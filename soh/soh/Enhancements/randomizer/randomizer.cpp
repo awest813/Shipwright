@@ -33,6 +33,10 @@ extern "C" {
 #include <functions.h>
 #include "../../../src/overlays/actors/ovl_En_GirlA/z_en_girla.h"
 #include "src/overlays/actors/ovl_Obj_Bean/z_obj_bean.h"
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 extern void func_80B8FE00(ObjBean*); // trigger planting
 extern PlayState* gPlayState;
 }
@@ -974,13 +978,26 @@ bool IsRandoGenerating() {
     return randoGenerating;
 }
 
+#ifdef __EMSCRIPTEN__
+static void GenerateRandomizerDeferred(void* seed) {
+    std::unique_ptr<std::string> ownedSeed(static_cast<std::string*>(seed));
+    GenerateRandomizerImgui(*ownedSeed);
+}
+#endif
+
 bool GenerateRandomizer(std::string seed /*= ""*/) {
     if (randoGenerating) {
         return false;
     }
     WaitForRandoGeneration();
     randoGenerating = true;
+#ifdef __EMSCRIPTEN__
+    // No threads on the web build. Generate on the main thread a few game frames from now, so the
+    // file select screen gets to show that generation started before the page blocks.
+    emscripten_async_call(GenerateRandomizerDeferred, new std::string(seed), 150);
+#else
     randoThread = std::thread(&GenerateRandomizerImgui, seed);
+#endif
     return true;
 }
 

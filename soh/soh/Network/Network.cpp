@@ -8,6 +8,12 @@ void Network::Enable(const char* host, uint16_t port) {
         return;
     }
 
+#ifdef __EMSCRIPTEN__
+    // Browsers can't open raw TCP sockets, and the receive loop needs a thread. See docs/WEB_PORT.md.
+    SPDLOG_ERROR("[Network] Networked features are not available in the web build");
+    return;
+#endif
+
     if (SDLNet_ResolveHost(&networkAddress, host, port) == -1) {
         SPDLOG_ERROR("[Network] SDLNet_ResolveHost: {}", SDLNet_GetError());
     }
