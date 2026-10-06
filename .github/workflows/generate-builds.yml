@@ -86,6 +86,43 @@ jobs:
           SoH.dmg
           readme.txt
 
+  build-web:
+    needs: generate-soh-otr
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Git Checkout
+      uses: actions/checkout@v7
+      with:
+        submodules: true
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build
+    - name: Setup Emscripten
+      uses: mymindstorm/setup-emsdk@v14
+      with:
+        version: 6.0.11
+        actions-cache-folder: emsdk-cache
+    - name: Download soh.o2r
+      uses: actions/download-artifact@v8
+      with:
+        name: soh.o2r
+        path: build-tools
+    - name: Build SoH for the web
+      run: |
+        embuilder build sdl2 sdl2_net zlib bzip2 ogg vorbis
+        emcmake cmake --no-warn-unused-cli -H. -Bbuild-web -GNinja -DCMAKE_BUILD_TYPE:STRING=Release -DSOH_PREBUILT_O2R=$PWD/build-tools/soh.o2r
+        cmake --build build-web -j4
+        mkdir soh-web
+        cp build-web/soh/soh.html soh-web/index.html
+        cp build-web/soh/soh.js build-web/soh/soh.wasm build-web/soh/soh.data soh-web/
+        cp soh/platform/web/README.md soh-web/readme.md
+    - name: Upload build
+      uses: actions/upload-artifact@v7
+      with:
+        name: soh-web
+        path: soh-web
+
   build-linux:
     needs: generate-soh-otr
     runs-on: ubuntu-22.04
