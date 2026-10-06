@@ -16,7 +16,7 @@
      ACTOR_FLAG_DRAW_CULLING_DISABLED | ACTOR_FLAG_LOCK_ON_DISABLED)
 
 void EnTakaraMan_Init(Actor* thisx, PlayState* play);
-void EnTakaraMan_Reset(Actor* thisx, PlayState* play);
+void EnTakaraMan_Reset(void);
 void EnTakaraMan_Update(Actor* thisx, PlayState* play);
 void EnTakaraMan_Draw(Actor* thisx, PlayState* play);
 void EnTakaraMan_Destroy(Actor* thisx, PlayState* play);
@@ -47,7 +47,7 @@ static u8 sTakaraIsInitialized = false;
 
 SHIP_SAVESTATE_DEFINE(EnTakaraMan, EN_TAKARA_MAN_SHIP_SAVESTATE_FIELDS)
 
-void EnTakaraMan_Reset(Actor* thisx, PlayState* play) {
+void EnTakaraMan_Reset(void) {
     sTakaraIsInitialized = false;
 }
 
