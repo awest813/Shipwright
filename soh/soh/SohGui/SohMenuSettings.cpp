@@ -193,6 +193,7 @@ void SohMenu::AddMenuSettings() {
     AddWidget(path, "Reset Button Combination:", WIDGET_CVAR_BTN_SELECTOR)
         .CVar("gSettings.ResetBtn")
         .Options(BtnSelectorOptions().DefaultValue(BTN_CUSTOM_MODIFIER2));
+#ifndef __EMSCRIPTEN__ // browser storage isn't a folder the OS can open
     AddWidget(path, "Open App Files Folder", WIDGET_BUTTON)
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) {
@@ -200,6 +201,7 @@ void SohMenu::AddMenuSettings() {
             SDL_OpenURL(std::string("file:///" + std::filesystem::absolute(filesPath).string()).c_str());
         })
         .Options(ButtonOptions().Tooltip("Opens the folder that contains the save and mods folders, etc."));
+#endif
 
     AddWidget(path, "Boot", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Boot Sequence", WIDGET_CVAR_COMBOBOX)
@@ -362,7 +364,7 @@ void SohMenu::AddMenuSettings() {
                 .IsPercentage()
                 .Min(0.5f)
                 .Max(2.0f));
-#ifndef __WIIU__
+#if !defined(__WIIU__) && !defined(__EMSCRIPTEN__) // WebGL2 can't resolve the MSAA framebuffers
     AddWidget(path, "Anti-aliasing (MSAA)", WIDGET_CVAR_SLIDER_INT)
         .CVar(CVAR_MSAA_VALUE)
         .RaceDisable(false)
@@ -378,6 +380,7 @@ void SohMenu::AddMenuSettings() {
                 .Max(8)
                 .DefaultValue(1));
 #endif
+#ifndef __EMSCRIPTEN__ // the web build presents one frame per game tick, see docs/WEB_PORT.md
     auto fps = CVarGetInteger(CVAR_SETTING("InterpolationFPS"), 20);
     const char* fpsFormat = fps == 20 ? "Original (%d)" : "%d";
     AddWidget(path, "Current FPS", WIDGET_CVAR_SLIDER_INT)
@@ -401,6 +404,7 @@ void SohMenu::AddMenuSettings() {
         .CVar(CVAR_SETTING("MatchRefreshRate"))
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip("Matches interpolation value to the refresh rate of your display."));
+#endif
     AddWidget(path, "Renderer API (Needs reload)", WIDGET_VIDEO_BACKEND).RaceDisable(false);
     AddWidget(path, "Enable Vsync", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_VSYNC_ENABLED)
