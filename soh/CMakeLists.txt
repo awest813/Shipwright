@@ -586,6 +586,22 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
             $<$<COMPILE_LANGUAGE:CXX>:-Wno-deprecated-enum-enum-conversion>
         )
 
+        # These run-once table initializers are single functions with thousands of statements. At -O2 the
+        # constructors they call get inlined into 10-25k wasm locals per function, which takes browsers
+        # tens of seconds and gigabytes to compile (enough to crash the tab). -Oz keeps them to a few dozen.
+        set_property(SOURCE
+            soh/Enhancements/randomizer/3drando/hint_list.cpp
+            soh/Enhancements/randomizer/3drando/hint_list/hint_list_item.cpp
+            soh/Enhancements/randomizer/3drando/hint_list/hint_list_exclude_overworld.cpp
+            soh/Enhancements/randomizer/3drando/hint_list/hint_list_exclude_dungeon.cpp
+            soh/Enhancements/randomizer/Traps.cpp
+            soh/Enhancements/randomizer/item_list.cpp
+            soh/Enhancements/randomizer/location_list.cpp
+            soh/Enhancements/randomizer/location_access/dungeons/water_temple.cpp
+            soh/Enhancements/randomizer/settings.cpp
+            APPEND PROPERTY COMPILE_OPTIONS -Oz
+        )
+
         # Single-threaded build: std::thread is unavailable, see docs/WEB_PORT.md.
         target_link_options(${PROJECT_NAME} PRIVATE
             -sMIN_WEBGL_VERSION=2
@@ -595,7 +611,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
             -sMAXIMUM_MEMORY=4GB
             -sSTACK_SIZE=4MB
             # libultraship treats pointers below 0x10000 as not-a-pointer
-            -sGLOBAL_BASE=0x100000
+            -sGLOBAL_BASE=1mb
             -sEXIT_RUNTIME=0
             -sFORCE_FILESYSTEM=1
             -sEXPORTED_RUNTIME_METHODS=FS,IDBFS,callMain,addRunDependency,removeRunDependency
