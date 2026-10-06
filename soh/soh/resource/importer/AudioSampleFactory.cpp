@@ -193,6 +193,15 @@ static void OggDecoderWorker(std::shared_ptr<SOH::AudioSample> audioSample, std:
     }
 }
 
+// Streamed samples decode on a detached thread. The single-threaded web build decodes in place.
+template <typename F, typename... Args> static void StartDecoder(F worker, Args... args) {
+#ifdef __EMSCRIPTEN__
+    worker(args...);
+#else
+    std::thread(worker, args...).detach();
+#endif
+}
+
 namespace SOH {
 std::shared_ptr<Ship::IResource>
 ResourceFactoryBinaryAudioSampleV2::ReadResource(std::shared_ptr<Ship::File> file,
@@ -314,16 +323,13 @@ ResourceFactoryXMLAudioSampleV0::ReadResource(std::shared_ptr<Ship::File> file,
             drwav_read_pcm_frames_s16(&wav, numFrames, (int16_t*)audioSample->sample.sampleAddr);
             return audioSample;
         } else if (strcmp(customFormatStr, "mp3") == 0) {
-            std::thread fileDecoderThread = std::thread(Mp3DecoderWorker, audioSample, sampleFile);
-            fileDecoderThread.detach();
+            StartDecoder(Mp3DecoderWorker, audioSample, sampleFile);
             return audioSample;
         } else if (strcmp(customFormatStr, "ogg") == 0) {
-            std::thread fileDecoderThread = std::thread(OggDecoderWorker, audioSample, sampleFile, initData);
-            fileDecoderThread.detach();
+            StartDecoder(OggDecoderWorker, audioSample, sampleFile, initData);
             return audioSample;
         } else if (strcmp(customFormatStr, "flac") == 0) {
-            std::thread fileDecoderThread = std::thread(FlacDecoderWorker, audioSample, sampleFile);
-            fileDecoderThread.detach();
+            StartDecoder(FlacDecoderWorker, audioSample, sampleFile);
             return audioSample;
         }
     }

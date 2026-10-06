@@ -1,0 +1,11 @@
+# Emscripten build: provided by the emscripten port (-sUSE_ZLIB=1), no library search needed.
+if(NOT TARGET ZLIB::ZLIB)
+    add_library(ZLIB::ZLIB INTERFACE IMPORTED GLOBAL)
+    set_target_properties(ZLIB::ZLIB PROPERTIES INTERFACE_COMPILE_OPTIONS "-sUSE_ZLIB=1" INTERFACE_LINK_OPTIONS "-sUSE_ZLIB=1")
+endif()
+set(ZLIB_FOUND TRUE)
+set(ZLIB_INCLUDE_DIRS "")
+set(ZLIB_LIBRARIES "")
+set(ZLIB_INCLUDE_DIR "")
+set(ZLIB_LIBRARY "")
+set(ZLIB_VERSION_STRING "1.3.2")

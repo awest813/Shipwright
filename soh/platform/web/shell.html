@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ship of Harkinian</title>
+<style>
+  :root { color-scheme: dark; --bg: #0b0f14; --panel: #151b23; --text: #e6edf3; --muted: #8b949e; --accent: #3fb950; --error: #f85149; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; overflow: hidden; }
+  #canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; background: #000; outline: none; }
+  #overlay { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); padding: 16px; box-sizing: border-box; overflow: auto; }
+  #panel { background: var(--panel); border-radius: 12px; padding: 24px; max-width: 520px; width: 100%; box-sizing: border-box; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  p { margin: 8px 0; color: var(--muted); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #222a33; }
+  .row:first-of-type { border-top: none; }
+  .status { font-size: 13px; color: var(--muted); }
+  .status.ok { color: var(--accent); }
+  label.button, button { font: inherit; cursor: pointer; border: 1px solid #30363d; background: #21262d; color: var(--text); padding: 6px 12px; border-radius: 6px; white-space: nowrap; }
+  button#start { width: 100%; margin-top: 16px; padding: 10px; background: #238636; border-color: #2ea043; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  input[type=file] { display: none; }
+  #message { min-height: 1.5em; font-size: 13px; }
+  #message.error { color: var(--error); }
+  code { background: #0d1117; padding: 1px 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+<div id="overlay">
+  <div id="panel">
+    <h1>Ship of Harkinian</h1>
+    <p>Web build (experimental). The game needs an <code>oot.o2r</code> and/or <code>oot-mq.o2r</code> generated from your own legally obtained ROM by this version of desktop SoH. Files stay in this browser.</p>
+    <div class="row">
+      <div><div>Ocarina of Time</div><div class="status" id="status-oot.o2r">Loading…</div></div>
+      <label class="button">Load oot.o2r<input type="file" accept=".o2r" data-archive="oot.o2r"></label>
+    </div>
+    <div class="row">
+      <div><div>Master Quest</div><div class="status" id="status-oot-mq.o2r">Loading…</div></div>
+      <label class="button">Load oot-mq.o2r<input type="file" accept=".o2r" data-archive="oot-mq.o2r"></label>
+    </div>
+    <div id="message"></div>
+    <button id="start" disabled>Start</button>
+  </div>
+</div>
+<script>
+  "use strict";
+  const DATA_DIR = "/data";
+  const ARCHIVES = ["oot.o2r", "oot-mq.o2r"];
+  const overlay = document.getElementById("overlay");
+  const startButton = document.getElementById("start");
+  const message = document.getElementById("message");
+  let running = false;
+
+  function showMessage(text, isError) {
+    message.textContent = text;
+    message.className = isError ? "error" : "";
+  }
+
+  function hasFile(path) {
+    try { return FS.analyzePath(path).exists; } catch (e) { return false; }
+  }
+
+  function refreshArchiveStatus() {
+    let any = false;
+    for (const name of ARCHIVES) {
+      const present = hasFile(`${DATA_DIR}/${name}`);
+      const el = document.getElementById(`status-${name}`);
+      el.textContent = present ? "Ready" : "Not loaded";
+      el.className = present ? "status ok" : "status";
+      any = any || present;
+    }
+    startButton.disabled = !any;
+  }
+
+  // Saves, config and archives live in IndexedDB. Writes land in memory first, so flush them.
+  let syncing = false;
+  function persist() {
+    if (syncing) return;
+    syncing = true;
+    FS.syncfs(false, (err) => {
+      syncing = false;
+      if (err) console.error("Saving to browser storage failed", err);
+    });
+  }
+
+  var Module = {
+    canvas: document.getElementById("canvas"),
+    noInitialRun: true,
+    preRun: [() => {
+      FS.mkdir(DATA_DIR);
+      FS.mount(IDBFS, {}, DATA_DIR);
+      addRunDependency("syncfs");
+      FS.syncfs(true, (err) => {
+        if (err) console.error("Loading browser storage failed", err);
+        removeRunDependency("syncfs");
+      });
+    }],
+    onRuntimeInitialized: () => {
+      refreshArchiveStatus();
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+    },
+    print: (text) => console.log(text),
+    printErr: (text) => console.warn(text),
+    onAbort: (what) => {
+      overlay.style.display = "";
+      showMessage(`The game stopped: ${what}`, true);
+    },
+  };
+
+  for (const input of document.querySelectorAll("input[data-archive]")) {
+    input.addEventListener("change", async () => {
+      const file = input.files[0];
+      input.value = "";
+      if (!file) return;
+      const name = input.dataset.archive;
+      showMessage(`Storing ${name}…`);
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        // A .o2r is a zip archive
+        if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error("this is not an .o2r archive");
+        FS.writeFile(`${DATA_DIR}/${name}`, bytes);
+        persist();
+        refreshArchiveStatus();
+        showMessage(`${name} loaded.`);
+      } catch (e) {
+        showMessage(`Could not load ${file.name}: ${e.message}`, true);
+      }
+    });
+  }
+
+  startButton.addEventListener("click", () => {
+    if (running) return;
+    running = true;
+    overlay.style.display = "none";
+    Module.canvas.focus();
+    setInterval(persist, 10000);
+    Module.callMain([]);
+  });
+
+  document.addEventListener("visibilitychange", () => { if (document.hidden && running) persist(); });
+  window.addEventListener("pagehide", () => { if (running) persist(); });
+
+  // Keep the browser from acting on keys the game uses (F5 reload, F11 fullscreen, Tab focus, Ctrl+R).
+  window.addEventListener("keydown", (e) => {
+    if (!running) return;
+    if (/^F\d+$/.test(e.key) || e.key === "Tab" || (e.ctrlKey && e.key.toLowerCase() === "r")) e.preventDefault();
+  }, { capture: true });
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>

@@ -1,0 +1,27 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 8c8f227..670e50a 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -36,8 +36,8 @@ option(ROM_CRC_BSWAP "Byte-swap the ROM CRC written to the version file" OFF)
+ 
+ option(BUILD_UI "Build with the interactive viewer (libultraship + Fast3D + ImGui)" OFF)
+ 
+-if(EMSCRIPTEN)
+-    add_definitions(-D__EMSCRIPTEN__)
++# The standalone web build (torch.js). As a library, the embedding project owns the link flags.
++if(EMSCRIPTEN AND USE_STANDALONE)
+     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --bind -lidbfs.js -s MODULARIZE=1 -s EXPORT_ES6=1 -s NO_DISABLE_EXCEPTION_CATCHING -s ALLOW_MEMORY_GROWTH=1 -s EXPORT_NAME=createModule -s EXPORTED_RUNTIME_METHODS='[\"FS\", \"IDBFS\"]'")
+     if(EMSCRIPTEN_PRELOAD)
+         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --preload-file ${EMSCRIPTEN_PRELOAD}")
+@@ -224,6 +224,11 @@ if (MSVC)
+     add_compile_definitions(NOMINMAX _USE_MATH_DEFINES)
+ endif()
+ 
++# The embind wrapper is only for the standalone web build; it also redefines Companion::Instance.
++if(NOT USE_STANDALONE)
++    list(FILTER SRC_DIR EXCLUDE REGEX "src/lib/web.cpp")
++endif()
++
+ # Build
+ if (USE_STANDALONE)
+     add_definitions(-DSTANDALONE)

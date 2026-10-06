@@ -1,0 +1,12 @@
+# Emscripten build: provided by the emscripten port (-sUSE_SDL_NET=2), no library search needed.
+if(NOT TARGET SDL2_net::SDL2_net)
+    add_library(SDL2_net::SDL2_net INTERFACE IMPORTED GLOBAL)
+    set_target_properties(SDL2_net::SDL2_net PROPERTIES INTERFACE_COMPILE_OPTIONS "-sUSE_SDL_NET=2" INTERFACE_LINK_OPTIONS "-sUSE_SDL_NET=2")
+endif()
+if(NOT TARGET SDL2_net::SDL2_net-static)
+    add_library(SDL2_net::SDL2_net-static INTERFACE IMPORTED GLOBAL)
+    set_target_properties(SDL2_net::SDL2_net-static PROPERTIES INTERFACE_COMPILE_OPTIONS "-sUSE_SDL_NET=2" INTERFACE_LINK_OPTIONS "-sUSE_SDL_NET=2")
+endif()
+set(SDL2_net_FOUND TRUE)
+set(SDL2_net_INCLUDE_DIRS "")
+set(SDL2_net_LIBRARIES "")

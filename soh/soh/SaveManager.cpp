@@ -194,7 +194,9 @@ SaveManager::SaveManager() {
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnExitGame>(
         [this](uint32_t fileNum) { ThreadPoolWait(); });
 
+#ifndef __EMSCRIPTEN__ // no threads on the web build, so saves are written synchronously
     smThreadPool = std::make_shared<BS::thread_pool>(1);
+#endif
 
     for (SaveFileMetaInfo& info : fileMetaInfo) {
         info.valid = false;
@@ -1317,7 +1319,7 @@ void SaveManager::SaveSection(int fileNum, int sectionID, bool threaded) {
     }
 
     auto saveContext = std::make_shared<SaveContext>(gSaveContext);
-    if (threaded) {
+    if (threaded && smThreadPool) {
         smThreadPool->detach_task(
             [this, fileNum, saveContext, sectionID] { SaveFileThreaded(fileNum, *saveContext, sectionID); });
     } else {

@@ -68,6 +68,10 @@
 #include <SDL2/SDL_scancode.h>
 #endif
 
+#ifdef __EMSCRIPTEN__
+#include <SDL2/SDL_messagebox.h>
+#endif
+
 #ifdef __SWITCH__
 #include <port/switch/SwitchImpl.h>
 #elif defined(__WIIU__)
@@ -409,6 +413,22 @@ static bool RemoveArchiveAcrossAppDirs(const std::string& fileName) {
 }
 
 void OTRGlobals::RunExtract(int argc, char* argv[]) {
+#ifdef __EMSCRIPTEN__
+    // The web page puts oot.o2r / oot-mq.o2r in place before the game starts. In-browser extraction
+    // is a later phase of docs/WEB_PORT.md, so without a usable archive there is nothing to run.
+    bool hasArchive = std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("oot.o2r", appShortName)) ||
+                      std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("oot-mq.o2r", appShortName));
+    if (!hasArchive || VerifyArchiveVersion(DetectOTRVersion("oot.o2r", false)) ||
+        VerifyArchiveVersion(DetectOTRVersion("oot-mq.o2r", true))) {
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Ship of Harkinian",
+                                 "No compatible oot.o2r or oot-mq.o2r was provided.\n"
+                                 "Generate one with this version of desktop SoH and load it on the page.",
+                                 nullptr);
+        exit(1);
+    }
+    CheckAndCreateModFolder();
+    return;
+#endif
     bool extractDone = false;
     ExtractSteps extractStep = ES_PORT_ARCHIVE;
     WindowsSteps windowsStep = WS_TEMP;
@@ -1038,6 +1058,30 @@ int AudioPlayer_Buffered(void);
 extern "C" int AudioPlayer_GetDesiredBuffered(void);
 std::unordered_map<std::string, ExtensionEntry> ExtensionCache;
 
+// Synthesizes and queues one game frame of audio.
+static void OTRAudio_ProcessFrame() {
+// AudioMgr_ThreadEntry(&gAudioMgr);
+//  528 and 544 relate to 60 fps at 32 kHz 32000/60 = 533.333..
+//  in an ideal world, one third of the calls should use num_samples=544 and two thirds num_samples=528
+#define SAMPLES_HIGH 560
+#define SAMPLES_LOW 528
+
+#define AUDIO_FRAMES_PER_UPDATE (R_UPDATE_RATE > 0 ? R_UPDATE_RATE : 1)
+#define NUM_AUDIO_CHANNELS 2
+
+    int samples_left = AudioPlayer_Buffered();
+    u32 num_audio_samples = samples_left < AudioPlayer_GetDesiredBuffered() ? SAMPLES_HIGH : SAMPLES_LOW;
+
+    // 3 is the maximum authentic frame divisor.
+    s16 audio_buffer[SAMPLES_HIGH * NUM_AUDIO_CHANNELS * 3];
+    for (int i = 0; i < AUDIO_FRAMES_PER_UPDATE; i++) {
+        AudioMgr_CreateNextAudioBuffer(audio_buffer + i * (num_audio_samples * NUM_AUDIO_CHANNELS), num_audio_samples);
+    }
+
+    AudioPlayer_Play((u8*)audio_buffer,
+                     num_audio_samples * (sizeof(int16_t) * NUM_AUDIO_CHANNELS * AUDIO_FRAMES_PER_UPDATE));
+}
+
 void OTRAudio_Thread() {
     while (audio.running) {
         {
@@ -1051,28 +1095,7 @@ void OTRAudio_Thread() {
             }
         }
         std::unique_lock<std::mutex> Lock(audio.mutex);
-// AudioMgr_ThreadEntry(&gAudioMgr);
-//  528 and 544 relate to 60 fps at 32 kHz 32000/60 = 533.333..
-//  in an ideal world, one third of the calls should use num_samples=544 and two thirds num_samples=528
-#define SAMPLES_HIGH 560
-#define SAMPLES_LOW 528
-
-#define AUDIO_FRAMES_PER_UPDATE (R_UPDATE_RATE > 0 ? R_UPDATE_RATE : 1)
-#define NUM_AUDIO_CHANNELS 2
-
-        int samples_left = AudioPlayer_Buffered();
-        u32 num_audio_samples = samples_left < AudioPlayer_GetDesiredBuffered() ? SAMPLES_HIGH : SAMPLES_LOW;
-
-        // 3 is the maximum authentic frame divisor.
-        s16 audio_buffer[SAMPLES_HIGH * NUM_AUDIO_CHANNELS * 3];
-        for (int i = 0; i < AUDIO_FRAMES_PER_UPDATE; i++) {
-            AudioMgr_CreateNextAudioBuffer(audio_buffer + i * (num_audio_samples * NUM_AUDIO_CHANNELS),
-                                           num_audio_samples);
-        }
-
-        AudioPlayer_Play((u8*)audio_buffer,
-                         num_audio_samples * (sizeof(int16_t) * NUM_AUDIO_CHANNELS * AUDIO_FRAMES_PER_UPDATE));
-
+        OTRAudio_ProcessFrame();
         audio.processing = false;
         audio.cv_from_thread.notify_one();
     }
@@ -1082,10 +1105,12 @@ void OTRAudio_Init() {
     // Precache all our samples, sequences, etc...
     ResourceMgr_LoadDirectory("audio");
 
+#ifndef __EMSCRIPTEN__ // single-threaded web build: Graph_ProcessGfxCommands runs audio inline
     if (!audio.running) {
         audio.running = true;
         audio.thread = std::thread(OTRAudio_Thread);
     }
+#endif
 }
 
 // C->C++ Bridge
@@ -1096,6 +1121,9 @@ extern "C" char** fontMap;
 extern "C" size_t fontMapSize;
 
 extern "C" void OTRAudio_Exit() {
+#ifdef __EMSCRIPTEN__
+    return;
+#endif
     // Tell the audio thread to stop
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
@@ -1791,6 +1819,10 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
 
 // C->C++ Bridge
 extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
+#ifdef __EMSCRIPTEN__
+    // Each browser frame shows only the last draw, so present one frame per game tick for now.
+    int target_fps = 20;
+#else
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
         audio.processing = true;
@@ -1798,6 +1830,7 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
 
     audio.cv_to_thread.notify_one();
     int target_fps = OTRGlobals::Instance->GetInterpolationFPS();
+#endif
     static int last_fps;
     static int last_update_rate;
     static int time;
@@ -1842,12 +1875,16 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
     last_fps = fps;
     last_update_rate = R_UPDATE_RATE;
 
+#ifdef __EMSCRIPTEN__
+    OTRAudio_ProcessFrame();
+#else
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
         while (audio.processing) {
             audio.cv_from_thread.wait(Lock);
         }
     }
+#endif
 
     bool curAltAssets = CVarGetInteger(CVAR_SETTING("AltAssets"), 1);
     if (prevAltAssets != curAltAssets) {

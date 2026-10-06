@@ -256,6 +256,10 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set_target_properties(${PROJECT_NAME} PROPERTIES
     OUTPUT_NAME "soh.elf"
     )
+elseif(EMSCRIPTEN)
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        SUFFIX ".html"
+    )
 endif()
 ################################################################################
 # MSVC runtime library
@@ -560,6 +564,46 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
                 -Wno-stringop-overflow
             >
         )
+    elseif (EMSCRIPTEN)
+        target_compile_options(${PROJECT_NAME} PRIVATE
+            -Wall -Wextra -Wno-error
+            -Wformat-security
+            -Wno-unused-parameter
+            -Wno-unused-function
+            -Wno-unused-variable
+            -Wno-missing-field-initializers
+            -Wno-parentheses
+            -Wno-narrowing
+            -Wno-missing-braces
+            -Wno-unknown-pragmas
+            $<$<COMPILE_LANGUAGE:C>:
+                -Werror-implicit-function-declaration
+                -Wno-implicit-int
+                -Wno-incompatible-pointer-types
+                -Wno-int-conversion
+            >
+            $<$<COMPILE_LANGUAGE:CXX>:-fpermissive>
+            $<$<COMPILE_LANGUAGE:CXX>:-Wno-deprecated-enum-enum-conversion>
+        )
+
+        # Single-threaded build: std::thread is unavailable, see docs/WEB_PORT.md.
+        target_link_options(${PROJECT_NAME} PRIVATE
+            -sMIN_WEBGL_VERSION=2
+            -sMAX_WEBGL_VERSION=2
+            -sALLOW_MEMORY_GROWTH=1
+            -sINITIAL_MEMORY=512MB
+            -sMAXIMUM_MEMORY=4GB
+            -sSTACK_SIZE=4MB
+            # libultraship treats pointers below 0x10000 as not-a-pointer
+            -sGLOBAL_BASE=0x100000
+            -sEXIT_RUNTIME=0
+            -sFORCE_FILESYSTEM=1
+            -sEXPORTED_RUNTIME_METHODS=FS,IDBFS,callMain,addRunDependency,removeRunDependency
+            -lidbfs.js
+            "SHELL:--shell-file ${CMAKE_CURRENT_SOURCE_DIR}/platform/web/shell.html"
+            "SHELL:--preload-file ${CMAKE_BINARY_DIR}/soh/soh.o2r@/app/soh.o2r"
+            "SHELL:--preload-file ${CMAKE_BINARY_DIR}/gamecontrollerdb.txt@/app/gamecontrollerdb.txt"
+        )
     else()
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
         set(CPU_OPTION -msse2 -mfpmath=sse)
@@ -605,12 +649,14 @@ if (CMAKE_GENERATOR MATCHES "Visual Studio")
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_SOURCE_DIR}/soh/assets/yml ${CMAKE_BINARY_DIR}/soh/assets
     )
 endif()
+if(NOT EMSCRIPTEN)
 add_custom_command(
     TARGET ${PROJECT_NAME}
     POST_BUILD
     COMMENT "Copying asset ymls..."
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_SOURCE_DIR}/soh/assets/yml $<TARGET_FILE_DIR:soh>/assets
 )
+endif()
 ################################################################################
 # Dependencies
 ################################################################################
@@ -685,6 +731,28 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "CafeOS")
     target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
         ${DEVKITPRO}/portlibs/wiiu/include/
     )
+elseif(EMSCRIPTEN)
+    find_package(SDL2 REQUIRED)
+    find_package(SDL2_net REQUIRED)
+    find_package(Ogg REQUIRED)
+    find_package(Vorbis REQUIRED)
+    set(ADDITIONAL_LIBRARY_DEPENDENCIES
+        "libultraship;"
+        "torch;"
+        SDL2::SDL2
+        SDL2_net::SDL2_net
+        Ogg::ogg
+        Vorbis::vorbis
+        Vorbis::vorbisenc
+        Vorbis::vorbisfile
+        opus
+        opusfile
+    )
+    # soh.o2r and gamecontrollerdb.txt are preloaded into the virtual filesystem at link time
+    set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY LINK_DEPENDS
+        ${CMAKE_BINARY_DIR}/soh/soh.o2r ${CMAKE_BINARY_DIR}/gamecontrollerdb.txt
+        ${CMAKE_CURRENT_SOURCE_DIR}/platform/web/shell.html)
+    add_dependencies(${PROJECT_NAME} GenerateSohOtr)
 else()
     find_package(SDL2)
     set(THREADS_PREFER_PTHREAD_FLAG ON)
@@ -744,7 +812,7 @@ if(USE_ASAN)
 endif()
 
 
-if(NOT CMAKE_SYSTEM_NAME MATCHES "Darwin|NintendoSwitch|CafeOS")
+if(NOT CMAKE_SYSTEM_NAME MATCHES "Darwin|NintendoSwitch|CafeOS|Emscripten")
 INSTALL(TARGETS soh DESTINATION . COMPONENT ship)
 endif()
 

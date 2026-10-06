@@ -1,0 +1,228 @@
+diff --git a/src/fast/Fast3dGui.cpp b/src/fast/Fast3dGui.cpp
+index 237a502..383489a 100644
+--- a/src/fast/Fast3dGui.cpp
++++ b/src/fast/Fast3dGui.cpp
+@@ -58,7 +58,7 @@ bool Fast3dGui::SupportsViewports() {
+     }
+ #endif
+ 
+-#if defined(__ANDROID__) || defined(__IOS__)
++#if defined(__ANDROID__) || defined(__IOS__) || defined(__EMSCRIPTEN__)
+     return false;
+ #endif
+ 
+diff --git a/src/fast/backends/gfx_opengl.cpp b/src/fast/backends/gfx_opengl.cpp
+index ad9b1dd..31ed4da 100644
+--- a/src/fast/backends/gfx_opengl.cpp
++++ b/src/fast/backends/gfx_opengl.cpp
+@@ -583,7 +583,10 @@ void GfxRenderingAPIOGL::UploadTexture(const uint8_t* rgba32_buf, uint32_t width
+     textures[mCurrentTextureIds[mCurrentTile]].height = height;
+ }
+ 
+-#ifdef USE_OPENGLES
++#if defined(__EMSCRIPTEN__)
++// WebGL2 rejects GL_MIRROR_CLAMP_TO_EDGE; mirror, and let the shader's clamp emulation clamp.
++#define GL_MIRROR_CLAMP_TO_EDGE GL_MIRRORED_REPEAT
++#elif defined(USE_OPENGLES)
+ #define GL_MIRROR_CLAMP_TO_EDGE 0x8743
+ #endif
+ 
+@@ -708,7 +711,7 @@ void GfxRenderingAPIOGL::DrawTriangles(float buf_vbo[], size_t buf_vbo_len, size
+ }
+ 
+ void GfxRenderingAPIOGL::Init() {
+-#if !defined(__linux__) && !defined(__OpenBSD__)
++#if !defined(__linux__) && !defined(__OpenBSD__) && !defined(__EMSCRIPTEN__)
+     glewInit();
+ #endif
+ 
+@@ -1029,7 +1032,8 @@ GfxRenderingAPIOGL::GetPixelDepth(int fb_id, const std::set<std::pair<float, flo
+     // When looking up one value and the framebuffer is single-sampled, we can read pixels directly
+     // Otherwise we need to blit first to a new buffer then read it
+     if (coordinates.size() == 1 && fb.msaa_level <= 1) {
+-        uint32_t depth_stencil_value;
++        // GLES can't read depth back, so report the far plane rather than garbage.
++        uint32_t depth_stencil_value = 0xFFFFFFFF;
+         glBindFramebuffer(GL_FRAMEBUFFER, fb.fbo);
+         int x = coordinates.begin()->first;
+         int y = coordinates.begin()->second;
+diff --git a/src/fast/backends/gfx_sdl2.cpp b/src/fast/backends/gfx_sdl2.cpp
+index 15c5415..1c0bffd 100644
+--- a/src/fast/backends/gfx_sdl2.cpp
++++ b/src/fast/backends/gfx_sdl2.cpp
+@@ -345,6 +345,13 @@ void GfxWindowBackendSDL2::Init(const char* gameName, const char* gfxApiName, bo
+         SDL_SetHint(SDL_HINT_RENDER_DRIVER, "metal");
+     }
+ 
++#if defined(__EMSCRIPTEN__)
++    // WebGL2
++    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
++    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
++    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
++#endif
++
+ #if defined(__APPLE__)
+     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG); // Always required on Mac
+     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+@@ -696,6 +703,11 @@ static uint64_t qpc_to_100ns(uint64_t qpc) {
+ 
+ void GfxWindowBackendSDL2::SyncFramerateWithTime() const {
+     uint64_t t = qpc_to_100ns(SDL_GetPerformanceCounter());
++#ifdef __EMSCRIPTEN__
++    // The browser paces frames (requestAnimationFrame); sleeping here would block the page.
++    previous_time = t;
++    return;
++#endif
+ 
+     const int64_t next = previous_time + 10 * FRAME_INTERVAL_US_NUMERATOR / FRAME_INTERVAL_US_DENOMINATOR;
+     int64_t left = next - t;
+diff --git a/src/fast/interpreter.cpp b/src/fast/interpreter.cpp
+index 2b51ad7..8e66c97 100644
+--- a/src/fast/interpreter.cpp
++++ b/src/fast/interpreter.cpp
+@@ -3964,6 +3964,10 @@ bool gfx_othermode_h_handler_f3d(F3DGfx** cmd0) {
+ // failed to resolve it (segment not set up). Keep it only if it belongs to a loaded module,
+ // where it's a real low pointer (e.g. a static TLUT) rather than an unresolved segment addr.
+ static bool IsValidResolvedAddress(uintptr_t addr) {
++#ifdef __EMSCRIPTEN__
++    // wasm32 heap pointers live below 0x10000000 too and dladdr can't vouch for them.
++    return addr != 0;
++#endif
+     if (addr > 0x0FFFFFFF) {
+         return true;
+     }
+diff --git a/src/ship/Context.cpp b/src/ship/Context.cpp
+index 361a1f7..9de3603 100644
+--- a/src/ship/Context.cpp
++++ b/src/ship/Context.cpp
+@@ -125,7 +125,9 @@ bool Context::InitLogging(spdlog::level::level_enum debugBuildLogLevel,
+ 
+     try {
+         // Setup Logging
++#ifndef __EMSCRIPTEN__
+         spdlog::init_thread_pool(8192, 1);
++#endif
+         std::vector<spdlog::sink_ptr> sinks;
+ 
+ #if (!defined(_WIN32)) || defined(_DEBUG)
+@@ -172,6 +174,11 @@ bool Context::InitLogging(spdlog::level::level_enum debugBuildLogLevel,
+         mLogger = std::make_shared<spdlog::logger>("multi_sink", sinks.begin(), sinks.end());
+         GetLogger()->set_level(debugBuildLogLevel);
+         GetLogger()->flush_on(spdlog::level::trace);
++#elif defined(__EMSCRIPTEN__)
++        // No threads on the web build, so log synchronously.
++        mLogger = std::make_shared<spdlog::logger>(GetName(), sinks.begin(), sinks.end());
++        GetLogger()->set_level(releaseBuildLogLevel);
++        GetLogger()->flush_on(spdlog::level::info);
+ #else
+         mLogThreadPool = std::make_shared<spdlog::details::thread_pool>(8192, 1);
+         mLogger = std::make_shared<spdlog::async_logger>(GetName(), sinks.begin(), sinks.end(), mLogThreadPool,
+@@ -474,6 +481,11 @@ std::string Context::GetShortName() const {
+ }
+ 
+ std::string Context::GetAppBundlePath() {
++#ifdef __EMSCRIPTEN__
++    // Read-only files shipped with the page, preloaded into the virtual filesystem.
++    return "/app";
++#endif
++
+ #if defined(__ANDROID__)
+     const char* externaldir = SDL_AndroidGetExternalStoragePath();
+     if (externaldir != NULL) {
+@@ -537,6 +549,11 @@ std::string Context::GetAppBundlePath() {
+ }
+ 
+ std::string Context::GetAppDirectoryPath(const std::string& appName) {
++#ifdef __EMSCRIPTEN__
++    // Persistent storage (IndexedDB) that the web page mounts before starting the game.
++    return "/data";
++#endif
++
+ #if defined(__ANDROID__)
+     const char* externaldir = SDL_AndroidGetExternalStoragePath();
+     if (externaldir != NULL) {
+diff --git a/src/ship/resource/ResourceManager.cpp b/src/ship/resource/ResourceManager.cpp
+index c62ee72..691caf9 100644
+--- a/src/ship/resource/ResourceManager.cpp
++++ b/src/ship/resource/ResourceManager.cpp
+@@ -11,6 +11,26 @@
+ 
+ namespace Ship {
+ 
++// Queues a task on the resource thread pool. The single-threaded web build has no pool, so the
++// task runs right away and the caller gets back an already-satisfied future.
++template <typename F> static auto SubmitTask(BS::thread_pool* pool, F&& task, BS::priority_t priority = 0) {
++#ifdef __EMSCRIPTEN__
++    using R = std::invoke_result_t<std::decay_t<F>>;
++    std::promise<R> promise;
++    try {
++        if constexpr (std::is_void_v<R>) {
++            task();
++            promise.set_value();
++        } else {
++            promise.set_value(task());
++        }
++    } catch (...) { promise.set_exception(std::current_exception()); }
++    return promise.get_future();
++#else
++    return pool->submit_task(std::forward<F>(task), priority);
++#endif
++}
++
+ ResourceFilter::ResourceFilter(const std::list<std::string>& includeMasks, const std::list<std::string>& excludeMasks,
+                                const uintptr_t owner, const std::shared_ptr<Archive> parent)
+     : IncludeMasks(includeMasks), ExcludeMasks(excludeMasks), Owner(owner), Parent(parent) {
+@@ -56,11 +76,13 @@ void ResourceManager::Init(const std::vector<std::string>& archivePaths,
+     mArchiveManager = std::make_shared<ArchiveManager>();
+     GetArchiveManager()->Init(archivePaths, validHashes);
+ 
++#ifndef __EMSCRIPTEN__
+     // the extra `- 1` is because we reserve an extra thread for spdlog
+     size_t threadCount = std::max(1, (int32_t)(std::thread::hardware_concurrency() - reservedThreadCount - 1));
+     mThreadPool = std::make_shared<BS::thread_pool>(threadCount);
++#endif
+ 
+-    if (!IsLoaded()) {
++    if (!IsLoaded() && mThreadPool != nullptr) {
+         // Nothing ever unpauses the thread pool since nothing will ever try to load the archive again.
+         mThreadPool->pause();
+     }
+@@ -214,7 +236,8 @@ ResourceManager::LoadResourceAsync(const ResourceIdentifier& identifier, bool lo
+         return promise->get_future().share();
+     }
+ 
+-    return mThreadPool->submit_task(
++    return SubmitTask(
++        mThreadPool.get(),
+         [this, identifier, loadExact, initData]() -> std::shared_ptr<IResource> {
+             return LoadResourceProcess(identifier, loadExact, initData);
+         },
+@@ -332,7 +355,8 @@ ResourceManager::LoadResourcesProcess(const ResourceFilter& filter) {
+ 
+ std::shared_future<std::shared_ptr<std::vector<std::shared_ptr<IResource>>>>
+ ResourceManager::LoadResourcesAsync(const ResourceFilter& filter, BS::priority_t priority) {
+-    return mThreadPool->submit_task(
++    return SubmitTask(
++        mThreadPool.get(),
+         [this, filter]() -> std::shared_ptr<std::vector<std::shared_ptr<IResource>>> {
+             return LoadResourcesProcess(filter);
+         },
+@@ -353,7 +377,7 @@ std::shared_ptr<std::vector<std::shared_ptr<IResource>>> ResourceManager::LoadRe
+ }
+ 
+ void ResourceManager::DirtyResources(const ResourceFilter& filter) {
+-    mThreadPool->submit_task([this, filter]() -> void {
++    SubmitTask(mThreadPool.get(), [this, filter]() -> void {
+         auto list = GetArchiveManager()->ListFiles(filter.IncludeMasks, filter.ExcludeMasks);
+ 
+         for (const auto& key : *list.get()) {
+@@ -377,7 +401,8 @@ void ResourceManager::UnloadResourcesAsync(const std::string& searchMask, BS::pr
+ }
+ 
+ void ResourceManager::UnloadResourcesAsync(const ResourceFilter& filter, BS::priority_t priority) {
+-    mThreadPool->submit_task([this, filter]() -> void { UnloadResourcesProcess(filter); }, priority);
++    SubmitTask(
++        mThreadPool.get(), [this, filter]() -> void { UnloadResourcesProcess(filter); }, priority);
+ }
+ 
+ void ResourceManager::UnloadResources(const std::string& searchMask) {

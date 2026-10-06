@@ -72,9 +72,11 @@ int main(int argc, char* argv[]) {
 }
 
 void Main(void* arg) {
-    IrqMgrClient irqClient;
-    OSMesgQueue irqMgrMsgQ;
-    OSMesg irqMgrMsgBuf[60];
+    // Static because gIrqMgr keeps pointers to them, and on the web build Main never returns: its
+    // stack is unwound when Graph_ThreadEntry hands control to the browser.
+    static IrqMgrClient irqClient;
+    static OSMesgQueue irqMgrMsgQ;
+    static OSMesg irqMgrMsgBuf[60];
     uintptr_t sysHeap;
     uintptr_t fb;
     void* debugHeap;

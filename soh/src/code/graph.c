@@ -506,10 +506,38 @@ static void RunFrame() {
     exit(0);
 }
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+
+// Called by the browser once per display refresh. The game advances at 60 / R_UPDATE_RATE ticks
+// per second, so only run a frame when the next tick is due.
+static void Graph_WebFrame(void) {
+    static double nextTick = 0.0;
+    double now = emscripten_get_now();
+    double interval = 1000.0 * (R_UPDATE_RATE > 0 ? R_UPDATE_RATE : 1) / 60.0;
+
+    if (!WindowIsRunning()) {
+        emscripten_cancel_main_loop();
+        return;
+    }
+    if (now < nextTick) {
+        return;
+    }
+    // After a stall (background tab, long load) resync instead of running a burst of catch-up ticks.
+    nextTick = (now - nextTick > interval * 4) ? now + interval : nextTick + interval;
+    RunFrame();
+}
+#endif
+
 void Graph_ThreadEntry(void* arg0) {
+#ifdef __EMSCRIPTEN__
+    // Hands control to the browser; this never returns.
+    emscripten_set_main_loop(Graph_WebFrame, 0, 1);
+#else
     while (WindowIsRunning()) {
         RunFrame();
     }
+#endif
 }
 
 void* Graph_Alloc(GraphicsContext* gfxCtx, size_t size) {

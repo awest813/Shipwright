@@ -7,6 +7,9 @@ set(CMAKE_C_STANDARD 23 CACHE STRING "The C standard to use")
 set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum OS X deployment version")
 
 project(Ship VERSION 9.2.3 LANGUAGES C CXX)
+if(EMSCRIPTEN)
+    include(CMake/emscripten.cmake)
+endif()
 include(CMake/soh-cvars.cmake)
 include(CMake/lus-cvars.cmake)
 set(SPDLOG_LEVEL_TRACE 0)
@@ -184,8 +187,10 @@ set(GFX_DEBUG_DISASSEMBLER ON)
 set(GBI_UCODE F3DEX_GBI_2)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake")
 
-# Enable MPQ and OTR support
-set(INCLUDE_MPQ_SUPPORT ON)
+# Enable MPQ and OTR support. The web build only loads .o2r archives.
+if(NOT EMSCRIPTEN)
+    set(INCLUDE_MPQ_SUPPORT ON)
+endif()
 
 ################################################################################
 # Set CONTROLLERBUTTONS_T
@@ -338,6 +343,19 @@ add_custom_target(
 file(GLOB_RECURSE SOH_O2R_ASSETS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/soh/assets/custom/*)
 list(FILTER SOH_O2R_ASSETS EXCLUDE REGEX "/soh/assets/custom/shaders/")
 file(GLOB_RECURSE SOH_O2R_SHADERS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libultraship/src/fast/shaders/*)
+if(EMSCRIPTEN)
+# soh-o2r-packer can't run from a wasm build, so package the natively built soh.o2r instead.
+if(NOT SOH_PREBUILT_O2R)
+    message(FATAL_ERROR "The web build needs -DSOH_PREBUILT_O2R=<path to a natively built soh.o2r>")
+endif()
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/soh/soh.o2r
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SOH_PREBUILT_O2R} ${CMAKE_BINARY_DIR}/soh/soh.o2r
+    COMMENT "Copying prebuilt soh.o2r..."
+    DEPENDS ${SOH_PREBUILT_O2R}
+    VERBATIM
+)
+else()
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/soh/soh.o2r
     # copy LUS default shaders into assets/custom
@@ -354,6 +372,7 @@ add_custom_command(
     BYPRODUCTS ${CMAKE_SOURCE_DIR}/soh.o2r
     VERBATIM
 )
+endif()
 add_custom_target(GenerateSohOtr ALL DEPENDS ${CMAKE_BINARY_DIR}/soh/soh.o2r)
 
 # ExtractAssets produced soh.o2r as well as the rom archives, so keep doing that.
@@ -372,7 +391,9 @@ endif()
 ################################################################################
 add_subdirectory(libultraship ${CMAKE_BINARY_DIR}/libultraship SYSTEM)
 quiet_target(libultraship "${WARNING_OVERRIDE}")
-target_compile_definitions(libultraship PUBLIC INCLUDE_MPQ_SUPPORT)
+if(INCLUDE_MPQ_SUPPORT)
+    target_compile_definitions(libultraship PUBLIC INCLUDE_MPQ_SUPPORT)
+endif()
 add_subdirectory(soh)
 
 set_property(TARGET soh PROPERTY APPIMAGE_DESKTOP_FILE_TERMINAL YES)
