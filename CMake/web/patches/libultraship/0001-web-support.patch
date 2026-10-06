@@ -47,7 +47,7 @@ index ad9b1dd..31ed4da 100644
          int x = coordinates.begin()->first;
          int y = coordinates.begin()->second;
 diff --git a/src/fast/backends/gfx_sdl2.cpp b/src/fast/backends/gfx_sdl2.cpp
-index 15c5415..1c0bffd 100644
+index 15c5415..726c710 100644
 --- a/src/fast/backends/gfx_sdl2.cpp
 +++ b/src/fast/backends/gfx_sdl2.cpp
 @@ -345,6 +345,13 @@ void GfxWindowBackendSDL2::Init(const char* gameName, const char* gfxApiName, bo
@@ -64,7 +64,18 @@ index 15c5415..1c0bffd 100644
  #if defined(__APPLE__)
      SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG); // Always required on Mac
      SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-@@ -696,6 +703,11 @@ static uint64_t qpc_to_100ns(uint64_t qpc) {
+@@ -375,6 +382,10 @@ void GfxWindowBackendSDL2::Init(const char* gameName, const char* gfxApiName, bo
+ 
+ #ifdef __IOS__
+     Uint32 flags = SDL_WINDOW_BORDERLESS | SDL_WINDOW_SHOWN;
++#elif defined(__EMSCRIPTEN__)
++    // No high-DPI canvas: rendering at device resolution (often 2-3x) costs browsers too much. The internal
++    // resolution setting can still raise it.
++    Uint32 flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
+ #else
+     Uint32 flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+ #endif
+@@ -696,6 +707,11 @@ static uint64_t qpc_to_100ns(uint64_t qpc) {
  
  void GfxWindowBackendSDL2::SyncFramerateWithTime() const {
      uint64_t t = qpc_to_100ns(SDL_GetPerformanceCounter());
