@@ -88,22 +88,23 @@ index 15c5415..726c710 100644
      const int64_t next = previous_time + 10 * FRAME_INTERVAL_US_NUMERATOR / FRAME_INTERVAL_US_DENOMINATOR;
      int64_t left = next - t;
 diff --git a/src/fast/interpreter.cpp b/src/fast/interpreter.cpp
-index 2b51ad7..8e66c97 100644
+index 2b51ad7..d8a6378 100644
 --- a/src/fast/interpreter.cpp
 +++ b/src/fast/interpreter.cpp
-@@ -3964,6 +3964,10 @@ bool gfx_othermode_h_handler_f3d(F3DGfx** cmd0) {
+@@ -3964,6 +3964,11 @@ bool gfx_othermode_h_handler_f3d(F3DGfx** cmd0) {
  // failed to resolve it (segment not set up). Keep it only if it belongs to a loaded module,
  // where it's a real low pointer (e.g. a static TLUT) rather than an unresolved segment addr.
  static bool IsValidResolvedAddress(uintptr_t addr) {
 +#ifdef __EMSCRIPTEN__
-+    // wasm32 heap pointers live below 0x10000000 too and dladdr can't vouch for them.
-+    return addr != 0;
++    // wasm32 heap pointers live below 0x10000000 too and dladdr can't vouch for them. SegAddr hands
++    // back an unresolved segmented address unchanged, and those always have bit 0 set.
++    return addr != 0 && (addr & 1) == 0;
 +#endif
      if (addr > 0x0FFFFFFF) {
          return true;
      }
 diff --git a/src/ship/Context.cpp b/src/ship/Context.cpp
-index 361a1f7..9de3603 100644
+index 361a1f7..a8d3480 100644
 --- a/src/ship/Context.cpp
 +++ b/src/ship/Context.cpp
 @@ -125,7 +125,9 @@ bool Context::InitLogging(spdlog::level::level_enum debugBuildLogLevel,
@@ -116,7 +117,16 @@ index 361a1f7..9de3603 100644
          std::vector<spdlog::sink_ptr> sinks;
  
  #if (!defined(_WIN32)) || defined(_DEBUG)
-@@ -172,6 +174,11 @@ bool Context::InitLogging(spdlog::level::level_enum debugBuildLogLevel,
+@@ -165,13 +167,20 @@ bool Context::InitLogging(spdlog::level::level_enum debugBuildLogLevel,
+         sinks.push_back(systemConsoleSink);
+ #endif
+ 
++#ifndef __EMSCRIPTEN__ // the app directory is browser storage there; the console has the log
+         auto logPath = GetPathRelativeToAppDirectory(("logs/" + GetName() + ".log"));
+         auto fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(logPath, 1024 * 1024 * 10, 10);
+         sinks.push_back(fileSink);
++#endif
+ #ifdef _DEBUG
          mLogger = std::make_shared<spdlog::logger>("multi_sink", sinks.begin(), sinks.end());
          GetLogger()->set_level(debugBuildLogLevel);
          GetLogger()->flush_on(spdlog::level::trace);
@@ -128,7 +138,7 @@ index 361a1f7..9de3603 100644
  #else
          mLogThreadPool = std::make_shared<spdlog::details::thread_pool>(8192, 1);
          mLogger = std::make_shared<spdlog::async_logger>(GetName(), sinks.begin(), sinks.end(), mLogThreadPool,
-@@ -474,6 +481,11 @@ std::string Context::GetShortName() const {
+@@ -474,6 +483,11 @@ std::string Context::GetShortName() const {
  }
  
  std::string Context::GetAppBundlePath() {
@@ -140,7 +150,7 @@ index 361a1f7..9de3603 100644
  #if defined(__ANDROID__)
      const char* externaldir = SDL_AndroidGetExternalStoragePath();
      if (externaldir != NULL) {
-@@ -537,6 +549,11 @@ std::string Context::GetAppBundlePath() {
+@@ -537,6 +551,11 @@ std::string Context::GetAppBundlePath() {
  }
  
  std::string Context::GetAppDirectoryPath(const std::string& appName) {

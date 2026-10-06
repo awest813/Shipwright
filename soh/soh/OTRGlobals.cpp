@@ -418,6 +418,11 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     // The web page (soh/platform/web/shell.html) either supplies oot.o2r / oot-mq.o2r, or stages the
     // player's ROM at kWebRomPath along with that version's asset descriptions under /app/assets.
     static constexpr const char* kWebRomPath = "/tmp/rom.z64";
+    if (!sohArchiveVersionMatch) {
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Ship of Harkinian",
+                                 "The soh.o2r bundled with this page doesn't match the game version.", nullptr);
+        exit(1);
+    }
     if (std::filesystem::exists(kWebRomPath)) {
         Extractor extract;
         std::atomic<size_t> extractCount = 0, totalExtract = 0;
@@ -1146,9 +1151,7 @@ extern "C" char** fontMap;
 extern "C" size_t fontMapSize;
 
 extern "C" void OTRAudio_Exit() {
-#ifdef __EMSCRIPTEN__
-    return;
-#endif
+#ifndef __EMSCRIPTEN__ // the web build has no audio thread
     // Tell the audio thread to stop
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
@@ -1158,6 +1161,7 @@ extern "C" void OTRAudio_Exit() {
 
     // Wait until the audio thread quit
     audio.thread.join();
+#endif
 #if 0
     for (size_t i = 0; i < sequenceMapSize; i++) {
         free(sequenceMap[i]);

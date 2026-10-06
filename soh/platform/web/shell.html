@@ -17,9 +17,11 @@
   .status { font-size: 13px; color: var(--muted); }
   .status.ok { color: var(--accent); }
   label.button, button { font: inherit; cursor: pointer; border: 1px solid #30363d; background: #21262d; color: var(--text); padding: 6px 12px; border-radius: 6px; white-space: nowrap; }
-  button#start { width: 100%; margin-top: 16px; padding: 10px; background: #238636; border-color: #2ea043; font-weight: 600; }
-  button:disabled { opacity: .5; cursor: default; }
-  input[type=file] { display: none; }
+  label.button:focus-within, button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }
+  button#start { width: 100%; margin-top: 16px; padding: 10px; background: #1a7f37; border-color: #2ea043; color: #fff; font-weight: 600; }
+  button:disabled, label.button.disabled { opacity: .5; cursor: default; }
+  /* Visually hidden but focusable, so the labels work from the keyboard */
+  input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
   #message { min-height: 1.5em; font-size: 13px; }
   #message.error { color: var(--error); }
   code { background: #0d1117; padding: 1px 4px; border-radius: 4px; }
@@ -32,37 +34,59 @@
     <h1>Ship of Harkinian</h1>
     <p>Web build (experimental). Load your own legally obtained Ocarina of Time ROM (<code>.z64</code>, <code>.n64</code> or <code>.v64</code>) and it is converted into the game archive right here, or load an <code>oot.o2r</code> / <code>oot-mq.o2r</code> made by this version of desktop SoH. Files stay in this browser; the ROM itself is not kept.</p>
     <div class="row">
-      <div><div>ROM</div><div class="status" id="status-rom">Optional if the archives below are loaded</div></div>
-      <label class="button">Load ROM<input type="file" accept=".z64,.n64,.v64" id="rom-input"></label>
+      <div><div>ROM</div><div class="status" id="status-rom">Not needed if the archives below are loaded</div></div>
+      <label class="button disabled">Load ROM<input type="file" accept=".z64,.n64,.v64" id="rom-input" disabled></label>
     </div>
     <div class="row">
       <div><div>Ocarina of Time</div><div class="status" id="status-oot.o2r">Loading…</div></div>
-      <label class="button">Load oot.o2r<input type="file" accept=".o2r" data-archive="oot.o2r"></label>
+      <label class="button disabled">Load oot.o2r<input type="file" accept=".o2r" data-archive="oot.o2r" disabled></label>
     </div>
     <div class="row">
       <div><div>Master Quest</div><div class="status" id="status-oot-mq.o2r">Loading…</div></div>
-      <label class="button">Load oot-mq.o2r<input type="file" accept=".o2r" data-archive="oot-mq.o2r"></label>
+      <label class="button disabled">Load oot-mq.o2r<input type="file" accept=".o2r" data-archive="oot-mq.o2r" disabled></label>
     </div>
-    <div id="message"></div>
+    <div id="message" role="status" aria-live="polite">Loading the game files…</div>
     <button id="start" disabled>Start</button>
   </div>
 </div>
 <script>
   "use strict";
   const DATA_DIR = "/data";
+  const ROM_PATH = "/tmp/rom.z64"; // where RunExtract (soh/soh/OTRGlobals.cpp) looks for a staged ROM
   const ARCHIVES = ["oot.o2r", "oot-mq.o2r"];
   const overlay = document.getElementById("overlay");
   const startButton = document.getElementById("start");
   const message = document.getElementById("message");
-  let running = false;
-  let stopped = false; // the game aborted
+  const fileInputs = document.querySelectorAll("input[type=file]");
+  let ready = false;   // runtime initialized and browser storage loaded
+  let running = false; // Start was pressed
   let started = false; // the game reached its main loop
+  let stopped = false; // the game stopped (exit during startup, abort or crash)
+  let storageWorks = true;
+  let stagedRomPath = null; // version directory of a ROM waiting to be converted
   let persistSoon = 0;
-  let stagedRomPath = null; // version directory of a ROM waiting to be extracted
 
   function showMessage(text, isError) {
     message.textContent = text;
     message.className = isError ? "error" : "";
+  }
+
+  function setControlsEnabled(enabled) {
+    for (const input of fileInputs) {
+      input.disabled = !enabled;
+      input.parentElement.classList.toggle("disabled", !enabled);
+    }
+    refreshArchiveStatus();
+  }
+
+  // Shows the start screen again with an explanation; the page has to be reloaded after this.
+  function stop(text) {
+    if (stopped) return;
+    stopped = true;
+    overlay.style.display = "";
+    setControlsEnabled(false);
+    startButton.disabled = true;
+    showMessage(`${text} Reload the page to try again.`, true);
   }
 
   function hasFile(path) {
@@ -72,17 +96,18 @@
   function refreshArchiveStatus() {
     let any = false;
     for (const name of ARCHIVES) {
-      const present = hasFile(`${DATA_DIR}/${name}`);
+      const present = ready && hasFile(`${DATA_DIR}/${name}`);
       const el = document.getElementById(`status-${name}`);
-      el.textContent = present ? "Ready" : "Not loaded";
+      el.textContent = !ready ? "Loading…" : present ? "Ready" : "Not loaded";
       el.className = present ? "status ok" : "status";
       any = any || present;
     }
-    startButton.disabled = !any && !stagedRomPath;
+    startButton.disabled = !ready || running || stopped || (!any && !stagedRomPath);
   }
 
   // N64 dumps come in three byte orders; Torch's version table hashes big-endian (.z64) dumps.
   function toBigEndian(rom) {
+    if (rom.length < 0x1000) throw new Error("this does not look like an N64 ROM");
     const magic = (rom[0] << 24 | rom[1] << 16 | rom[2] << 8 | rom[3]) >>> 0;
     if (magic === 0x80371240) return rom;
     const out = new Uint8Array(rom.length);
@@ -104,13 +129,21 @@
     return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
   }
 
+  async function fetchOk(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`could not download ${url} (${response.status})`);
+    return response;
+  }
+
   // Unpacks a bundle made by pack_assets.py: gzip of (u32 path length, path, u32 size, data)*.
   async function installAssetBundle(version) {
-    const response = await fetch(`assets/${version}.bundle.gz`);
-    if (!response.ok) throw new Error(`could not download the ${version} asset descriptions`);
-    const unzipped = response.body.pipeThrough(new DecompressionStream("gzip"));
-    const data = new Uint8Array(await new Response(unzipped).arrayBuffer());
-    const view = new DataView(data.buffer);
+    let data = new Uint8Array(await (await fetchOk(`assets/${version}.bundle.gz`)).arrayBuffer());
+    // Some servers send .gz files with Content-Encoding: gzip, and then the browser already unpacked it.
+    if (data[0] === 0x1f && data[1] === 0x8b) {
+      const unzipped = new Blob([data]).stream().pipeThrough(new DecompressionStream("gzip"));
+      data = new Uint8Array(await new Response(unzipped).arrayBuffer());
+    }
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     const decoder = new TextDecoder();
     const base = `/app/assets/${version}`;
     for (let pos = 0; pos < data.length;) {
@@ -123,16 +156,43 @@
     }
   }
 
-  // Saves, config and archives live in IndexedDB. Writes land in memory first, so flush them.
-  let syncing = false, syncAgain = false;
+  function removeTree(path) {
+    for (const name of FS.readdir(path)) {
+      if (name === "." || name === "..") continue;
+      const child = `${path}/${name}`;
+      if (FS.isDir(FS.stat(child).mode)) removeTree(child); else FS.unlink(child);
+    }
+    FS.rmdir(path);
+  }
+
+  // Drops a previously staged ROM and every asset bundle, keeping the preloaded config.yml.
+  function clearStagedRom() {
+    try { FS.unlink(ROM_PATH); } catch (e) {}
+    for (const name of FS.readdir("/app/assets")) {
+      if (name === "." || name === ".." || name === "config.yml") continue;
+      removeTree(`/app/assets/${name}`);
+    }
+    stagedRomPath = null;
+  }
+
+  // Saves, config and archives live in IndexedDB; writes land in memory first, so flush them.
+  // Resolves once everything written so far is stored.
+  let syncing = null, syncAgain = false;
   function persist() {
-    if (syncing) { syncAgain = true; return; }
-    syncing = true;
-    FS.syncfs(false, (err) => {
-      syncing = false;
-      if (syncAgain) { syncAgain = false; persist(); }
-      if (err) console.error("Saving to browser storage failed", err);
+    if (syncing) { syncAgain = true; return syncing; }
+    syncing = new Promise((resolve) => {
+      FS.syncfs(false, (err) => {
+        if (err) {
+          console.error("Saving to browser storage failed", err);
+          if (storageWorks && !running) showMessage("Your browser didn't let this page store files, so they will be lost when the page closes.", true);
+          storageWorks = false;
+        }
+        syncing = null;
+        resolve(!err);
+        if (syncAgain) { syncAgain = false; persist(); }
+      });
     });
+    return syncing;
   }
 
   var Module = {
@@ -143,31 +203,45 @@
       FS.mount(IDBFS, {}, DATA_DIR);
       addRunDependency("syncfs");
       FS.syncfs(true, (err) => {
-        if (err) console.error("Loading browser storage failed", err);
+        if (err) {
+          console.error("Loading browser storage failed", err);
+          storageWorks = false;
+        }
         removeRunDependency("syncfs");
       });
     }],
+    setStatus: (text) => { if (!ready && text) showMessage(text); },
     onRuntimeInitialized: () => {
-      refreshArchiveStatus();
+      ready = true;
+      setControlsEnabled(true);
+      showMessage(storageWorks ? "" : "Your browser didn't let this page use storage (private window?), so nothing will be kept after it closes.", !storageWorks);
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
     },
     print: (text) => console.log(text),
     printErr: (text) => console.warn(text),
-    onAbort: (what) => {
-      stopped = true;
-      overlay.style.display = "";
-      showMessage(`The game stopped: ${what}`, true);
-    },
+    onAbort: (what) => stop(`The game stopped: ${what}.`),
     onGameStarted: () => { started = true; },
     // Saves and other files the game writes go to browser storage right away.
     onFileWritten: () => { clearTimeout(persistSoon); persistSoon = setTimeout(persist, 250); },
+    // The game wrote oot.o2r / oot-mq.o2r from the staged ROM; the ROM and asset descriptions can go.
+    onArchiveExtracted: () => {
+      clearStagedRom();
+      persist();
+    },
   };
+
+  // Crashes inside the game (wasm traps, uncaught C++ exceptions) surface here rather than through onAbort.
+  window.addEventListener("error", (e) => {
+    const isGameCrash = e.error instanceof WebAssembly.RuntimeError ||
+                        (typeof WebAssembly.Exception !== "undefined" && e.error instanceof WebAssembly.Exception);
+    if (running && isGameCrash) stop(`The game crashed (${e.error.message || "C++ exception"}).`);
+  });
 
   for (const input of document.querySelectorAll("input[data-archive]")) {
     input.addEventListener("change", async () => {
       const file = input.files[0];
       input.value = "";
-      if (!file) return;
+      if (!file || !ready) return;
       const name = input.dataset.archive;
       showMessage(`Storing ${name}…`);
       try {
@@ -175,9 +249,8 @@
         // A .o2r is a zip archive
         if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error("this is not an .o2r archive");
         FS.writeFile(`${DATA_DIR}/${name}`, bytes);
-        persist();
         refreshArchiveStatus();
-        showMessage(`${name} loaded.`);
+        if (await persist()) showMessage(`${name} stored in this browser.`);
       } catch (e) {
         showMessage(`Could not load ${file.name}: ${e.message}`, true);
       }
@@ -188,58 +261,50 @@
     const input = event.target;
     const file = input.files[0];
     input.value = "";
-    if (!file) return;
+    if (!file || !ready) return;
     const status = document.getElementById("status-rom");
     try {
+      if (!window.crypto || !crypto.subtle) throw new Error("the page has to be opened over HTTPS (or from localhost) to read ROMs");
+      if (typeof DecompressionStream === "undefined") throw new Error("this browser is too old to read ROMs");
       showMessage(`Checking ${file.name}…`);
       const rom = toBigEndian(new Uint8Array(await file.arrayBuffer()));
-      const versions = await (await fetch("assets/rom-versions.json")).json();
+      const versions = await (await fetchOk("assets/rom-versions.json")).json();
       const version = versions[await sha1Hex(rom)];
       if (!version) throw new Error("this ROM version isn't supported (check it at ship.equipment)");
       showMessage(`Downloading asset descriptions for ${version.name}…`);
+      clearStagedRom();
       await installAssetBundle(version.path);
-      FS.writeFile("/tmp/rom.z64", rom);
+      FS.writeFile(ROM_PATH, rom);
       stagedRomPath = version.path;
-      status.textContent = `${version.name}: will be converted when you press Start`;
+      status.textContent = `${version.name}: converted when you press Start`;
       status.className = "status ok";
       refreshArchiveStatus();
       showMessage("");
     } catch (e) {
+      clearStagedRom();
+      status.textContent = "Not needed if the archives below are loaded";
+      status.className = "status";
+      refreshArchiveStatus();
       showMessage(`Could not use ${file.name}: ${e.message}`, true);
     }
   });
 
-  // Called by the game once it has written oot.o2r / oot-mq.o2r from the staged ROM.
-  Module.onArchiveExtracted = () => {
-    try { FS.unlink("/tmp/rom.z64"); } catch (e) {}
-    try { removeTree(`/app/assets/${stagedRomPath}`); } catch (e) {}
-    stagedRomPath = null;
-    persist();
-  };
-
-  function removeTree(path) {
-    for (const name of FS.readdir(path)) {
-      if (name === "." || name === "..") continue;
-      const child = `${path}/${name}`;
-      if (FS.isDir(FS.stat(child).mode)) removeTree(child); else FS.unlink(child);
-    }
-    FS.rmdir(path);
-  }
-
   startButton.addEventListener("click", () => {
-    if (running) return;
+    if (running || !ready || stopped) return;
     running = true;
-    startButton.disabled = true;
+    setControlsEnabled(false);
     // Startup (and converting a ROM) blocks the page, so show what's happening first.
-    showMessage(stagedRomPath ? "Converting your ROM, this can take a minute. Keep this tab open…" : "Starting…");
+    showMessage(stagedRomPath ? "Converting your ROM. This can take a minute; keep this tab open…" : "Starting…");
     requestAnimationFrame(() => setTimeout(() => {
-      Module.callMain([]);
+      try {
+        Module.callMain([]);
+      } catch (e) {
+        stop(`The game crashed while starting (${e.message || e}).`);
+      }
       setInterval(persist, 10000);
-      if (!started && !stopped) {
+      if (!started) {
         // main() exited during startup; it has already explained why in a dialog.
-        stopped = true;
-        overlay.style.display = "";
-        showMessage("The game couldn't start. Reload the page to try again.", true);
+        stop("The game couldn't start.");
       }
       if (stopped) return;
       overlay.style.display = "none";
@@ -250,10 +315,11 @@
   document.addEventListener("visibilitychange", () => { if (document.hidden && running) persist(); });
   window.addEventListener("pagehide", () => { if (running) persist(); });
 
-  // Keep the browser from acting on keys the game uses (F5 reload, F11 fullscreen, Tab focus, Ctrl+R).
+  // While the game is on screen, keep the browser from acting on keys it uses (F5 reload, F11
+  // fullscreen, Tab focus, Ctrl+R). F12 stays available for the developer tools.
   window.addEventListener("keydown", (e) => {
-    if (!running) return;
-    if (/^F\d+$/.test(e.key) || e.key === "Tab" || (e.ctrlKey && e.key.toLowerCase() === "r")) e.preventDefault();
+    if (!running || stopped || overlay.style.display !== "none") return;
+    if ((/^F\d+$/.test(e.key) && e.key !== "F12") || e.key === "Tab" || (e.ctrlKey && e.key.toLowerCase() === "r")) e.preventDefault();
   }, { capture: true });
 </script>
 {{{ SCRIPT }}}

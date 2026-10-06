@@ -855,6 +855,10 @@ endif()
 
 find_program(CURL NAMES curl DOC "Path to the curl program.  Used to download files.")
 execute_process(COMMAND ${CURL} -sSfL https://raw.githubusercontent.com/mdqinc/SDL_GameControllerDB/master/gamecontrollerdb.txt -o ${CMAKE_BINARY_DIR}/gamecontrollerdb.txt OUTPUT_VARIABLE RESULT)
+if(EMSCRIPTEN AND NOT EXISTS ${CMAKE_BINARY_DIR}/gamecontrollerdb.txt)
+    # The web build preloads it; without the download SDL still has its built-in browser mapping.
+    file(TOUCH ${CMAKE_BINARY_DIR}/gamecontrollerdb.txt)
+endif()
 
 if("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
 configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/macosx/Info.plist.in ${CMAKE_BINARY_DIR}/macosx/Info.plist @ONLY)

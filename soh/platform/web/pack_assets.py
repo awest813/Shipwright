@@ -35,7 +35,10 @@ def parse_config(path):
 
 
 def pack_version(src_dir, out_path):
-    with gzip.open(out_path, "wb", compresslevel=9) as out:
+    if not os.path.isdir(src_dir):
+        sys.exit(f"config.yml refers to {src_dir}, which does not exist")
+    # mtime=0 keeps the output identical between builds
+    with open(out_path, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", compresslevel=9, mtime=0) as out:
         for root, _, files in sorted(os.walk(src_dir)):
             for name in sorted(files):
                 full = os.path.join(root, name)

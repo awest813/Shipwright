@@ -63,6 +63,17 @@ int copy_file(const char* src, const char* dst) {
 }
 #endif
 
+// On the web build files only live in memory until the page copies them to browser storage, so it is
+// told about every change to save data.
+static void NotifySaveFilesChanged() {
+#ifdef __EMSCRIPTEN__
+    EM_ASM({
+        if (Module.onFileWritten)
+            Module.onFileWritten();
+    });
+#endif
+}
+
 bool SaveManager::WriteFileSafely(const std::filesystem::path& fileName, const std::string& contents) {
     std::filesystem::path tempFile = fileName;
     tempFile += ".temp";
@@ -101,13 +112,7 @@ bool SaveManager::WriteFileSafely(const std::filesystem::path& fileName, const s
         return false;
     }
 #endif
-#ifdef __EMSCRIPTEN__
-    // The file only lives in memory until the page copies it to browser storage.
-    EM_ASM({
-        if (Module.onFileWritten)
-            Module.onFileWritten();
-    });
-#endif
+    NotifySaveFilesChanged();
     return true;
 }
 
@@ -2507,11 +2512,13 @@ void SaveManager::CopyZeldaFile(int from, int to) {
     std::filesystem::copy_file(GetFileName(from), GetFileName(to));
 #endif
     fileMetaInfo[to] = fileMetaInfo[from];
+    NotifySaveFilesChanged();
 }
 
 void SaveManager::DeleteZeldaFile(int fileNum) {
     if (std::filesystem::exists(GetFileName(fileNum))) {
         std::filesystem::remove(GetFileName(fileNum));
+        NotifySaveFilesChanged();
     }
     fileMetaInfo[fileNum].valid = false;
     fileMetaInfo[fileNum].quest = QUEST_NORMAL;

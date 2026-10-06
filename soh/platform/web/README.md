@@ -1,7 +1,7 @@
 # Web build (experimental)
 
-Ship of Harkinian compiled to WebAssembly with Emscripten. See [docs/WEB_PORT.md](../../../docs/WEB_PORT.md)
-for the audit, design and roadmap.
+Ship of Harkinian compiled to WebAssembly with Emscripten. `docs/WEB_PORT.md` in the repository has
+the audit, design, progress and roadmap.
 
 Current state: single-threaded, WebGL2, interpolation off, networking unavailable. The page turns
 the player's ROM into `oot.o2r` / `oot-mq.o2r` in the browser, or accepts archives made by desktop SoH
@@ -35,8 +35,8 @@ Configuring for Emscripten applies the patches in `CMake/web/patches/` to the `l
 `torch` submodules (they are meant to go upstream).
 
 The output is `build-web/soh/soh.{html,js,wasm,data}` plus `build-web/soh/assets/` (the extractor's
-asset descriptions, one bundle per ROM version, fetched on demand). Serve that directory over HTTP, for example
-`python3 -m http.server -d build-web/soh`, and open `soh.html`. Opening the file directly from disk
+asset descriptions, one bundle per ROM version, fetched on demand). Serve that directory over
+HTTP, for example `python3 -m http.server -d build-web/soh`, and open `soh.html`. Opening the file directly from disk
 does not work.
 
 ## Using it
@@ -48,7 +48,12 @@ does not work.
    archive is stored in the browser (IndexedDB), together with saves and settings, so this is only
    needed once. The ROM itself is not kept.
 
-Saves are flushed to browser storage every few seconds and when the tab is hidden.
+Saves reach browser storage within a quarter of a second of being written. Other files, such as
+settings, follow within 10 seconds and whenever the tab is hidden. In a private window the browser
+may refuse storage altogether; the page says so, and nothing is kept after it closes.
+
+The page has to be served over HTTPS or from `localhost` for ROM conversion, which needs the
+browser's crypto API.
 
 ## Files
 

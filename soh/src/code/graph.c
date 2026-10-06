@@ -11,6 +11,10 @@
 #include "soh/Enhancements/gameconsole.h"
 #include "soh/OTRGlobals.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 #define GFXPOOL_HEAD_MAGIC 0x1234
 #define GFXPOOL_TAIL_MAGIC 0x5678
 
@@ -507,8 +511,6 @@ static void RunFrame() {
 }
 
 #ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-
 // Called by the browser once per display refresh. The game advances at 60 / R_UPDATE_RATE ticks
 // per second, so only run a frame when the next tick is due.
 static void Graph_WebFrame(void) {
@@ -520,7 +522,9 @@ static void Graph_WebFrame(void) {
         emscripten_cancel_main_loop();
         return;
     }
-    if (now < nextTick) {
+    // A tick is usually a whole number of display refreshes (50 ms = 3 at 60 Hz), and callback times
+    // jitter by a fraction of a millisecond, so allow some slack rather than slipping a refresh.
+    if (now + 4.0 < nextTick) {
         return;
     }
     // After a stall (background tab, long load) resync instead of running a burst of catch-up ticks.

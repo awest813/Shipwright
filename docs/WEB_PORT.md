@@ -1,13 +1,15 @@
 # Web Port (Emscripten / WebAssembly): Audit & Plan
 
-Status: **Phase 0 done, Phase 1 in progress.** The web build compiles, links and boots in
-Chromium: the main loop runs and the boot logo scene renders through WebGL2. Gameplay has
-not been verified yet, because that needs a real `oot.o2r`. Build instructions are in
-[soh/platform/web/README.md](../soh/platform/web/README.md).
+Status: **Phases 0-2 implemented, gameplay not yet verified.** The web build compiles in CI
+(`soh-web` artifact), boots in Chromium, renders through WebGL2 and runs the SoH menus. The
+page converts the player's ROM into `oot.o2r` in the browser. Everything past the first scene
+load needs real game data and has not been play-tested yet. Build and usage instructions are
+in [soh/platform/web/README.md](../soh/platform/web/README.md).
 
-This document records an audit of the codebase (SoH `94f950f8`, libultraship `62e973a`,
-Torch `2ab12fe`) and the phased plan for shipping Ship of Harkinian in a browser. Section 6
-lists what implementing it has turned up so far.
+This document began as an audit of the codebase (SoH `94f950f8`, libultraship `62e973a`,
+Torch `2ab12fe`). Sections 1 and 2 are that original audit and design, kept as a record; a few
+details differ from what was built. Section 3 tracks what has actually been done, and section 6
+lists what implementing it turned up.
 
 ## TL;DR
 
@@ -215,88 +217,41 @@ Both are submodules owned by other repos. Land those changes upstream
 
 ---
 
-## 3. Phased Plan
+## 3. Progress
 
-### Phase 0: Spike: "it links" (≈1 week)
-Goal: `emcmake cmake` + `ninja` produces `soh.html/js/wasm` that reaches `main()`.
+### Done
+- **Build:** `CMake/emscripten.cmake`, Emscripten ports behind `find_package` shims
+  (`CMake/web/modules`), FetchContent for libzip, nlohmann_json, opus and opusfile, wasm exceptions,
+  GLES/WebGL2, MPQ and scripting off, `SOH_PREBUILT_O2R` instead of running the native packer.
+  libultraship and Torch changes live in `CMake/web/patches/` and are applied at configure time.
+- **Runtime:** `emscripten_set_main_loop` drives `RunFrame` once per game tick (20 Hz, with
+  slack for refresh jitter). Audio, resource loading, logging, saves and music decoding run without
+  threads. Randomizer seeds generate on the main thread after a short delay. Networked features
+  refuse cleanly.
+- **Rendering and input:** WebGL2 context, the GL fixes from section 1.2, wasm32 pointer checks,
+  no ImGui viewports, canvas at CSS-pixel resolution, browser keys kept away from the game.
+- **Storage:** IDBFS at `/data` (`GetAppDirectoryPath`), bundled files preloaded at `/app`
+  (`GetAppBundlePath`). Writes through `WriteFileSafely` and save deletes/copies are flushed to
+  IndexedDB within 250 ms; everything else every 10 s and when the tab is hidden.
+- **In-browser ROM conversion** (section 2.3 had planned a Worker; it runs on the main thread
+  instead, reusing `RunExtract`): the page normalizes the byte order, looks up the SHA-1 in
+  `rom-versions.json` (generated from `soh/assets/yml/config.yml`), fetches that version's ~450 KB
+  bundle (`pack_assets.py`), and the game's web startup path runs the Torch extraction.
+- **Page:** start screen with ROM / archive upload, clear errors for unsupported ROMs, missing
+  browser features, storage failures, startup failures and crashes.
+- **CI:** `build-web` job uploading the `soh-web` artifact.
+- **wasm-only bugs fixed:** see section 6.
 
-- [ ] Add `CMake/emscripten.cmake` (SoH) and `cmake/dependencies/emscripten.cmake`
-      (LUS). Pre-build ports with `embuilder build sdl2 zlib bzip2 ogg vorbis`.
-      FetchContent libzip, nlohmann_json, opus, opusfile.
-- [ ] Add `EMSCRIPTEN` branches at `soh/CMakeLists.txt:390`, `:563`, `:688`,
-      `:250`, `:747` and root `CMakeLists.txt:131`, `:188`, `:434-444`. Drop
-      `-export-dynamic`, `SDL2_net` (for now) and `CMAKE_DL_LIBS`.
-- [ ] Force `USE_OPENGLES=ON`, `INCLUDE_MPQ_SUPPORT=OFF` and
-      `ENABLE_SCRIPTING=OFF`. Define `IMGUI_IMPL_OPENGL_ES3`.
-- [ ] Apply global `add_compile_options(-fwasm-exceptions)` and
-      `add_link_options(-fwasm-exceptions)`.
-- [ ] Add an option to consume a prebuilt `soh.o2r` and skip
-      `GenerateSohOtr`/`ExtractAssets` under Emscripten.
-- [ ] Torch: exclude `src/lib/web.cpp` when `NOT USE_STANDALONE`.
-- [ ] Gate `SDLNet_Init()` and the Network/CrowdControl/Sail/Anchor sources
-      behind a `SOH_NETWORKING` define (default OFF on web).
-- [ ] Gate `pfd` usage in the Extractor behind `!__EMSCRIPTEN__`.
-
-### Phase 1: MVP: "it plays" (≈2-4 weeks)
-Goal: title screen to gameplay in Chrome and Firefox, with audio, input and saves.
-The user provides `oot.o2r`.
-
-- [ ] **Loop:** `emscripten_set_main_loop` driving `RunFrame` at the 20 Hz tick
-      rate. Make the `irqClient`/`irqMgrMsgQ` stack objects static. Skip
-      `SyncFramerateWithTime` sleeping. Interpolation locked off.
-- [ ] **Threads:** inline the audio thread body in `Graph_ProcessGfxCommands`.
-      Synchronous `ResourceManager::LoadResource`. Synchronous spdlog. SaveManager
-      `threaded=false`. Synchronous custom-music decode. Randomizer generation
-      runs synchronously after a "Generating…" frame.
-- [ ] **GL:** request an ES 3.0 context. Fix the `glewInit` guard. Map
-      `MIRROR_CLAMP_TO_EDGE` to `MIRRORED_REPEAT`. Initialize
-      `depth_stencil_value`. MSAA off. ImGui viewports off.
-- [ ] **wasm32:** `IsValidResolvedAddress` returns true on Emscripten.
-      `-sGLOBAL_BASE=0x10000`.
-- [ ] **Link flags:** `-sALLOW_MEMORY_GROWTH -sINITIAL_MEMORY=512MB
-      -sMAXIMUM_MEMORY=4GB -sSTACK_SIZE=1MB -sMIN_WEBGL_VERSION=2
-      -sMAX_WEBGL_VERSION=2 -lidbfs.js --preload-file soh.o2r
-      --preload-file gamecontrollerdb.txt`.
-- [ ] **Shell page** (`soh/platform/web/`): canvas, a click-to-start overlay
-      (AudioContext and pointer lock), `oot.o2r` upload to IndexedDB to MEMFS,
-      IDBFS mount for saves, and `syncfs` hooks.
-- [ ] **Input:** `preventDefault` on game hotkeys. Rebind reset/save-state off
-      Ctrl+R/F5 by default on web.
-- [ ] **CI:** a `build-web` job in `generate-builds.yml` that `needs:
-      generate-soh-otr`, sets up emsdk (pinned version), and uploads
-      `soh-web.zip`. `pr-artifacts.yml` picks it up automatically.
-
-**Exit criteria:** load a save, play through Kokiri Forest and the Deku Tree
-with correct graphics and audio, then save, reload the tab, and continue.
-
-### Phase 2: In-browser ROM extraction (≈2-3 weeks)
-- [ ] `soh-extract` wasm target (Torch + TorchExtract) running in a Worker.
-- [ ] Per-version yml bundles produced by CI (one compressed archive per
-      supported hash), fetched on demand.
-- [ ] ROM picker UI: drag-and-drop or file input, hash check against
-      `supportedHashes.json`, progress reporting from the Worker, and support for
-      both vanilla and MQ.
-- [ ] Write `oot.o2r` straight to its final location (avoid the extra copy at
-      `Extract.cpp:663`) and persist it to IndexedDB.
-
-### Phase 3: Parity & polish (ongoing)
-- [ ] Frame interpolation: queue interpolated frames and present one per rAF
-      callback (60/120/144 Hz).
-- [ ] Proper `GetPixelDepth` via a depth-to-RGBA pass (lens flare, Lens of Truth
-      edge cases).
-- [ ] MSAA via a WebGL2-compatible resolve path.
-- [ ] Mods: upload `.o2r` mods into IndexedDB, mounted at `mods/`.
-- [ ] Save/config export and import. Web Speech API TTS backend.
-- [ ] Randomizer generation in a Worker (or the pthreads variant).
-- [ ] Mobile/touch: on-screen controls (LUS has `port/mobile` precedent), and
-      cap the resolution scale on low-end GPUs.
-- [ ] Optional pthreads build variant (COOP/COEP), restoring audio/render
-      overlap and enabling WasmFS + OPFS.
-
-### Phase 4: Online (optional)
-- [ ] WebSocket transport for Anchor, plus the matching server endpoint.
-- [ ] Crowd Control/Sail stay desktop-only unless those services offer
-      WebSocket APIs.
+### Not done yet
+- Play-testing with real game data (the exit criterion: Kokiri Forest through the Deku Tree,
+  save, reload, continue).
+- Frame interpolation above 20 FPS: queue interpolated frames and present one per browser frame.
+- Proper `GetPixelDepth` (depth-to-RGBA pass) and an MSAA path that WebGL2 can resolve.
+- Mods upload, save export/import, a Web Speech text-to-speech backend.
+- Mobile/touch controls.
+- A pthreads variant (COOP/COEP) for audio/render overlap and WasmFS + OPFS.
+- WebSocket transport for Anchor; Crowd Control and Sail stay desktop-only.
+- Upstreaming the libultraship and Torch patches.
 
 ---
 
@@ -312,38 +267,32 @@ with correct graphics and audio, then save, reload the tab, and continue.
 | Upstream churn in LUS/Torch | Land guards upstream early, and keep web CI running on every PR so regressions show up immediately. |
 | Unmeasured: randomizer generation time in wasm | Measure in Phase 1. If it takes more than about 2 s, prioritize the Worker. |
 
-## 5. Suggested Directory Layout
+## 5. Layout
 
 ```
-CMake/emscripten.cmake            # SoH-side toolchain glue / flags
+CMake/emscripten.cmake            # web toolchain glue, flags, FetchContent, submodule patches
+CMake/web/modules/                # find_package shims for Emscripten ports
+CMake/web/patches/                # libultraship and torch changes, until upstreamed
 soh/platform/web/
-  shell.html                      # custom emscripten shell (canvas, overlays)
-  boot.js                         # storage mounting, file upload, syncfs hooks
-  extract-worker.js               # Phase 2: drives soh-extract.wasm
-  README.md                       # how to build & serve locally
+  shell.html                      # the page: storage, ROM / archive upload, start flow
+  pack_assets.py                  # per-version extractor asset bundles + rom-versions.json
+  README.md                       # building, serving, using
 docs/WEB_PORT.md                  # this document
-```
-
-Local build, once Phase 0 lands (sketch):
-
-```sh
-# host: build soh.o2r natively
-cmake -S . -B build-tools -GNinja -DSOH_TOOLS_ONLY=ON && cmake --build build-tools --target GenerateSohOtr
-# web
-emcmake cmake -S . -B build-web -GNinja -DCMAKE_BUILD_TYPE=Release -DSOH_PREBUILT_O2R=build-tools/soh.o2r
-cmake --build build-web
-python3 -m http.server -d build-web/soh   # or any static server
 ```
 
 ## 6. Lessons From the Implementation
 
-Two WebAssembly-specific problems came up that the static audit did not predict.
+Two kinds of WebAssembly-specific problem came up that the static audit did not predict.
 
 - **Signature mismatches trap.** Native ABIs tolerate calling a C function through a declaration
   with the wrong parameter list. WebAssembly traps instead, either at the call (indirect calls:
   "null function or function signature mismatch") or with a `wasm-ld` "function signature mismatch"
-  warning (direct calls). One case was found and fixed: `framebuffer_effects.c` declared
-  `gfx_create_framebuffer` without its last parameter. Treat any such `wasm-ld` warning as a bug.
+  warning (direct calls). Treat any such `wasm-ld` warning as a bug. Fixed so far:
+  `gfx_create_framebuffer` declared without its last parameter in `framebuffer_effects.c`,
+  `EnTakaraMan_Reset` and `Select_LoadTitle` taking different parameters from the function pointer
+  they are called through, and `SkelAnime_DrawSkeleton2`'s callback types. They were found by
+  scanning the C sources with `-Wcast-function-type-strict` and with
+  `-Wincompatible-function-pointer-types` re-enabled; rerun that scan after large changes.
 - **Huge functions can crash the browser's compiler.** The randomizer's data-table initializers
   (hint text, item and location tables, trick names, settings) are single functions with
   thousands of statements. At `-O2` the constructors they call are inlined into 10-25k wasm locals
