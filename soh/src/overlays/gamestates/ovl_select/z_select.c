@@ -19,7 +19,7 @@
 void Select_SwitchBetterWarpMode(SelectContext* this, u8 isBetterWarpMode);
 void Sram_InitDebugSave(void);
 
-void Select_LoadTitle(SelectContext* this) {
+void Select_LoadTitle(SelectContext* this, s32 entranceIndex) {
     this->state.running = false;
     SET_NEXT_GAMESTATE(&this->state, Title_Init, TitleContext);
 }
