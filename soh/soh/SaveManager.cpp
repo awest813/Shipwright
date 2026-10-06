@@ -3,6 +3,9 @@
 #include <filesystem>
 #include <array>
 #include <mutex>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 #ifdef _WIN32
 #include <io.h>
 #elif !defined(__SWITCH__) && !defined(__WIIU__)
@@ -97,6 +100,13 @@ bool SaveManager::WriteFileSafely(const std::filesystem::path& fileName, const s
         std::filesystem::remove(tempFile, ec);
         return false;
     }
+#endif
+#ifdef __EMSCRIPTEN__
+    // The file only lives in memory until the page copies it to browser storage.
+    EM_ASM({
+        if (Module.onFileWritten)
+            Module.onFileWritten();
+    });
 #endif
     return true;
 }

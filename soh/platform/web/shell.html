@@ -57,6 +57,7 @@
   let running = false;
   let stopped = false; // the game aborted
   let started = false; // the game reached its main loop
+  let persistSoon = 0;
   let stagedRomPath = null; // version directory of a ROM waiting to be extracted
 
   function showMessage(text, isError) {
@@ -123,12 +124,13 @@
   }
 
   // Saves, config and archives live in IndexedDB. Writes land in memory first, so flush them.
-  let syncing = false;
+  let syncing = false, syncAgain = false;
   function persist() {
-    if (syncing) return;
+    if (syncing) { syncAgain = true; return; }
     syncing = true;
     FS.syncfs(false, (err) => {
       syncing = false;
+      if (syncAgain) { syncAgain = false; persist(); }
       if (err) console.error("Saving to browser storage failed", err);
     });
   }
@@ -157,6 +159,8 @@
       showMessage(`The game stopped: ${what}`, true);
     },
     onGameStarted: () => { started = true; },
+    // Saves and other files the game writes go to browser storage right away.
+    onFileWritten: () => { clearTimeout(persistSoon); persistSoon = setTimeout(persist, 250); },
   };
 
   for (const input of document.querySelectorAll("input[data-archive]")) {
