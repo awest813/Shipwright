@@ -3,9 +3,9 @@
 Ship of Harkinian compiled to WebAssembly with Emscripten. See [docs/WEB_PORT.md](../../../docs/WEB_PORT.md)
 for the audit, design and roadmap.
 
-Current state: single-threaded, WebGL2, interpolation off, networking unavailable. The page needs
-an `oot.o2r` / `oot-mq.o2r` produced by desktop SoH of the same version (in-browser ROM extraction is
-not done yet).
+Current state: single-threaded, WebGL2, interpolation off, networking unavailable. The page turns
+the player's ROM into `oot.o2r` / `oot-mq.o2r` in the browser, or accepts archives made by desktop SoH
+of the same version.
 
 ## Getting a build
 
@@ -34,18 +34,23 @@ cmake --build build-web
 Configuring for Emscripten applies the patches in `CMake/web/patches/` to the `libultraship` and
 `torch` submodules (they are meant to go upstream).
 
-The output is `build-web/soh/soh.{html,js,wasm,data}`. Serve that directory over HTTP, for example
+The output is `build-web/soh/soh.{html,js,wasm,data}` plus `build-web/soh/assets/` (the extractor's
+asset descriptions, one bundle per ROM version, fetched on demand). Serve that directory over HTTP, for example
 `python3 -m http.server -d build-web/soh`, and open `soh.html`. Opening the file directly from disk
 does not work.
 
 ## Using it
 
-1. Load `oot.o2r` and/or `oot-mq.o2r` on the start screen. They are stored in the browser
-   (IndexedDB), together with saves and settings, so this is only needed once.
-2. Click **Start**.
+1. On the start screen, load your ROM (`.z64`, `.n64` or `.v64`), or an `oot.o2r` / `oot-mq.o2r`.
+   A ROM is identified by its hash, and only that version's asset descriptions (about 450 KB) are
+   downloaded.
+2. Click **Start**. A ROM is converted first, which blocks the page for a while. The resulting
+   archive is stored in the browser (IndexedDB), together with saves and settings, so this is only
+   needed once. The ROM itself is not kept.
 
 Saves are flushed to browser storage every few seconds and when the tab is hidden.
 
 ## Files
 
-- `shell.html`: the page around the game: storage mount, archive upload, start button.
+- `shell.html`: the page around the game: storage mount, ROM / archive upload, start button.
+- `pack_assets.py`: packs `soh/assets/yml` into the per-version bundles and `rom-versions.json`.

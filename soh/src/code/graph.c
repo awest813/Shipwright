@@ -531,7 +531,11 @@ static void Graph_WebFrame(void) {
 
 void Graph_ThreadEntry(void* arg0) {
 #ifdef __EMSCRIPTEN__
-    // Hands control to the browser; this never returns.
+    // Tells the page startup succeeded, then hands control to the browser; this never returns.
+    EM_ASM({
+        if (Module.onGameStarted)
+            Module.onGameStarted();
+    });
     emscripten_set_main_loop(Graph_WebFrame, 0, 1);
 #else
     while (WindowIsRunning()) {

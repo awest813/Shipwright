@@ -70,6 +70,7 @@
 
 #ifdef __EMSCRIPTEN__
 #include <SDL2/SDL_messagebox.h>
+#include <emscripten.h>
 #endif
 
 #ifdef __SWITCH__
@@ -414,15 +415,39 @@ static bool RemoveArchiveAcrossAppDirs(const std::string& fileName) {
 
 void OTRGlobals::RunExtract(int argc, char* argv[]) {
 #ifdef __EMSCRIPTEN__
-    // The web page puts oot.o2r / oot-mq.o2r in place before the game starts. In-browser extraction
-    // is a later phase of docs/WEB_PORT.md, so without a usable archive there is nothing to run.
+    // The web page (soh/platform/web/shell.html) either supplies oot.o2r / oot-mq.o2r, or stages the
+    // player's ROM at kWebRomPath along with that version's asset descriptions under /app/assets.
+    static constexpr const char* kWebRomPath = "/tmp/rom.z64";
+    if (std::filesystem::exists(kWebRomPath)) {
+        Extractor extract;
+        std::atomic<size_t> extractCount = 0, totalExtract = 0;
+        bool extracted =
+            extract.RunFileStandalone(kWebRomPath) &&
+            extract.CallTorch(Ship::Context::GetAppBundlePath(), Ship::Context::GetAppDirectoryPath(appShortName),
+                              &extractCount, &totalExtract);
+        std::error_code ec;
+        std::filesystem::remove(kWebRomPath, ec);
+        if (!extracted) {
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Ship of Harkinian",
+                                     "This ROM could not be turned into a game archive.\n"
+                                     "Check that it is a supported, unmodified dump.",
+                                     nullptr);
+            exit(1);
+        }
+        // Let the page persist the new archive and drop the asset descriptions.
+        EM_ASM({
+            if (Module.onArchiveExtracted)
+                Module.onArchiveExtracted();
+        });
+    }
+
     bool hasArchive = std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("oot.o2r", appShortName)) ||
                       std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("oot-mq.o2r", appShortName));
     if (!hasArchive || VerifyArchiveVersion(DetectOTRVersion("oot.o2r", false)) ||
         VerifyArchiveVersion(DetectOTRVersion("oot-mq.o2r", true))) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Ship of Harkinian",
                                  "No compatible oot.o2r or oot-mq.o2r was provided.\n"
-                                 "Generate one with this version of desktop SoH and load it on the page.",
+                                 "Load your ROM, or an archive made by this version of desktop SoH, on the page.",
                                  nullptr);
         exit(1);
     }

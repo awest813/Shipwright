@@ -619,6 +619,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
             "SHELL:--shell-file ${CMAKE_CURRENT_SOURCE_DIR}/platform/web/shell.html"
             "SHELL:--preload-file ${CMAKE_BINARY_DIR}/soh/soh.o2r@/app/soh.o2r"
             "SHELL:--preload-file ${CMAKE_BINARY_DIR}/gamecontrollerdb.txt@/app/gamecontrollerdb.txt"
+            "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/assets/yml/config.yml@/app/assets/config.yml"
         )
     else()
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
@@ -764,6 +765,21 @@ elseif(EMSCRIPTEN)
         opus
         opusfile
     )
+    # The extractor's asset descriptions, one compressed bundle per ROM version, fetched by the page
+    # for the user's ROM (soh/platform/web/shell.html). config.yml itself is preloaded.
+    file(GLOB_RECURSE SOH_WEB_YML CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/yml/*)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/assets/rom-versions.json
+        COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/platform/web/pack_assets.py
+                ${CMAKE_CURRENT_SOURCE_DIR}/assets/yml ${CMAKE_CURRENT_BINARY_DIR}/assets
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/platform/web/pack_assets.py ${SOH_WEB_YML}
+        COMMENT "Packing extractor assets for the web..."
+        VERBATIM
+    )
+    add_custom_target(PackWebAssets DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/assets/rom-versions.json)
+    add_dependencies(${PROJECT_NAME} PackWebAssets)
+
     # soh.o2r and gamecontrollerdb.txt are preloaded into the virtual filesystem at link time
     set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY LINK_DEPENDS
         ${CMAKE_BINARY_DIR}/soh/soh.o2r ${CMAKE_BINARY_DIR}/gamecontrollerdb.txt

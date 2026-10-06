@@ -116,6 +116,7 @@ jobs:
         mkdir soh-web
         cp build-web/soh/soh.html soh-web/index.html
         cp build-web/soh/soh.js build-web/soh/soh.wasm build-web/soh/soh.data soh-web/
+        cp -r build-web/soh/assets soh-web/
         cp soh/platform/web/README.md soh-web/readme.md
     - name: Upload build
       uses: actions/upload-artifact@v7

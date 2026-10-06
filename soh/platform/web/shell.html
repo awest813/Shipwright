@@ -30,7 +30,11 @@
 <div id="overlay">
   <div id="panel">
     <h1>Ship of Harkinian</h1>
-    <p>Web build (experimental). The game needs an <code>oot.o2r</code> and/or <code>oot-mq.o2r</code> generated from your own legally obtained ROM by this version of desktop SoH. Files stay in this browser.</p>
+    <p>Web build (experimental). Load your own legally obtained Ocarina of Time ROM (<code>.z64</code>, <code>.n64</code> or <code>.v64</code>) and it is converted into the game archive right here, or load an <code>oot.o2r</code> / <code>oot-mq.o2r</code> made by this version of desktop SoH. Files stay in this browser; the ROM itself is not kept.</p>
+    <div class="row">
+      <div><div>ROM</div><div class="status" id="status-rom">Optional if the archives below are loaded</div></div>
+      <label class="button">Load ROM<input type="file" accept=".z64,.n64,.v64" id="rom-input"></label>
+    </div>
     <div class="row">
       <div><div>Ocarina of Time</div><div class="status" id="status-oot.o2r">Loading…</div></div>
       <label class="button">Load oot.o2r<input type="file" accept=".o2r" data-archive="oot.o2r"></label>
@@ -51,6 +55,9 @@
   const startButton = document.getElementById("start");
   const message = document.getElementById("message");
   let running = false;
+  let stopped = false; // the game aborted
+  let started = false; // the game reached its main loop
+  let stagedRomPath = null; // version directory of a ROM waiting to be extracted
 
   function showMessage(text, isError) {
     message.textContent = text;
@@ -70,7 +77,49 @@
       el.className = present ? "status ok" : "status";
       any = any || present;
     }
-    startButton.disabled = !any;
+    startButton.disabled = !any && !stagedRomPath;
+  }
+
+  // N64 dumps come in three byte orders; Torch's version table hashes big-endian (.z64) dumps.
+  function toBigEndian(rom) {
+    const magic = (rom[0] << 24 | rom[1] << 16 | rom[2] << 8 | rom[3]) >>> 0;
+    if (magic === 0x80371240) return rom;
+    const out = new Uint8Array(rom.length);
+    if (magic === 0x37804012) { // .v64: 16-bit byte swapped
+      for (let i = 0; i + 1 < rom.length; i += 2) { out[i] = rom[i + 1]; out[i + 1] = rom[i]; }
+      return out;
+    }
+    if (magic === 0x40123780) { // .n64: 32-bit little endian
+      for (let i = 0; i + 3 < rom.length; i += 4) {
+        out[i] = rom[i + 3]; out[i + 1] = rom[i + 2]; out[i + 2] = rom[i + 1]; out[i + 3] = rom[i];
+      }
+      return out;
+    }
+    throw new Error("this does not look like an N64 ROM");
+  }
+
+  async function sha1Hex(bytes) {
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-1", bytes));
+    return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  // Unpacks a bundle made by pack_assets.py: gzip of (u32 path length, path, u32 size, data)*.
+  async function installAssetBundle(version) {
+    const response = await fetch(`assets/${version}.bundle.gz`);
+    if (!response.ok) throw new Error(`could not download the ${version} asset descriptions`);
+    const unzipped = response.body.pipeThrough(new DecompressionStream("gzip"));
+    const data = new Uint8Array(await new Response(unzipped).arrayBuffer());
+    const view = new DataView(data.buffer);
+    const decoder = new TextDecoder();
+    const base = `/app/assets/${version}`;
+    for (let pos = 0; pos < data.length;) {
+      const pathLength = view.getUint32(pos, true); pos += 4;
+      const path = decoder.decode(data.subarray(pos, pos + pathLength)); pos += pathLength;
+      const size = view.getUint32(pos, true); pos += 4;
+      const full = `${base}/${path}`;
+      FS.mkdirTree(full.substring(0, full.lastIndexOf("/")));
+      FS.writeFile(full, data.subarray(pos, pos + size)); pos += size;
+    }
   }
 
   // Saves, config and archives live in IndexedDB. Writes land in memory first, so flush them.
@@ -103,9 +152,11 @@
     print: (text) => console.log(text),
     printErr: (text) => console.warn(text),
     onAbort: (what) => {
+      stopped = true;
       overlay.style.display = "";
       showMessage(`The game stopped: ${what}`, true);
     },
+    onGameStarted: () => { started = true; },
   };
 
   for (const input of document.querySelectorAll("input[data-archive]")) {
@@ -129,13 +180,67 @@
     });
   }
 
+  document.getElementById("rom-input").addEventListener("change", async (event) => {
+    const input = event.target;
+    const file = input.files[0];
+    input.value = "";
+    if (!file) return;
+    const status = document.getElementById("status-rom");
+    try {
+      showMessage(`Checking ${file.name}…`);
+      const rom = toBigEndian(new Uint8Array(await file.arrayBuffer()));
+      const versions = await (await fetch("assets/rom-versions.json")).json();
+      const version = versions[await sha1Hex(rom)];
+      if (!version) throw new Error("this ROM version isn't supported (check it at ship.equipment)");
+      showMessage(`Downloading asset descriptions for ${version.name}…`);
+      await installAssetBundle(version.path);
+      FS.writeFile("/tmp/rom.z64", rom);
+      stagedRomPath = version.path;
+      status.textContent = `${version.name}: will be converted when you press Start`;
+      status.className = "status ok";
+      refreshArchiveStatus();
+      showMessage("");
+    } catch (e) {
+      showMessage(`Could not use ${file.name}: ${e.message}`, true);
+    }
+  });
+
+  // Called by the game once it has written oot.o2r / oot-mq.o2r from the staged ROM.
+  Module.onArchiveExtracted = () => {
+    try { FS.unlink("/tmp/rom.z64"); } catch (e) {}
+    try { removeTree(`/app/assets/${stagedRomPath}`); } catch (e) {}
+    stagedRomPath = null;
+    persist();
+  };
+
+  function removeTree(path) {
+    for (const name of FS.readdir(path)) {
+      if (name === "." || name === "..") continue;
+      const child = `${path}/${name}`;
+      if (FS.isDir(FS.stat(child).mode)) removeTree(child); else FS.unlink(child);
+    }
+    FS.rmdir(path);
+  }
+
   startButton.addEventListener("click", () => {
     if (running) return;
     running = true;
-    overlay.style.display = "none";
-    Module.canvas.focus();
-    setInterval(persist, 10000);
-    Module.callMain([]);
+    startButton.disabled = true;
+    // Startup (and converting a ROM) blocks the page, so show what's happening first.
+    showMessage(stagedRomPath ? "Converting your ROM, this can take a minute. Keep this tab open…" : "Starting…");
+    requestAnimationFrame(() => setTimeout(() => {
+      Module.callMain([]);
+      setInterval(persist, 10000);
+      if (!started && !stopped) {
+        // main() exited during startup; it has already explained why in a dialog.
+        stopped = true;
+        overlay.style.display = "";
+        showMessage("The game couldn't start. Reload the page to try again.", true);
+      }
+      if (stopped) return;
+      overlay.style.display = "none";
+      Module.canvas.focus();
+    }, 50));
   });
 
   document.addEventListener("visibilitychange", () => { if (document.hidden && running) persist(); });
