@@ -77,16 +77,23 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Opus)
 
-set(OP_DISABLE_HTTP ON)
-set(OP_DISABLE_DOCS ON)
-set(OP_DISABLE_EXAMPLES ON)
+# opusfile 0.12 has no CMake build, so build its sources directly (without the HTTP backend).
 FetchContent_Declare(
     OpusFile
     GIT_REPOSITORY https://github.com/xiph/opusfile.git
     GIT_TAG v0.12
-    OVERRIDE_FIND_PACKAGE
 )
 FetchContent_MakeAvailable(OpusFile)
+add_library(opusfile STATIC
+    ${opusfile_SOURCE_DIR}/src/info.c
+    ${opusfile_SOURCE_DIR}/src/internal.c
+    ${opusfile_SOURCE_DIR}/src/opusfile.c
+    ${opusfile_SOURCE_DIR}/src/stream.c
+)
+target_include_directories(opusfile PUBLIC ${opusfile_SOURCE_DIR}/include)
+target_compile_options(opusfile PRIVATE -sUSE_OGG=1 -w)
+target_link_libraries(opusfile PUBLIC opus)
+target_link_options(opusfile INTERFACE -sUSE_OGG=1)
 
 #=================== libultraship / torch patches ===================
 # Web support for the submodules lives in CMake/web/patches until it is upstreamed. Apply each
