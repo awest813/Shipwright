@@ -1,8 +1,13 @@
 # Web Port (Emscripten / WebAssembly): Audit & Plan
 
-Status: **proposal**. No web build exists yet. This document records an audit of
-the codebase (SoH `94f950f8`, libultraship `62e973a`, Torch `2ab12fe`) and a
-phased plan for shipping Ship of Harkinian in a browser.
+Status: **Phase 0 done, Phase 1 in progress.** The web build compiles, links and boots in
+Chromium: the main loop runs and the boot logo scene renders through WebGL2. Gameplay has
+not been verified yet, because that needs a real `oot.o2r`. Build instructions are in
+[soh/platform/web/README.md](../soh/platform/web/README.md).
+
+This document records an audit of the codebase (SoH `94f950f8`, libultraship `62e973a`,
+Torch `2ab12fe`) and the phased plan for shipping Ship of Harkinian in a browser. Section 6
+lists what implementing it has turned up so far.
 
 ## TL;DR
 
@@ -329,3 +334,20 @@ emcmake cmake -S . -B build-web -GNinja -DCMAKE_BUILD_TYPE=Release -DSOH_PREBUIL
 cmake --build build-web
 python3 -m http.server -d build-web/soh   # or any static server
 ```
+
+## 6. Lessons From the Implementation
+
+Two WebAssembly-specific problems came up that the static audit did not predict.
+
+- **Signature mismatches trap.** Native ABIs tolerate calling a C function through a declaration
+  with the wrong parameter list. WebAssembly traps instead, either at the call (indirect calls:
+  "null function or function signature mismatch") or with a `wasm-ld` "function signature mismatch"
+  warning (direct calls). One case was found and fixed: `framebuffer_effects.c` declared
+  `gfx_create_framebuffer` without its last parameter. Treat any such `wasm-ld` warning as a bug.
+- **Huge functions can crash the browser's compiler.** The randomizer's data-table initializers
+  (hint text, item and location tables, trick names, settings) are single functions with
+  thousands of statements. At `-O2` the constructors they call are inlined into 10-25k wasm locals
+  per function, and V8 needed tens of seconds and gigabytes to compile each one, which crashed
+  the tab on first call. Building those files with `-Oz` brings them down to a few dozen locals,
+  and the whole module compiles in under 300 ms (`soh/CMakeLists.txt`, Emscripten branch). A new
+  table initializer of that size needs the same treatment.
