@@ -99,18 +99,31 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y ninja-build
+        sudo apt-get install -y ninja-build ccache
     - name: Setup Emscripten
       uses: mymindstorm/setup-emsdk@v14
       with:
         version: 6.0.11
         actions-cache-folder: emsdk-cache
+    - name: Configure web compiler cache
+      uses: hendrikmuhs/ccache-action@v1.2.23
+      with:
+        max-size: "2G"
+        evict-old-files: job
+        save: ${{ github.event_name == 'push' }}
+        key: ${{ runner.os }}-web-emcc-6.0.11-${{ github.ref }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-web-emcc-6.0.11-${{ github.ref }}
+          ${{ runner.os }}-web-emcc-6.0.11
     - name: Download soh.o2r
       uses: actions/download-artifact@v8
       with:
         name: soh.o2r
         path: build-tools
     - name: Build SoH for the web
+      env:
+        EM_COMPILER_WRAPPER: ccache
+        CCACHE_BASEDIR: ${{ github.workspace }}
       run: |
         embuilder build sdl2 sdl2_net zlib bzip2 ogg vorbis
         emcmake cmake --no-warn-unused-cli -H. -Bbuild-web -GNinja -DCMAKE_BUILD_TYPE:STRING=Release -DSOH_PREBUILT_O2R=$PWD/build-tools/soh.o2r
@@ -120,6 +133,7 @@ jobs:
         cp build-web/soh/soh.html soh-web/index.html
         cp build-web/soh/soh.js build-web/soh/soh.wasm build-web/soh/soh.data soh-web/
         cp build-web/depth-test.html build-web/depth-test.js build-web/depth-test.wasm soh-web/
+        cp soh/platform/web/browser-timing.html soh-web/
         cp -r build-web/soh/assets soh-web/
         cp soh/platform/web/README.md soh-web/readme.md
     - name: Upload build

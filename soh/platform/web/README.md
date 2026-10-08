@@ -63,6 +63,13 @@ report** to save the average FPS, frame-time percentiles, stalls and rendering d
 Reports distinguish draw-completion intervals from browser-frame timestamp intervals and include
 completion delay after the browser callback. This helps identify simulation work or callback
 jitter without treating it as proof of a missed displayed frame.
+Reports separately count every browser animation callback, including callbacks where the game
+does not present a frame. Compare `browserCallbackFps` with `averageFps` to distinguish limited
+browser callback cadence from game presentation skips.
+Matching updated engines also report `simulationCpuTimeMs`, `presentationCpuTimeMs` and
+`totalCpuTimeMs`. Simulation samples count actual game ticks; presentation samples include
+event handling, interpolation and graphics submission. CPU elapsed time includes synchronous
+GL waits and does not measure GPU execution time. Older engines leave these sample counts zero.
 Keep the tab visible and continue playing during the sample. Hidden-tab or cancelled reports
 are marked incomplete. These measurements describe successful presentation callbacks; they
 do not establish rendering accuracy or GPU execution time.
@@ -91,6 +98,11 @@ The page has to be served over HTTPS or from `localhost` for ROM conversion, whi
 browser's crypto API.
 
 ## Files
+
+`browser-timing.html` measures browser callback cadence without loading the game or WebGL.
+Close other game tabs, keep the timing page visible, press **Measure browser timing**, then
+export its 30-second report. Compare that baseline with the game's FPS report on the same
+browser and device. Neither report establishes the display's refresh rate or GPU execution time.
 
 The web artifact also includes `depth-test.html`. Open it on the same local server and press
 **Run depth tests** to verify the renderer's C++ WebGL depth encoding and GL state restoration.

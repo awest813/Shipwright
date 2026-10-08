@@ -245,6 +245,49 @@ test('presentation report includes long stalls and marks interrupted runs incomp
   assert.match(h.elements.get('web-status').textContent, /incomplete/);
 });
 
+test('browser callback cadence includes callbacks when the game skips presentation', () => {
+  const h = harness();
+  h.context.now = 0; h.context.performance = { now: () => h.context.now };
+  h.context.requestAnimationFrame = () => {};
+  h.evaluate('started = true; running = true');
+  h.elements.get('benchmark-game').listeners.click();
+  for (let frame = 1; frame <= 60; frame++) {
+    h.context.now = frame * 1000 / 60;
+    h.evaluate('trackBrowserFrame(performance.now())');
+    if (frame % 2 === 0) h.evaluate('Module.onFramePresented(false, 52)');
+  }
+  h.evaluate('finishBenchmark()');
+  assert.equal(h.evaluate('benchmarkReport.presentedFrames'), 30);
+  assert.equal(h.evaluate('benchmarkReport.averageFps'), 30);
+  assert.equal(h.evaluate('benchmarkReport.browserCallbackFrames'), 60);
+  assert.equal(h.evaluate('benchmarkReport.browserCallbackFps'), 60);
+  assert.equal(h.evaluate('benchmarkReport.browserCallbackTimeMs.samples'), 59);
+  assert.ok(Math.abs(h.evaluate('benchmarkReport.browserCallbackTimeMs.p95') - 1000 / 60) < 1e-8);
+  assert.ok(Math.abs(h.evaluate('benchmarkReport.browserFrameTimeMs.p95') - 1000 / 30) < 1e-8);
+  h.evaluate('clearTimeout(statusTimeout)');
+});
+
+test('CPU timing distinguishes simulation ticks, interpolation frames and older engines', () => {
+  const h = harness();
+  h.context.now = 0; h.context.performance = { now: () => h.context.now };
+  h.evaluate('started = true; running = true');
+  h.elements.get('benchmark-game').listeners.click();
+  h.context.now = 17; h.evaluate('Module.onFramePresented(false, 52, 9, 5)');
+  h.context.now = 34; h.evaluate('Module.onFramePresented(false, 52, -1, 4)');
+  h.context.now = 51; h.evaluate('Module.onFramePresented(false, 52, 0, 3)');
+  h.context.now = 68; h.evaluate('Module.onFramePresented(false, 52)');
+  h.evaluate('finishBenchmark()');
+  assert.equal(h.evaluate('benchmarkReport.simulationCpuTimeMs.samples'), 2);
+  assert.equal(h.evaluate('benchmarkReport.simulationCpuTimeMs.max'), 9);
+  assert.equal(h.evaluate('benchmarkReport.presentationCpuTimeMs.samples'), 3);
+  assert.equal(h.evaluate('benchmarkReport.presentationCpuTimeMs.max'), 5);
+  assert.equal(h.evaluate('benchmarkReport.totalCpuTimeMs.samples'), 3);
+  assert.equal(h.evaluate('benchmarkReport.totalCpuTimeMs.max'), 14);
+  assert.equal(h.evaluate('benchmarkReport.totalCpuTimeMs.p50'), 4);
+  assert.equal(h.evaluate('benchmarkReport.presentedFrames'), 4);
+  h.evaluate('clearTimeout(statusTimeout)');
+});
+
 test('randomizer generation reports state, blocks seed import and restores controls on failure', async () => {
   const h = harness(); h.evaluate('ready = true; started = true; running = true');
   h.elements.get('benchmark-game').listeners.click();

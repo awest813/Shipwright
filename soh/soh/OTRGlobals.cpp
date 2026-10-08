@@ -1866,32 +1866,44 @@ extern "C" EMSCRIPTEN_KEEPALIVE void WebToggleMenu(void) {
 // Keeping just the current list avoids copying the game's large graphics pools.
 static Gfx* webCommands = nullptr;
 
-extern "C" void Graph_WebPresentFrame(float interpolation) {
+extern "C" void Graph_WebPresentFrame(float interpolation, double simulationMs) {
     if (webCommands == nullptr)
         return;
     auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(OTRGlobals::Instance->context->GetWindow());
     if (wnd == nullptr)
         return;
+    const double presentationStart = emscripten_get_now();
     wnd->HandleEvents();
     wnd->SetTargetFps(60);
     auto interpreter = wnd->GetInterpreterWeak().lock();
-    if (!interpreter) return;
-    if (GfxDebuggerIsDebugging()) interpolation = 1.0f;
+    if (!interpreter)
+        return;
+    if (GfxDebuggerIsDebugging())
+        interpolation = 1.0f;
     // Animated texture segments are generated at GetInterpolationFPS(); select the matching
     // segment even when a browser refresh was dropped rather than counting callbacks.
     const int divisor = std::max<int>(R_UPDATE_RATE, 1);
     interpreter->mInterpolationIndex = std::clamp<int>((int)std::round(interpolation * divisor) - 1, 0, divisor - 1);
     interpreter->mInterpolationT = interpolation;
-    auto replacements = interpolation >= 1.0f ? std::unordered_map<Mtx*, MtxF>()
-                                              : FrameInterpolation_Interpolate(interpolation);
-    auto theme = static_cast<UIWidgets::Colors>(CVarGetInteger(CVAR_SETTING("Menu.Theme"), UIWidgets::Colors::LightBlue));
+    auto replacements =
+        interpolation >= 1.0f ? std::unordered_map<Mtx*, MtxF>() : FrameInterpolation_Interpolate(interpolation);
+    auto theme =
+        static_cast<UIWidgets::Colors>(CVarGetInteger(CVAR_SETTING("Menu.Theme"), UIWidgets::Colors::LightBlue));
     ImGui::PushStyleColor(ImGuiCol_TitleBgActive, UIWidgets::ColorValues.at(theme));
     bool presented = wnd->DrawAndRunGraphicsCommands(webCommands, replacements);
     ImGui::PopStyleColor();
     if (presented) {
         const bool menuVisible = wnd->GetGui()->GetMenuOrMenubarVisible();
         const int scene = gPlayState != nullptr ? gPlayState->sceneNum : -1;
-        EM_ASM({ if (Module.onFramePresented) Module.onFramePresented(!!$0, $1); }, menuVisible, scene);
+        // CPU elapsed time includes event handling, interpolation and graphics submission,
+        // including any synchronous GL waits. It is not a GPU timer.
+        const double presentationCpuMs = emscripten_get_now() - presentationStart;
+        EM_ASM(
+            {
+                if (Module.onFramePresented)
+                    Module.onFramePresented(!!$0, $1, $2, $3);
+            },
+            menuVisible, scene, simulationMs, presentationCpuMs);
     }
 }
 #endif

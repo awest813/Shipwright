@@ -83,7 +83,7 @@
     <button id="start" disabled>Start</button>
     <details id="extras">
       <summary>Saves, mods & controls</summary>
-      <p>Default keyboard: Space = Start, X = A, C = B, WASD = movement, Z = target, arrow keys = C buttons. Press Esc for settings and configurable keyboard/gamepad bindings. F5/F6 manage save states when enabled; Tab switches alternate assets.</p>
+      <p>Default keyboard: Space = Start, X = A, C = B, WASD = movement, Z = target, arrow keys = C buttons. Press Esc for settings and configurable keyboard/gamepad bindings. When save states are enabled, F5 saves, F6 changes slots, and F7 loads. Tab switches alternate assets.</p>
       <p>Pair a Bluetooth controller in your device's Bluetooth settings, or connect it by USB. Press a controller button while this tab is focused, then configure it in the in-game controller menu.</p>
       <p id="controller-status" class="status" role="status">Press a button on your paired controller to detect it.</p>
       <div class="actions">
@@ -131,6 +131,12 @@
   let randomizerGenerating = false;
 
   function trackBrowserFrame(time) {
+    if (benchmark) {
+      benchmark.browserCallbacks++;
+      if (lastRafTime !== null && lastRafTime >= benchmark.startedAt) {
+        benchmark.callbackIntervals.push(time - lastRafTime);
+      }
+    }
     lastRafTime = time;
     if (started && !stopped) requestAnimationFrame(trackBrowserFrame);
   }
@@ -153,7 +159,13 @@
       frameTimeMs: { p50: percentile(0.5), p95: percentile(0.95), p99: percentile(0.99), max: sorted.at(-1) ?? null },
       timeSinceLastPresentationMs: now - benchmark.lastFrame,
       browserFrameTimeMs: summarize(benchmark.browserIntervals),
+      browserCallbackFrames: benchmark.browserCallbacks,
+      browserCallbackFps: durationMs > 0 ? benchmark.browserCallbacks * 1000 / durationMs : 0,
+      browserCallbackTimeMs: summarize(benchmark.callbackIntervals),
       completionAfterBrowserFrameMs: summarize(benchmark.completionDelays),
+      simulationCpuTimeMs: summarize(benchmark.simulationCpuTimes),
+      presentationCpuTimeMs: summarize(benchmark.presentationCpuTimes),
+      totalCpuTimeMs: summarize(benchmark.totalCpuTimes),
       overBudgetFrames: sorted.filter(ms => ms > 1000 / 60 + 2).length,
       budgetWithJitterMs: 1000 / 60 + 2, menuFrames: benchmark.menuFrames,
       sceneFrames: benchmark.sceneFrames,
@@ -164,7 +176,7 @@
     benchmark = null;
     document.getElementById("benchmark-game").textContent = "Measure FPS";
     document.getElementById("benchmark-report").hidden = false;
-    showMessage(reason === "completed" ? `Timed report: ${benchmarkReport.averageFps.toFixed(1)} FPS average. Export the report for frame times.` :
+    showMessage(reason === "completed" ? `Timed report: ${benchmarkReport.averageFps.toFixed(1)} FPS; ${benchmarkReport.browserCallbackFps.toFixed(1)} browser callbacks/s. Export for frame times.` :
       `FPS measurement ended: ${reason}. This report is incomplete.`, reason !== "completed");
   }
 
@@ -174,6 +186,8 @@
     const now = performance.now();
     benchmark = { startedAt: now, startedDate: new Date().toISOString(), lastFrame: now, frames: 0,
       intervals: [], browserIntervals: [], completionDelays: [], lastBrowserFrame: lastRafTime,
+      browserCallbacks: 0, callbackIntervals: [],
+      simulationCpuTimes: [], presentationCpuTimes: [], totalCpuTimes: [],
       menuFrames: 0, sceneFrames: {} };
     benchmarkReport = null;
     document.getElementById("benchmark-report").hidden = true;
@@ -541,7 +555,7 @@
         "Seed generation failed. Review your randomizer settings and try again.", !success);
       persist();
     },
-    onFramePresented: (menuVisible = false, scene = null) => {
+    onFramePresented: (menuVisible = false, scene = null, simulationMs = -1, presentationCpuMs = null) => {
       if (gameMenuVisible !== menuVisible) {
         gameMenuVisible = menuVisible;
         document.body.classList.toggle("native-menu-open", menuVisible);
@@ -563,6 +577,12 @@
       if (benchmark) {
         benchmark.intervals.push(now - benchmark.lastFrame);
         benchmark.lastFrame = now; benchmark.frames++;
+        const hasSimulation = Number.isFinite(simulationMs) && simulationMs >= 0;
+        if (hasSimulation) benchmark.simulationCpuTimes.push(simulationMs);
+        if (Number.isFinite(presentationCpuMs) && presentationCpuMs >= 0) {
+          benchmark.presentationCpuTimes.push(presentationCpuMs);
+          benchmark.totalCpuTimes.push(presentationCpuMs + (hasSimulation ? simulationMs : 0));
+        }
         if (lastRafTime !== null) {
           if (benchmark.lastBrowserFrame !== null && lastRafTime > benchmark.lastBrowserFrame) {
             benchmark.browserIntervals.push(lastRafTime - benchmark.lastBrowserFrame);

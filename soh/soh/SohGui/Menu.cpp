@@ -211,10 +211,14 @@ uint32_t Menu::DrawSearchResults(std::string& menuSearchText) {
     int searchCount = 0;
     std::transform(menuSearchText.begin(), menuSearchText.end(), menuSearchText.begin(), ::tolower);
     menuSearchText.erase(std::remove(menuSearchText.begin(), menuSearchText.end(), ' '), menuSearchText.end());
-    ImGui::SetNextWindowSizeConstraints({ ImGui::GetContentRegionAvail().x / 2, 0 },
-                                        { ImGui::GetContentRegionAvail().x / 2, ImGui::GetContentRegionAvail().y });
-    if (ImGui::BeginChild("Search Results Col 1", { ImGui::GetContentRegionAvail().x / 2, 0 },
-                          ImGuiChildFlags_AutoResizeY, ImGuiWindowFlags_NoTitleBar)) {
+    float searchWidth = ImGui::GetContentRegionAvail().x / 2;
+#ifdef __EMSCRIPTEN__
+    if (ImGui::GetMainViewport()->Size.x < 1000)
+        searchWidth = ImGui::GetContentRegionAvail().x;
+#endif
+    ImGui::SetNextWindowSizeConstraints({ searchWidth, 0 }, { searchWidth, ImGui::GetContentRegionAvail().y });
+    if (ImGui::BeginChild("Search Results Col 1", { searchWidth, 0 }, ImGuiChildFlags_AutoResizeY,
+                          ImGuiWindowFlags_NoTitleBar)) {
         for (auto& menuLabel : menuOrder) {
             auto& menuEntry = menuEntries.at(menuLabel);
             for (auto& sidebarLabel : menuEntry.sidebarOrder) {
@@ -279,8 +283,8 @@ uint32_t Menu::DrawSearchResults(std::string& menuSearchText) {
                 searchCount++;
             }
         }
-        ImGui::EndChild();
     }
+    ImGui::EndChild();
     return searchCount;
 }
 
@@ -324,8 +328,8 @@ void Menu::MenuDrawItem(WidgetInfo& widget, UIWidgets::Colors menuThemeIndex) {
 
     if (widget.sameLine) {
 #ifdef __EMSCRIPTEN__
-        // A desktop row can exceed the entire portrait viewport.
-        if (ImGui::GetMainViewport()->WorkSize.x >= 600) {
+        // Desktop rows also overflow at tablet and narrow laptop widths.
+        if (ImGui::GetMainViewport()->WorkSize.x >= 1000) {
             ImGui::SameLine();
         }
 #else
@@ -677,8 +681,8 @@ void Menu::DrawElement() {
     windowWidth = window->WorkRect.GetWidth();
 
 #ifdef __EMSCRIPTEN__
-    if (windowWidth < 600) {
-        // Portrait browsers need the width occupied by the desktop sidebar for the settings.
+    if (windowWidth < 1000) {
+        // Narrow browsers need the desktop sidebar's width for usable settings columns.
         std::string headerIndex = CVarGetString(headerCvar, "Settings");
         if (!menuEntries.contains(headerIndex)) {
             headerIndex = menuOrder.front();

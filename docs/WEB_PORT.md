@@ -100,6 +100,30 @@ or establish a cause. The report is preserved locally as `build-tools/performanc
 The supplied USA Rev 2 ROM also converted successfully and reached the title sequence on
 the original port-8080 preview with this updated engine.
 
+A game-free browser timing page then averaged 55.99 animation callbacks/s (30 seconds,
+1680 callbacks), with an 18.0 ms median, 18.1 ms p95 and 20.0 ms maximum interval. Both game
+tabs were unloaded before this sample. This explains most of the 55.71 FPS game result in this
+test environment; it does not prove a permanent browser cap or physical-display limit. The
+report is preserved as `build-tools/performance-browser-only.json`. The game report now also
+counts every browser animation callback, including callbacks where the game skips presentation.
+A test verifies that 60 browser callbacks with 30 presentations are reported separately.
+Independent desktop-browser testing remains necessary to establish the 60 FPS target.
+
+A subsequent interior sample presented 1656 frames from 1660 browser callbacks over 30.01
+seconds: 55.18 FPS and 55.31 callbacks/s. Browser-callback p95 was 18.3 ms, with a 71.7 ms
+maximum interval. This demonstrates occasional stalls beyond the baseline cadence, without
+establishing their cause. The report is `build-tools/performance-all-browser-callbacks.json`.
+Engine CPU timing is implemented for the next build: simulation ticks, event/interpolation/graphics
+submission, and their combined time are reported separately. These are CPU elapsed measurements
+that include synchronous GL waits, not GPU timers; full-engine verification remains pending.
+
+Save states were enabled through the native warning controls and verified within Link's house.
+F5 saved slot 0, movement changed Link's position, and F7 restored it. F6 selected slot 1;
+a distinct position was saved and restored there, and cycling back to slot 0 restored the first
+position. Gameplay continued after loads. This covers same-room, in-memory states only;
+normal persistent game saving remains a separate workflow. Compact menus are being expanded
+to windows under 1000 CSS pixels; runtime verification of that new threshold is pending.
+
 A WebGL depth-to-RGBA readback is implemented and awaiting full-engine verification. Its
 standalone C++/Wasm browser fixture passed all 27 checks: precision, single/batched queries, row coordinates,
 default framebuffer, out-of-bounds queries, and GL state restoration checks. A prototype that

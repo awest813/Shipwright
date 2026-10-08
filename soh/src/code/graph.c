@@ -517,7 +517,7 @@ static void RunFrame() {
 }
 
 #ifdef __EMSCRIPTEN__
-extern void Graph_WebPresentFrame(float interpolation);
+extern void Graph_WebPresentFrame(float interpolation, double simulationMs);
 
 // Simulation retains the original tick rate; present one interpolated frame per browser refresh.
 static void Graph_WebFrame(void) {
@@ -525,6 +525,7 @@ static void Graph_WebFrame(void) {
     static double tickTime = 0.0;
     static double nextPresent = 0.0;
     double now = emscripten_get_now();
+    double simulationMs = -1.0;
     double interval = 1000.0 * (R_UPDATE_RATE > 0 ? R_UPDATE_RATE : 1) / 60.0;
 
     if (!WindowIsRunning()) {
@@ -537,18 +538,21 @@ static void Graph_WebFrame(void) {
         return;
     }
     const double presentInterval = 1000.0 / 60.0;
-    nextPresent =
-        (now - nextPresent > presentInterval * 4) ? now + presentInterval : nextPresent + presentInterval;
+    nextPresent = (now - nextPresent > presentInterval * 4) ? now + presentInterval : nextPresent + presentInterval;
     if (now + 4.0 >= nextTick) {
         // Resync after a stall instead of running a burst of catch-up ticks.
         tickTime = (now - nextTick > interval * 4) ? now : nextTick;
         nextTick = tickTime + interval;
+        double simulationStart = emscripten_get_now();
         RunFrame();
+        simulationMs = emscripten_get_now() - simulationStart;
     }
     float interpolation = (float)((now - tickTime + presentInterval) / interval);
-    if (interpolation < 0.0f) interpolation = 0.0f;
-    if (interpolation > 1.0f) interpolation = 1.0f;
-    Graph_WebPresentFrame(interpolation);
+    if (interpolation < 0.0f)
+        interpolation = 0.0f;
+    if (interpolation > 1.0f)
+        interpolation = 1.0f;
+    Graph_WebPresentFrame(interpolation, simulationMs);
 }
 #endif
 
