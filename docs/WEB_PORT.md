@@ -113,16 +113,25 @@ A subsequent interior sample presented 1656 frames from 1660 browser callbacks o
 seconds: 55.18 FPS and 55.31 callbacks/s. Browser-callback p95 was 18.3 ms, with a 71.7 ms
 maximum interval. This demonstrates occasional stalls beyond the baseline cadence, without
 establishing their cause. The report is `build-tools/performance-all-browser-callbacks.json`.
-Engine CPU timing is implemented for the next build: simulation ticks, event/interpolation/graphics
-submission, and their combined time are reported separately. These are CPU elapsed measurements
-that include synchronous GL waits, not GPU timers; full-engine verification remains pending.
+Engine CPU timing is verified in the `390492939` engine: simulation ticks,
+event/interpolation/graphics submission, and their combined time are reported separately.
+A 30-second vanilla Link's house sample recorded scene 52 for all 1,666 presentations and
+600 simulation ticks: 55.53 FPS against 55.59 browser callbacks/s. Simulation CPU time was
+7.0 ms at p95; presentation CPU time was 6.7 ms at p95, and combined CPU time was 10.7 ms
+at p95 (14.1 ms at p99, 72.6 ms maximum). The report is preserved locally as
+`build-tools/performance-cpu-child-house.json`. These are CPU elapsed measurements that
+include synchronous GL waits, not GPU timers. Occasional stalls remain; this is not a
+60 FPS or wider scene/device claim.
+An earlier attempted CPU sample retained cached engine assets and recorded zero CPU samples.
+Versioned JavaScript/Wasm/data filenames forced the fresh engine to load; permanent web
+build outputs now include the commit in all three filenames to prevent this cache mixture.
 
 Save states were enabled through the native warning controls and verified within Link's house.
 F5 saved slot 0, movement changed Link's position, and F7 restored it. F6 selected slot 1;
 a distinct position was saved and restored there, and cycling back to slot 0 restored the first
 position. Gameplay continued after loads. This covers same-room, in-memory states only;
-normal persistent game saving remains a separate workflow. Compact menus are being expanded
-to windows under 1000 CSS pixels; runtime verification of that new threshold is pending.
+normal persistent game saving remains a separate workflow. Compact menus now cover windows
+under 1000 CSS pixels; the updated layout was verified at the normal 714-pixel test viewport.
 
 A WebGL depth-to-RGBA readback is implemented. Its
 standalone C++/Wasm browser fixture passed all 27 checks: precision, single/batched queries, row coordinates,

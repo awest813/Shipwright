@@ -22,9 +22,11 @@ extern "C" {
 static bool captured = false;
 
 bool RenderAuditWantsFrame() {
-    return !captured && CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Enabled"), 0) && gPlayState != nullptr &&
-           gSaveContext.gameMode == GAMEMODE_NORMAL &&
-           gPlayState->gameplayFrames >= CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Frame"), 60);
+    if (captured || !CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Enabled"), 0))
+        return false;
+    const int targetFrame = CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Frame"), 60);
+    return targetFrame > 0 && gPlayState != nullptr && gSaveContext.gameMode == GAMEMODE_NORMAL &&
+           gPlayState->gameplayFrames >= static_cast<uint32_t>(targetFrame);
 }
 
 void RenderAuditCapture(const std::shared_ptr<Fast::Interpreter>& interpreter, float interpolation) {
@@ -33,7 +35,7 @@ void RenderAuditCapture(const std::shared_ptr<Fast::Interpreter>& interpreter, f
     if (!interpreter || !interpreter->mRapi || !GET_PLAYER(gPlayState))
         return;
     captured = true;
-    const int targetFrame = CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Frame"), 60);
+    const uint32_t targetFrame = static_cast<uint32_t>(CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Frame"), 60));
     const int expectedScene = CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Scene"), -1);
     const std::string label = CVarGetString(CVAR_DEVELOPER_TOOLS("RenderAudit.Label"), "capture");
     if (label.empty() || label.size() > 80 ||
