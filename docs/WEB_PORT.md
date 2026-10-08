@@ -70,6 +70,11 @@ sample averaged 59.99 FPS: browser-frame p95 was 16.8 ms (maximum 33.4 ms), whil
 p95 was 21.6 ms and completion delay after the browser callback was 10.1 ms at p95. This shows
 why simulation/render completion jitter alone is insufficient evidence of a skipped display
 frame. Neither callback timing measure proves GPU/compositor presentation deadlines on its own.
+A 1920×1080 browser viewport (1441×1080 game canvas) averaged 59.76 FPS in a 30-second interior
+sample. Browser-frame p95 remained 16.8 ms, but its maximum interval reached 66.5 ms; draw
+completion p95 was 23.0 ms and maximum 80.1 ms. The report is preserved locally as
+`build-tools/performance-desktop-interior.json`. Larger rendering dimensions remain usable on
+this host but occasional stalls require further profiling; this is not a device-wide 60 FPS claim.
 Vanilla gameplay transitioned into Kokiri Forest, rendered Saria's greeting, descended the
 ladder and traversed the outdoor area. The pause menu confirmed "Game saved"; an exported save
 contains savedSceneNum 85 (Kokiri Forest). After reload, that file appeared and resumed into
