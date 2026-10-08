@@ -85,6 +85,13 @@ Updated reports split presentation time into events, interpolation and graphics 
 SIMD status, renderer, rendering settings and internal dimensions; `contextChanged` flags a
 change during the sample. Older engines report unknown context as `null`. Compare samples
 with the same settings and dimensions before attributing a difference to an optimization.
+Matching diagnostic engines also record `runtimeAtStart` and `runtimeAtEnd`: Wasm memory
+size, allocator used/free bytes, and the actual Emscripten main-loop timing mode/value. Modes
+0, 1 and 2 mean timeout, animation frame and immediate respectively. The timing value is a
+delay for timeout mode and a callback interval for animation-frame mode. Allocator usage
+can fall after freeing resources while Wasm memory stays grown. These counters exclude
+JavaScript, GPU and other process memory; they do not diagnose a browser crash by themselves.
+They are separate from `contextChanged`, and older engines report `null`.
 Keep the tab visible and continue playing during the sample. Hidden-tab or cancelled reports
 are marked incomplete. These measurements describe successful presentation callbacks; they
 do not establish rendering accuracy or GPU execution time.

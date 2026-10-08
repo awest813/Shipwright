@@ -137,6 +137,7 @@
   let randomizerGenerating = false;
   let renderAuditPath = null;
   let performanceContext = null;
+  let runtimeDiagnostics = null;
 
   // SDL listens on the window. Leave native HTML keyboard behavior available in
   // the web controls, but always forward releases for keys held in the game.
@@ -175,6 +176,18 @@
       return performanceContext ? JSON.parse(JSON.stringify(performanceContext)) : null;
     } catch (error) {
       console.warn("Performance context is unavailable", error);
+      return null;
+    }
+  }
+
+  function captureRuntimeDiagnostics() {
+    runtimeDiagnostics = null;
+    if (typeof Module._WebReportRuntimeDiagnostics !== "function") return null;
+    try {
+      Module._WebReportRuntimeDiagnostics();
+      return runtimeDiagnostics ? JSON.parse(JSON.stringify(runtimeDiagnostics)) : null;
+    } catch (error) {
+      console.warn("Runtime diagnostics are unavailable", error);
       return null;
     }
   }
@@ -219,6 +232,7 @@
       presentationPhaseCpuTimeMs: Object.fromEntries(Object.entries(benchmark.phaseCpuTimes)
         .map(([name, samples]) => [name, summarize(samples)])),
       contextAtStart: benchmark.contextAtStart, contextAtEnd,
+      runtimeAtStart: benchmark.runtimeAtStart, runtimeAtEnd: captureRuntimeDiagnostics(),
       contextChanged: benchmark.contextAtStart && contextAtEnd ?
         JSON.stringify(benchmark.contextAtStart) !== JSON.stringify(contextAtEnd) : null,
       overBudgetFrames: sorted.filter(ms => ms > 1000 / 60 + 2).length,
@@ -245,6 +259,7 @@
       simulationCpuTimes: [], presentationCpuTimes: [], totalCpuTimes: [],
       phaseCpuTimes: { events: [], interpolation: [], graphics: [] },
       contextAtStart: capturePerformanceContext(),
+      runtimeAtStart: captureRuntimeDiagnostics(),
       menuFrames: 0, sceneFrames: {} };
     benchmarkReport = null;
     document.getElementById("benchmark-report").hidden = true;
@@ -743,6 +758,7 @@
       } catch (error) { showMessage(`Render audit could not be read: ${error.message}`, true); }
     },
     onWebPerformanceContext: context => { performanceContext = context; },
+    onWebRuntimeDiagnostics: diagnostics => { runtimeDiagnostics = diagnostics; },
     onFramePresented: (menuVisible = false, scene = null, simulationMs = -1, presentationCpuMs = null, phases = null) => {
       if (gameMenuVisible !== menuVisible) {
         gameMenuVisible = menuVisible;

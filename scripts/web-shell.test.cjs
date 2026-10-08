@@ -540,6 +540,40 @@ test('performance contexts freeze engine identity and identify changed rendering
   h.evaluate('clearTimeout(statusTimeout)');
 });
 
+test('runtime diagnostics record memory growth and loop timing separately from rendering settings', () => {
+  const h = harness(); h.evaluate('started = true; running = true');
+  const context = { gitCommit: 'test', settings: { msaaSamples: 1 } };
+  const runtime = { wasmMemoryBytes: 512 * 1024 * 1024, allocatorUsedBytes: 300 * 1024 * 1024,
+    allocatorFreeBytes: 200 * 1024 * 1024, mainLoopMode: 1, mainLoopTimingValue: 1 };
+  h.context.Module._WebReportPerformanceContext = () => h.context.Module.onWebPerformanceContext(context);
+  h.context.Module._WebReportRuntimeDiagnostics = () => h.context.Module.onWebRuntimeDiagnostics(runtime);
+  h.elements.get('benchmark-game').listeners.click();
+  runtime.wasmMemoryBytes = 4294967296;
+  runtime.allocatorUsedBytes = 400 * 1024 * 1024;
+  runtime.mainLoopMode = 0;
+  runtime.mainLoopTimingValue = 0;
+  h.evaluate('finishBenchmark()');
+  assert.equal(h.evaluate('benchmarkReport.runtimeAtStart.wasmMemoryBytes'), 512 * 1024 * 1024);
+  assert.equal(h.evaluate('benchmarkReport.runtimeAtEnd.wasmMemoryBytes'), 4294967296);
+  assert.equal(h.evaluate('benchmarkReport.runtimeAtStart.mainLoopMode'), 1);
+  assert.equal(h.evaluate('benchmarkReport.runtimeAtEnd.mainLoopMode'), 0);
+  assert.equal(h.evaluate('benchmarkReport.contextChanged'), false);
+  h.evaluate('clearTimeout(statusTimeout)');
+});
+
+test('older or failed engines report unknown runtime memory instead of stale diagnostics', () => {
+  const h = harness(); h.evaluate('started = true; running = true');
+  h.evaluate('runtimeDiagnostics = { wasmMemoryBytes: 42 }');
+  h.elements.get('benchmark-game').listeners.click(); h.evaluate('finishBenchmark()');
+  assert.equal(h.evaluate('benchmarkReport.runtimeAtStart'), null);
+  assert.equal(h.evaluate('benchmarkReport.runtimeAtEnd'), null);
+  h.evaluate('Module._WebReportRuntimeDiagnostics = () => { throw Error("unavailable") }');
+  h.elements.get('benchmark-game').listeners.click(); h.evaluate('finishBenchmark()');
+  assert.equal(h.evaluate('benchmarkReport.runtimeAtStart'), null);
+  assert.equal(h.evaluate('benchmarkReport.runtimeAtEnd'), null);
+  h.evaluate('clearTimeout(statusTimeout)');
+});
+
 test('missing or failed engine context is unknown and does not reuse a previous snapshot', () => {
   const h = harness(); h.evaluate('started = true; running = true');
   h.evaluate('performanceContext = { gitCommit: "stale" }');

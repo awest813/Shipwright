@@ -71,6 +71,7 @@
 #endif
 
 #ifdef __EMSCRIPTEN__
+#include "../platform/web/RuntimeDiagnostics.h"
 #include <SDL2/SDL_messagebox.h>
 #include <emscripten.h>
 #endif
@@ -1868,6 +1869,25 @@ extern "C" EMSCRIPTEN_KEEPALIVE void WebToggleMenu(void) {
 // The display list and interpolation records remain alive until the next simulation tick.
 // Keeping just the current list avoids copying the game's large graphics pools.
 static Gfx* webCommands = nullptr;
+
+extern "C" EMSCRIPTEN_KEEPALIVE int WebReportRuntimeDiagnostics(void) {
+    const auto diagnostics = Web::CaptureRuntimeDiagnostics();
+    // Pass byte counts as doubles so a 4 GiB Wasm memory cannot wrap to zero.
+    EM_ASM(
+        {
+            if (Module.onWebRuntimeDiagnostics)
+                Module.onWebRuntimeDiagnostics({
+                    wasmMemoryBytes : $0,
+                    allocatorUsedBytes : $1,
+                    allocatorFreeBytes : $2,
+                    mainLoopMode : $3,
+                    mainLoopTimingValue : $4
+                });
+        },
+        static_cast<double>(diagnostics.wasmMemoryBytes), static_cast<double>(diagnostics.allocatorUsedBytes),
+        static_cast<double>(diagnostics.allocatorFreeBytes), diagnostics.mainLoopMode, diagnostics.mainLoopTimingValue);
+    return 1;
+}
 
 extern "C" EMSCRIPTEN_KEEPALIVE int WebReportPerformanceContext(void) {
     if (OTRGlobals::Instance == nullptr || !OTRGlobals::Instance->context)

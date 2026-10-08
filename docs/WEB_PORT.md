@@ -146,6 +146,19 @@ Regular saves/settings had already been restored, and the successful ROM/gamepla
 render capture and completed FPS report were exported before the failure. Browser stability
 under resizing and memory pressure needs further investigation before promoting this candidate.
 
+The main preview responded again on the next audit turn; the failed temporary tabs were no
+longer present. Source review found framebuffer parameter updates reusing their GL objects,
+not creating new framebuffer objects on each resize. This does not exclude GPU allocation or
+driver failures. New report diagnostics capture Wasm memory size, allocator used/free bytes
+and the actual Emscripten main-loop timing mode/value at sample start/end. Memory diagnostics
+are separate from rendering configuration comparisons, and older engines report unknown values.
+These counters exclude JS/GPU/other process memory. All 41 shell tests pass. A real SDK/Wasm
+test also passed allocator growth/release, retained Wasm memory size after free and timer-mode
+queries; CI runs it before building the full game. Full-engine runtime validation is pending.
+The recovered `6990278` main preview exported its settings by keyboard, and resetting its
+viewport back to the default size completed successfully while the title sequence was running.
+That isolated success does not establish repeated resize stability or identify the earlier crash.
+
 The `a7ef6e7` intermediate audit build passed all five CI jobs. House frame 60 is exact against
 desktop at both one-third and two-thirds interpolation; the desktop images change at 640 pixels
 between fractions. Zora's Domain room 1 at frame 240 passes at both fractions with all 76,800
