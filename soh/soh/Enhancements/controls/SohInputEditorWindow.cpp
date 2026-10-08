@@ -97,6 +97,9 @@ void SohInputEditorWindow::UpdateElement() {
     }
 
     if (mInputEditorPopupOpen && ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) {
+#ifdef __EMSCRIPTEN__
+        mMappingCaptureActive = true;
+#endif
         Ship::Context::GetRawInstance()->GetControlDeck()->BlockGameInput(INPUT_EDITOR_WINDOW_GAME_INPUT_BLOCK_ID);
 
         // continue to block input for a third of a second after getting the mapping
@@ -111,6 +114,17 @@ void SohInputEditorWindow::UpdateElement() {
 
         Ship::Context::GetRawInstance()->GetWindow()->GetGui()->BlockGamepadNavigation();
     } else {
+#ifdef __EMSCRIPTEN__
+        // Cancelling or dismissing a popup must end raw-input capture as well as closing its UI.
+        // Otherwise the next keyboard/mouse input is consumed as a prospective mapping.
+        if (mMappingCaptureActive) {
+            auto controlDeck = Ship::Context::GetRawInstance()->GetControlDeck();
+            for (uint8_t port = 0; port < MAXCONTROLLERS; ++port) {
+                controlDeck->GetControllerByPort(port)->CancelMappingCapture();
+            }
+            mMappingCaptureActive = false;
+        }
+#endif
         if (mGameInputBlockTimer != INT32_MAX) {
             mGameInputBlockTimer--;
             if (mGameInputBlockTimer <= 0) {

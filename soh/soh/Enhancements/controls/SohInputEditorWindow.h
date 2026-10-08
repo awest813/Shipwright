@@ -98,6 +98,9 @@ class SohInputEditorWindow final : public Ship::GuiWindow {
     std::set<N64ButtonMask> mModifierButtonsBitmasks;
     std::set<N64ButtonMask> mCustomOcarinaButtonsBitmasks;
     bool mInputEditorPopupOpen;
+#ifdef __EMSCRIPTEN__
+    bool mMappingCaptureActive = false;
+#endif
     void DrawSetDefaultsButton(uint8_t portIndex);
     void DrawClearAllButton(uint8_t portIndex);
 

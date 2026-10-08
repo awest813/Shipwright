@@ -262,13 +262,23 @@ wraps complete mapping groups and add buttons within the available content width
 CI run 37837227864 passed all five jobs for `2ffbcb9`, including the full web engine.
 The main preview was then promoted to that engine. At 390×844, the formerly clipped
 C-up add button and the wrapped analog-stick Down add button both opened their mapping
-popups and Cancel worked. The wide 714×692 layout retains complete C-button rows. The
+popups and Cancel closed their UI. The wide 714×692 layout retains complete C-button rows. The
 viewport reset and menu close succeeded; exported save/spoiler files stayed identical,
 while configuration changed only the active settings header and ImGui window geometry.
 Evidence is `build-tools/{web-controller-bindings-portrait-wrapped-2ffb.png,
 web-controller-mapping-popup-portrait-2ffb.png,web-controller-analog-portrait-wrapped-2ffb.png,
 web-controller-bindings-desktop-2ffb.png,save-controller-popup-cancellation-2ffb.json}`.
 Viewport checks do not establish physical-device or Bluetooth-controller compatibility.
+
+A subsequent gameplay check found that cancelling the analog mapping popup leaves its
+raw-input capture flag active: A/Start still respond, while WASD is consumed as prospective
+mapping input. Reloading clears the transient state; exported controller bindings were
+unchanged. The pending `0006-mapping-capture-lifetime.patch` adds cancellation on controllers,
+buttons and both sticks, resetting captured keyboard/mouse input without editing mappings.
+The web input editor invokes it once after a mapping popup closes or is dismissed, including
+when the editor is hidden. Full-engine compilation and Cancel → gameplay regression checks
+remain pending; closing a popup alone is insufficient evidence that controls work.
+
 The same-commit adult-forest rendering comparison passes at 98.49% within the documented
 tolerance, with remaining differences concentrated around Navi's glow; see
 [WEB_RENDER_AUDIT.md](WEB_RENDER_AUDIT.md). All ten regular backup files restored exactly
