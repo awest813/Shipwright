@@ -159,6 +159,42 @@ The recovered `6990278` main preview exported its settings by keyboard, and rese
 viewport back to the default size completed successfully while the title sequence was running.
 That isolated success does not establish repeated resize stability or identify the earlier crash.
 
+A game-free 30-second browser timing sample subsequently measured 60.10 callbacks/s
+(p99 16.9 ms, maximum 17.5 ms), with only the unloaded main preview and timing page open.
+Host inspection found an unrelated MaddenNative build using nine compiler processes, 100%
+CPU and leaving about 2.7 GiB physical memory free. The user authorized stopping that build;
+its CMake/MSBuild/compiler descendants exited, source/build outputs were preserved, and a
+post-stop snapshot recorded 15% CPU, no compiler processes and about 6.1 GiB free. The
+baseline and snapshots are in `build-tools/browser-timing-under-build-load.json` and
+`build-tools/host-pressure-{before-browser-baseline,after-build-stop}.json`. Earlier game
+samples may be affected by this uncontrolled background load; the browser baseline alone
+does not establish game performance or explain the earlier crash.
+
+On `b53ef2f`, after the build stopped, generated File 2 loaded and moved normally. A quiet
+30-second house sample measured 59.79 FPS / 59.86 browser callbacks/s; presentation p95 was
+21.2 ms, maximum 62.9 ms, graphics submission p95 5.4 ms and total CPU elapsed p95 8.9 ms.
+Settings matched the previous house sample, but rendering was 714×535 with DPR 1 rather than
+714×536 with DPR 1.25, so the improvement is not a strict controlled comparison. A second
+sample on the house porch in Kokiri Forest (scene 85) measured 60.02 FPS / 60.05 callbacks/s,
+presentation p95 22.0 ms, maximum 40.0 ms and total CPU elapsed p95 9.1 ms. Reports are
+`build-tools/performance-b53-{after-build-stop,forest-after-build-stop}.json`. This establishes
+60 FPS average for that outdoor sample, while long frames and broader scene coverage remain.
+Physical free memory briefly measured 392,784 KiB after the first sample, then recovered to
+7,438,860 KiB without stopping other applications. These snapshots do not identify the source
+of that transient pressure; startup/resize stability still needs investigation.
+
+Normal play transitioned from Link's house to Kokiri Forest and back through the doorway.
+F5 saved state 0 on the porch; F7 restored Link's position after movement. Entering the house
+and pressing F7 also restored the forest scene and porch position, with the engine's loaded
+state notification visible (`build-tools/web-forest-cross-scene-state-b53.png`). Pointer input
+on the touch overlay's Start button opened the pause screen, and B opened the normal save
+prompt. Confirming with A displayed `Game saved`; a second A returned to gameplay. Resetting
+the viewport to the default 1280×720 succeeded with the game still running.
+After reloading the page, the ROM archive was Ready. Exported backups before/after reload
+contained the same ten paths with byte-identical contents, including all three save files and
+the selected generated spoiler (`build-tools/save-reload-b53-forest.json`).
+These desktop-browser pointer checks do not establish touch behavior on physical phones.
+
 The `a7ef6e7` intermediate audit build passed all five CI jobs. House frame 60 is exact against
 desktop at both one-third and two-thirds interpolation; the desktop images change at 640 pixels
 between fractions. Zora's Domain room 1 at frame 240 passes at both fractions with all 76,800
