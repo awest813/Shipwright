@@ -49,6 +49,8 @@
   #extras { border-top: 1px solid #30363d; margin-top: 16px; padding-top: 12px; }
   #extras summary { cursor: pointer; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  #mod-controls[hidden] { display: none; }
+  #mod-list { flex: 1; min-width: 0; max-width: 100%; padding: 8px; color: var(--text); background: var(--bg); border: 1px solid var(--muted); border-radius: 6px; }
 </style>
 </head>
 <body>
@@ -93,6 +95,10 @@
         <label class="button disabled">Import seed<input id="seed-input" type="file" accept=".json" disabled></label>
       </div>
       <p id="mods-status" class="status">Mods load at startup. Use .o2r mods compatible with this version.</p>
+      <div id="mod-controls" class="actions" hidden>
+        <select id="mod-list" aria-label="Installed mod" disabled></select>
+        <button id="mod-toggle" disabled>Disable mod</button>
+      </div>
       <p>Import a randomizer spoiler JSON, then choose a new randomizer save in file select. Generate new seeds from the in-game randomizer menu.</p>
     </details>
   </div>
@@ -398,10 +404,56 @@
     document.getElementById("backup").disabled = !ready || busy || stopped;
     if (ready) {
       FS.mkdirTree(`${DATA_DIR}/mods`);
-      const mods = FS.readdir(`${DATA_DIR}/mods`).filter(name => name.endsWith(".o2r"));
-      document.getElementById("mods-status").textContent = mods.length ? `Installed mods: ${mods.join(", ")}` : "Mods load at startup. Use .o2r mods compatible with this version.";
+      refreshMods();
     }
   }
+
+  function refreshMods(selected = document.getElementById("mod-list").value) {
+    const names = FS.readdir(`${DATA_DIR}/mods`).filter(name =>
+      /^[A-Za-z0-9_. -]+\.o2r(?:\.disabled)?$/i.test(name) && !FS.isDir(FS.stat(`${DATA_DIR}/mods/${name}`).mode)).sort();
+    const list = document.getElementById("mod-list");
+    list.replaceChildren();
+    for (const name of names) {
+      const option = document.createElement("option");
+      option.value = name;
+      const disabled = /\.disabled$/i.test(name);
+      option.textContent = `${disabled ? name.slice(0, -9) : name} (${disabled ? "disabled" : "enabled"})`;
+      list.appendChild(option);
+    }
+    list.value = names.includes(selected) ? selected : names[0] || "";
+    document.getElementById("mod-controls").hidden = !names.length;
+    const enabledCount = names.filter(name => !/\.disabled$/i.test(name)).length;
+    document.getElementById("mods-status").textContent = names.length ?
+      `${enabledCount} enabled mod(s), ${names.length - enabledCount} disabled. Changes apply when you press Start.` :
+      "Mods load at startup. Use .o2r mods compatible with this version.";
+    refreshModControls();
+  }
+
+  function refreshModControls() {
+    const list = document.getElementById("mod-list");
+    const disabled = !ready || busy || running || stopped || !list.value;
+    list.disabled = disabled;
+    const button = document.getElementById("mod-toggle");
+    button.disabled = disabled;
+    button.textContent = /\.disabled$/i.test(list.value) ? "Enable mod" : "Disable mod";
+  }
+
+  document.getElementById("mod-list").addEventListener("change", refreshModControls);
+  document.getElementById("mod-toggle").addEventListener("click", async () => {
+    if (!ready || busy || running || stopped) return;
+    const name = document.getElementById("mod-list").value;
+    if (!/^[A-Za-z0-9_. -]+\.o2r(?:\.disabled)?$/i.test(name)) return;
+    const wasDisabled = /\.disabled$/i.test(name);
+    const nextName = wasDisabled ? name.slice(0, -9) : `${name}.disabled`;
+    busy = true; setControlsEnabled(false);
+    try {
+      if (hasFile(`${DATA_DIR}/mods/${nextName}`)) throw new Error("a mod with that name already exists");
+      FS.rename(`${DATA_DIR}/mods/${name}`, `${DATA_DIR}/mods/${nextName}`);
+      refreshMods(nextName);
+      if (await persist()) showMessage(`${wasDisabled ? "Enabled" : "Disabled"} ${wasDisabled ? nextName : name}. Press Start to apply.`);
+    } catch (e) { showMessage(`Could not change mod: ${e.message}`, true); }
+    finally { busy = false; setControlsEnabled(!running && !stopped); }
+  });
 
   // N64 dumps come in three byte orders; Torch's version table hashes big-endian (.z64) dumps.
   function toBigEndian(rom) {
@@ -680,7 +732,7 @@
 
   document.getElementById("mods-input").addEventListener("change", async (event) => {
     const files = Array.from(event.target.files); event.target.value = "";
-    if (!files.length || !ready || running || busy) return;
+    if (!files.length || !ready || running || busy || stopped) return;
     busy = true; setControlsEnabled(false);
     try {
       const mods = [];
@@ -691,8 +743,12 @@
         mods.push({ name: file.name, bytes });
       }
       FS.mkdirTree(`${DATA_DIR}/mods`);
-      for (const mod of mods) FS.writeFile(`${DATA_DIR}/mods/${mod.name}`, mod.bytes);
-      if (await persist()) showMessage(`Installed ${mods.length} mod archive(s). Start the game to load them.`);
+      for (const mod of mods) {
+        const disabledPath = `${DATA_DIR}/mods/${mod.name}.disabled`;
+        const path = hasFile(disabledPath) && !hasFile(`${DATA_DIR}/mods/${mod.name}`) ? disabledPath : `${DATA_DIR}/mods/${mod.name}`;
+        FS.writeFile(path, mod.bytes);
+      }
+      if (await persist()) showMessage(`Installed or updated ${mods.length} mod archive(s). Choose enabled mods before Start.`);
     } catch (e) { showMessage(`Could not install mods: ${e.message}`, true); }
     finally { busy = false; setControlsEnabled(!running && !stopped); }
   });

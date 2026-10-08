@@ -11,6 +11,7 @@ function harness() {
     if (!elements.has(id)) elements.set(id, {
       style: { setProperty(name, value) { this[name] = value; } }, classList: { toggle() {}, add() {}, remove() {} }, listeners: {}, disabled: false, dataset: {}, width: 640, height: 480,
       addEventListener(name, fn) { this.listeners[name] = fn; }, focus() {}, click() {},
+      children: [], value: '', replaceChildren() { this.children = []; }, appendChild(child) { this.children.push(child); },
       setAttribute(name, value) { this[name] = value; }, setPointerCapture() {},
       getBoundingClientRect: () => ({ left: 0, top: 0, width: 120, height: 120 }),
     });
@@ -28,13 +29,14 @@ function harness() {
     btoa: text => Buffer.from(text, 'binary').toString('base64'),
     atob: text => { if (!/^[A-Za-z0-9+/]*={0,2}$/.test(text)) throw Error('Invalid base64'); return Buffer.from(text, 'base64').toString('binary'); },
     URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
-    document: { body: element('body'), getElementById: element, querySelectorAll: selector => selector === '[data-pad]' ? padButtons : [], createElement: () => element('download'), addEventListener() {} },
+    document: { body: element('body'), getElementById: element, querySelectorAll: selector => selector === '[data-pad]' ? padButtons : [], createElement: tag => tag === 'option' ? { value: '', textContent: '' } : element('download'), addEventListener() {} },
     window: { addEventListener() {} }, navigator: {}, WebAssembly,
     FS: {
       analyzePath: path => ({ exists: files.has(path) || dirs.has(path) }),
       mkdirTree(path) { const parts = path.split('/'); for (let i = 2; i <= parts.length; i++) dirs.add(parts.slice(0, i).join('/')); },
       writeFile: (path, bytes) => files.set(path, new Uint8Array(bytes)),
       readFile: path => files.get(path),
+      rename(from, to) { if (!files.has(from) || files.has(to)) throw Error('invalid rename'); files.set(to, files.get(from)); files.delete(from); },
       readdir(path) { return ['.', '..', ...new Set([...files.keys(), ...dirs].filter(p => p.startsWith(path + '/')).map(p => p.slice(path.length + 1).split('/')[0]))]; },
       stat: path => ({ mode: dirs.has(path) ? 1 : 0 }), isDir: mode => mode === 1,
       syncfs: (_, callback) => syncs.push(callback),
@@ -134,6 +136,56 @@ test('archive imports reject incomplete ZIP files and invalid central directory 
   h.context.bytes = valid;
   h.context.bytes = h.context.bytes.slice(0, -10);
   assert.equal(h.evaluate('isZipArchive(bytes)'), false);
+});
+
+test('mod selection disables and re-enables archives without losing bytes, and waits for persistence', async () => {
+  const h = harness(); h.evaluate('ready = true');
+  const bytes = new Uint8Array([80, 75, 1, 2]);
+  h.files.set('/data/mods/Example.O2R', bytes);
+  h.evaluate('refreshArchiveStatus()');
+  assert.equal(h.elements.get('mod-list').value, 'Example.O2R');
+  assert.match(h.elements.get('mods-status').textContent, /1 enabled mod/);
+  const disable = h.elements.get('mod-toggle').listeners.click();
+  assert.equal(h.files.has('/data/mods/Example.O2R'), false);
+  assert.equal(h.files.get('/data/mods/Example.O2R.disabled'), bytes);
+  assert.equal(h.elements.get('mod-toggle').disabled, true);
+  assert.equal(h.elements.get('start').disabled, true);
+  h.syncs.shift()(null); await disable;
+  assert.equal(h.elements.get('mod-toggle').textContent, 'Enable mod');
+  assert.equal(h.elements.get('mod-toggle').disabled, false);
+  const enable = h.elements.get('mod-toggle').listeners.click();
+  h.syncs.shift()(null); await enable;
+  assert.equal(h.files.get('/data/mods/Example.O2R'), bytes);
+  assert.equal(h.files.has('/data/mods/Example.O2R.disabled'), false);
+  h.evaluate('running = true; refreshMods()');
+  await h.elements.get('mod-toggle').listeners.click();
+  assert.equal(h.elements.get('mod-toggle').disabled, true);
+  assert.equal(h.files.get('/data/mods/Example.O2R'), bytes);
+});
+
+test('mod name collisions preserve both files instead of overwriting a disabled archive', async () => {
+  const h = harness(); h.evaluate('ready = true');
+  h.files.set('/data/mods/example.o2r', new Uint8Array([1]));
+  h.files.set('/data/mods/example.o2r.disabled', new Uint8Array([2]));
+  h.evaluate('refreshArchiveStatus()');
+  await h.elements.get('mod-toggle').listeners.click();
+  assert.equal(h.files.size, 2);
+  assert.deepEqual([...h.files.get('/data/mods/example.o2r')], [1]);
+  assert.deepEqual([...h.files.get('/data/mods/example.o2r.disabled')], [2]);
+  assert.match(h.elements.get('message').textContent, /already exists/);
+  assert.equal(h.syncs.length, 0);
+});
+
+test('updating a disabled mod keeps it disabled and avoids a duplicate active archive', async () => {
+  const h = harness(); h.evaluate('ready = true');
+  h.files.set('/data/mods/example.o2r.disabled', new Uint8Array([1]));
+  const bytes = Buffer.from('UEsDBBQAAAAAAAG0R10jrMa5BQAAAAUAAAAHAAAAdmVyc2lvbjkuMi4zUEsBAhQAFAAAAAAAAbRHXSOsxrkFAAAABQAAAAcAAAAAAAAAAAAAAIABAAAAAHZlcnNpb25QSwUGAAAAAAEAAQA1AAAAKgAAAAAA', 'base64');
+  const install = h.elements.get('mods-input').listeners.change({target:{files:[{name:'example.o2r',arrayBuffer:async()=>bytes}]}});
+  await new Promise(resolve => setImmediate(resolve));
+  h.syncs.shift()(null); await install;
+  assert.equal(h.files.has('/data/mods/example.o2r'), false);
+  assert.deepEqual(Buffer.from(h.files.get('/data/mods/example.o2r.disabled')), bytes);
+  assert.match(h.elements.get('mods-status').textContent, /0 enabled mod/);
 });
 
 test('seed imports reject unrelated JSON before storing it', async () => {

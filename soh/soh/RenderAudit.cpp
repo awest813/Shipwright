@@ -21,6 +21,18 @@ extern "C" {
 
 static bool captured = false;
 
+void RenderAuditRecordPopup(const std::string& title, const std::string& message) {
+    if (!CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Enabled"), 0))
+        return;
+    const std::filesystem::path path = Ship::Context::GetPathRelativeToAppDirectory("RenderAudit/startup.log");
+    std::error_code error;
+    std::filesystem::create_directories(path.parent_path(), error);
+    if (error)
+        return;
+    std::ofstream output(path, std::ios::app);
+    output << title << '\n' << message << "\n\n";
+}
+
 bool RenderAuditWantsFrame() {
     if (captured || !CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Enabled"), 0))
         return false;

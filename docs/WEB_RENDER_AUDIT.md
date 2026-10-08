@@ -28,6 +28,8 @@ archives. Windows's portable build uses its working directory for app files; `SH
 not a Windows override. Keep the user's regular desktop saves/config separate. The fixture's
 `RenderAudit.Exit` closes the native application after capture. No capture occurs in a normal
 run where `gDeveloperTools.RenderAudit.Enabled` is absent or zero.
+Audit runs also record popup messages in `RenderAudit/startup.log`, so a startup dialog that
+prevents gameplay is visible in the test artifacts. Such a run supplies no fidelity score.
 
 For the web build, export the test origin's existing saves/settings first. Reload to its start
 screen, open **Saves, mods & controls**, import the generated `web-backup.json`, then press

@@ -155,6 +155,16 @@ The web CVar now uses the same app-directory path as the writer; rebuilt-engine 
 is pending. Shell tests cover sample interruption, blocked imports and control recovery after
 generation failure.
 
+Startup mod management now lists installed `.o2r` archives and provides reversible enable/disable
+controls. Disabled archives retain their bytes and stay disabled when updated; collisions do
+not overwrite an existing archive. In the `390492939` engine with the updated shell, a local
+IA8 HUD texture test mod visibly replaced the game button backgrounds. Disabling it and
+restarting restored the original backgrounds. The disabled state also survived a page reload,
+and the selector fitted a 390×844 viewport. Evidence is preserved locally in
+`build-tools/web-mod-enabled-hud.png`, `web-mod-disabled-hud.png` and `web-phone-mod-controls.png`.
+This verifies one texture override and the startup workflow; other mod types and combinations
+still need runtime coverage. The shell suite now has 22 passing tests.
+
 This document began as an audit of the codebase (SoH `94f950f8`, libultraship `62e973a`,
 Torch `2ab12fe`). Sections 1 and 2 are that original audit and design, kept as a record; a few
 details differ from what was built. Section 3 tracks what has actually been done, and section 6

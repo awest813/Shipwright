@@ -55,7 +55,9 @@ settings, follow within 10 seconds and whenever the tab is hidden. In a private 
 may refuse storage altogether; the page says so, and nothing is kept after it closes.
 
 Open **Saves, mods & controls** before startup to export/import saves and settings or install
-compatible `.o2r` mods. Backups exclude ROMs, game archives, and mods. Import replaces matching
+compatible `.o2r` mods. Installed mods have an enable/disable selector on that start screen;
+disabling keeps the archive, and changes apply at the next Start. Updating a disabled mod keeps
+it disabled. Backups exclude ROMs, game archives, and mods. Import replaces matching
 save/settings files, so export a backup first when keeping existing progress matters. During play,
 the web toolbar provides save export, fullscreen, and measured presentation FPS. The engine still
 simulates at the original game tick rate; 60 FPS uses matrix interpolation.
