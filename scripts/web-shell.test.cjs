@@ -537,6 +537,25 @@ test('render capture export is limited to audit reports and interrupts FPS measu
   assert.equal(h.evaluate('renderAuditPath'), '/data/RenderAudit/house.json');
 });
 
+test('version 2 interpolation captures export while unknown versions preserve the prior capture', () => {
+  const h = harness();
+  h.evaluate('ready = true; started = true; running = true');
+  h.files.set('/data/RenderAudit/third.json', new TextEncoder().encode(JSON.stringify({
+    format: 'shipwright-render-capture', version: 2, reason: 'captured',
+    interpolation: 1 / 3, targetInterpolation: 1 / 3,
+  })));
+  h.evaluate('Module.onRenderAuditCaptured("/data/RenderAudit/third.json")');
+  h.elements.get('render-audit-export').listeners.click();
+  assert.equal(h.elements.get('download').download, 'third.json');
+  h.files.set('/data/RenderAudit/future.json', new TextEncoder().encode(JSON.stringify({
+    format: 'shipwright-render-capture', version: 99, reason: 'captured',
+  })));
+  h.evaluate('Module.onRenderAuditCaptured("/data/RenderAudit/future.json")');
+  assert.match(h.elements.get('web-status').textContent, /Invalid capture report/);
+  assert.equal(h.evaluate('renderAuditPath'), '/data/RenderAudit/third.json');
+  h.evaluate('clearTimeout(statusTimeout)');
+});
+
 test('randomizer generation reports state, blocks seed import and restores controls on failure', async () => {
   const h = harness(); h.evaluate('ready = true; started = true; running = true');
   h.elements.get('benchmark-game').listeners.click();

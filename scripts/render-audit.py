@@ -10,7 +10,7 @@ import zlib
 
 
 def validate(capture):
-    if capture.get('format') != 'shipwright-render-capture' or capture.get('version') != 1:
+    if capture.get('format') != 'shipwright-render-capture' or capture.get('version') not in (1, 2):
         raise ValueError('unsupported capture format')
     if capture.get('reason') != 'captured':
         raise ValueError(f"capture failed: {capture.get('reason')}")
@@ -25,8 +25,13 @@ def validate(capture):
                 'age', 'dayTime', 'health', 'player', 'camera', 'room', 'settings'):
         if key not in capture:
             raise ValueError(f'missing state metadata: {key}')
-    if capture['frame'] != capture['targetFrame'] or capture['interpolation'] != 1:
-        raise ValueError('capture is not the requested full simulation frame')
+    target_interpolation = capture.get('targetInterpolation') if capture['version'] == 2 else 1
+    interpolation = capture['interpolation']
+    if (type(target_interpolation) not in (int, float) or not math.isfinite(target_interpolation) or
+            not any(abs(target_interpolation - step / 3) <= 0.000001 for step in (1, 2, 3)) or
+            type(interpolation) not in (int, float) or not math.isfinite(interpolation) or
+            abs(interpolation - target_interpolation) > 0.000001 or capture['frame'] != capture['targetFrame']):
+        raise ValueError('capture is not the requested simulation frame and interpolation')
 
 
 def state_mismatches(left, right, path=''):
@@ -51,12 +56,24 @@ def channels(pixel):
     return pixel >> 10, (pixel >> 5) & 31, pixel & 31
 
 
-def compare(reference, candidate, threshold=0.94):
+def compare(reference, candidate, threshold=0.94, interpolation_step=None):
     validate(reference)
     validate(candidate)
+    if interpolation_step is not None and interpolation_step not in (1, 2, 3):
+        raise ValueError('interpolation step must be 1, 2 or 3')
+    if interpolation_step in (1, 2) and any(capture['version'] != 2 for capture in (reference, candidate)):
+        raise ValueError('intermediate frames require version 2 captures')
     keys = ('label', 'buildVersion', 'gitCommit', 'scene', 'frame', 'seed', 'interpolation', 'entrance', 'age', 'dayTime',
             'health', 'player', 'camera', 'room', 'settings')
-    differences = state_mismatches({k: reference[k] for k in keys}, {k: candidate[k] for k in keys})
+    reference_state = {k: reference[k] for k in keys}
+    candidate_state = {k: candidate[k] for k in keys}
+    reference_state['targetInterpolation'] = reference.get('targetInterpolation', 1)
+    candidate_state['targetInterpolation'] = candidate.get('targetInterpolation', 1)
+    differences = state_mismatches(reference_state, candidate_state)
+    if interpolation_step is not None:
+        for name, state in (('reference', reference_state), ('candidate', candidate_state)):
+            if abs(state['targetInterpolation'] - interpolation_step / 3) > 0.000001:
+                differences.append(name + '.targetInterpolation')
     if differences:
         return {'status': 'unmatched', 'stateMismatches': differences, 'fractionWithinOneLevel': None}
     within = 0
@@ -93,16 +110,21 @@ def fixture(args):
         raise ValueError('invalid fixture label')
     if args.frame < 1 or not 0 <= args.seed <= 2147483647 or not 0 <= args.scene <= 255:
         raise ValueError('invalid frame, seed or scene')
+    interpolation_step = getattr(args, 'interpolation_step', 3)
+    if type(interpolation_step) is not int or interpolation_step not in (1, 2, 3):
+        raise ValueError('interpolation step must be 1, 2 or 3')
     if (args.out / 'shipofharkinian.json').exists():
         raise ValueError('fixture directory already contains a config; use a new isolated directory')
     config = {
         'ConfigVersion': 7,
         'Window': {'Width': 640, 'Height': 480, 'Backend': {'Id': 2, 'Name': 'OpenGL'}, 'AudioBackend': 'sdl'},
         'CVars': {
-            'gSettings': {'BootSequence': 4, 'LowResMode': 1, 'MSAAValue': 1, 'InterpolationFPS': 20,
+            'gSettings': {'BootSequence': 4, 'LowResMode': 1, 'MSAAValue': 1,
+                          'InterpolationFPS': 60 if interpolation_step < 3 else 20,
                           'MatchRefreshRate': 0, 'AltAssets': 0, 'TextureFilter': 0},
             'gDeveloperTools': {'RenderAudit': {'Enabled': 1, 'Frame': args.frame, 'Scene': args.scene,
-                                               'Seed': args.seed, 'Label': args.label, 'Age': args.age, 'Exit': 1}},
+                                               'Seed': args.seed, 'Label': args.label, 'Age': args.age, 'Exit': 1,
+                                               'InterpolationStep': interpolation_step}},
         },
         'WarpPoints': {args.label: {'entranceId': args.entrance, 'roomNum': args.room,
                                    'pos': {'x': args.x, 'y': args.y, 'z': args.z},
@@ -128,18 +150,22 @@ def main():
     create.add_argument('--age', choices=(0, 1), type=int, default=1, help='0 adult, 1 child')
     create.add_argument('--frame', type=int, default=60)
     create.add_argument('--seed', type=int, default=12345)
+    create.add_argument('--interpolation-step', type=int, choices=(1, 2, 3), default=3,
+                        help='one-third, two-thirds or the complete frame at 60 FPS (default: complete)')
     create.add_argument('--out', type=Path, required=True)
     diff = commands.add_parser('compare', help='reject unmatched states, then measure every pixel')
     diff.add_argument('reference', type=Path)
     diff.add_argument('candidate', type=Path)
     diff.add_argument('--out', type=Path, required=True)
+    diff.add_argument('--interpolation-step', type=int, choices=(1, 2, 3),
+                      help='require this interpolation fraction in both captures')
     args = parser.parse_args()
     if args.command == 'fixture':
         fixture(args)
         return
     reference = json.loads(args.reference.read_text(encoding='utf-8'))
     candidate = json.loads(args.candidate.read_text(encoding='utf-8'))
-    report = compare(reference, candidate)
+    report = compare(reference, candidate, interpolation_step=args.interpolation_step)
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / 'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     write_png(args.out / 'reference.png', reference['pixels'])

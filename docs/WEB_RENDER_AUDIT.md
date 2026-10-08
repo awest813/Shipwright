@@ -45,8 +45,19 @@ The engine writes `RenderAudit/<label>.json` under its app directory. A capture 
 simulation frame, fixed RNG seed, player pose/animation, camera, age, time, health and render
 settings. It requires an offscreen, single-sample 320×240 game framebuffer. Missed frames,
 wrong scenes or wrong rendering dimensions produce a failure report instead of passing pixels.
-The audit forces the captured web frame to interpolation 1; it does not exercise intermediate
-interpolated frames. The fixture enables N64 resolution mode and disables MSAA/alternate assets.
+By default the audit captures interpolation 1. Add `--interpolation-step 1` or
+`--interpolation-step 2` when creating a fixture to request one-third or two-thirds of the
+interpolated frame. These fixtures enable 60 FPS on desktop; use normal 20 Hz gameplay scenes
+that supply three presentations per simulation tick. Updated engines produce version 2 reports
+with the requested and actual interpolation fractions. If desktop never presents that fraction,
+the audit reports a missed target frame instead of scoring a later frame.
+
+Pass the same `--interpolation-step` to `compare` to assert the requested fraction. Intermediate
+comparisons require version 2 captures, so an older engine's complete-frame capture cannot
+satisfy that request. Existing version 1 complete-frame reports remain supported. The web audit
+requests the fraction on the target simulation frame; this checks matrix/texture interpolation
+output at a known fraction, rather than browser timing. Intermediate-frame runtime validation
+is pending. The fixture enables N64 resolution mode and disables MSAA/alternate assets.
 Capture readback stalls are excluded from ordinary FPS samples: a running sample is marked
 incomplete when a capture occurs.
 
@@ -141,3 +152,13 @@ frame-60 match (`build-tools/comparison-house-699-desktop-web`). CI run 37789149
 five jobs after retrying a macOS disk-image packaging error. The complete engine and matching
 shell are now staged in both localhost previews. The isolated browser origin's regular backup
 was restored after fixtures, retaining the generated randomizer File 2 and its seed selection.
+
+The standard-SIMD candidate `9886d25` passed all five CI jobs in run 37800329180. Its matched
+Windows/web house frame 60 is exact across all 76,800 RGB555 pixels. Zora's Domain room 1 at
+frame 240 has 76,799 pixels within one level (99.9987%), with the same one-pixel/two-level
+maximum deviation observed on the scalar build. State metadata and commit match in both
+comparisons. Reports and paired images are in `build-tools/comparison-house-9886-desktop-web`
+and `build-tools/comparison-zoras-domain-water-9886-frame240`. These two full-frame samples
+support retaining the SIMD candidate for further testing; they do not prove an FPS improvement
+or intermediate-frame fidelity. The intermediate audit changes pass nine Python comparison
+tests and 36 shell tests; full-engine compilation and runtime validation are pending.

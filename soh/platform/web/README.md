@@ -122,8 +122,9 @@ browser's crypto API.
 
 For matched desktop/web diagnostic captures, see
 [`docs/WEB_RENDER_AUDIT.md`](../../../docs/WEB_RENDER_AUDIT.md). This opt-in fixture uses a
-temporary debug warp and fixed simulation frame; it does not establish full-game accuracy
-or intermediate interpolation correctness. The capture workflow is still being verified.
+temporary debug warp and fixed simulation frame. Updated audit builds can also request
+one-third/two-thirds interpolation captures; that workflow still needs runtime verification.
+These fixtures do not establish full-game accuracy or browser frame pacing.
 
 `browser-timing.html` measures browser callback cadence without loading the game or WebGL.
 Close other game tabs, keep the timing page visible, press **Measure browser timing**, then

@@ -1925,7 +1925,7 @@ extern "C" void Graph_WebPresentFrame(float interpolation, double simulationMs) 
     if (GfxDebuggerIsDebugging())
         interpolation = 1.0f;
     if (RenderAuditWantsFrame())
-        interpolation = 1.0f;
+        interpolation = RenderAuditTargetInterpolation();
     // Animated texture segments are generated at GetInterpolationFPS(); select the matching
     // segment even when a browser refresh was dropped rather than counting callbacks.
     const int divisor = std::max<int>(R_UPDATE_RATE, 1);

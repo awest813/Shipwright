@@ -96,7 +96,8 @@ silently combining different rendering configurations. It also separates present
 elapsed time into event handling, matrix interpolation and graphics submission; these remain
 elapsed wall-clock measurements, including preemption and synchronous GL waits, not GPU timers.
 All 35 shell tests pass, including context snapshot isolation, unavailable older engines and
-invalid phase samples. Full-engine compilation and interactive verification remain pending.
+invalid phase samples. CI run 37805092020 passed all five jobs for `974db0a`, including the
+complete web engine. Interactive verification of these diagnostics remains pending.
 
 The `95cdb36` engine generated a complete seed in the browser (finalSeed 1197554378,
 442 locations, hash 15-35-34-88-80) and stored its spoiler at an absolute `/data/Randomizer/`

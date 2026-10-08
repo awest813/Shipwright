@@ -11,6 +11,8 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
+#include <algorithm>
+#include <cmath>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
@@ -41,13 +43,21 @@ bool RenderAuditWantsFrame() {
            gPlayState->gameplayFrames >= static_cast<uint32_t>(targetFrame);
 }
 
+float RenderAuditTargetInterpolation() {
+    const int step = CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.InterpolationStep"), 3);
+    return static_cast<float>(std::clamp(step, 1, 3)) / 3.0f;
+}
+
 void RenderAuditCapture(const std::shared_ptr<Fast::Interpreter>& interpreter, float interpolation) {
-    if (!RenderAuditWantsFrame() || interpolation != 1.0f)
+    if (!RenderAuditWantsFrame())
         return;
     if (!interpreter || !interpreter->mRapi || !GET_PLAYER(gPlayState))
         return;
-    captured = true;
     const uint32_t targetFrame = static_cast<uint32_t>(CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Frame"), 60));
+    const float targetInterpolation = RenderAuditTargetInterpolation();
+    if (gPlayState->gameplayFrames == targetFrame && std::abs(interpolation - targetInterpolation) > 0.000001f)
+        return;
+    captured = true;
     const int expectedScene = CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Scene"), -1);
     const std::string label = CVarGetString(CVAR_DEVELOPER_TOOLS("RenderAudit.Label"), "capture");
     if (label.empty() || label.size() > 80 ||
@@ -57,7 +67,7 @@ void RenderAuditCapture(const std::shared_ptr<Fast::Interpreter>& interpreter, f
         return;
     }
     nlohmann::json result = { { "format", "shipwright-render-capture" },
-                              { "version", 1 },
+                              { "version", 2 },
                               { "label", label },
                               { "buildVersion", std::string(gBuildVersion) },
                               { "gitCommit", std::string(gGitCommitHash) },
@@ -66,6 +76,7 @@ void RenderAuditCapture(const std::shared_ptr<Fast::Interpreter>& interpreter, f
                               { "targetFrame", targetFrame },
                               { "seed", CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Seed"), 12345) },
                               { "interpolation", interpolation },
+                              { "targetInterpolation", targetInterpolation },
                               { "entrance", gSaveContext.entranceIndex },
                               { "age", gSaveContext.linkAge },
                               { "dayTime", gSaveContext.dayTime },
@@ -87,7 +98,10 @@ void RenderAuditCapture(const std::shared_ptr<Fast::Interpreter>& interpreter, f
     result["settings"] = { { "textureFilter", CVarGetInteger(CVAR_TEXTURE_FILTER, 0) },
                            { "alternateAssets", CVarGetInteger(CVAR_SETTING("AltAssets"), 1) } };
     std::string error;
-    if (gPlayState->gameplayFrames != targetFrame)
+    const int targetStep = CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.InterpolationStep"), 3);
+    if (targetStep < 1 || targetStep > 3)
+        error = "interpolation step must be 1, 2 or 3";
+    else if (gPlayState->gameplayFrames != targetFrame)
         error = "missed target simulation frame";
     else if (expectedScene >= 0 && gPlayState->sceneNum != expectedScene)
         error = "unexpected scene";

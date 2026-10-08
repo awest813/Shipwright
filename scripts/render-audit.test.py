@@ -55,8 +55,46 @@ class RenderAuditTests(unittest.TestCase):
         self.assertIn('camera.eye.0', result['stateMismatches'])
         candidate = capture()
         candidate['frame'] = 61
-        with self.assertRaisesRegex(ValueError, 'requested full simulation frame'):
+        with self.assertRaisesRegex(ValueError, 'requested simulation frame'):
             audit.compare(capture(), candidate)
+
+    def test_intermediate_frames_match_only_the_requested_fraction(self):
+        reference = capture()
+        reference.update(version=2, interpolation=1 / 3, targetInterpolation=1 / 3)
+        candidate = copy.deepcopy(reference)
+        candidate['interpolation'] = 0.3333333432674408
+        self.assertEqual(audit.compare(reference, candidate, interpolation_step=1)['status'], 'pass')
+        result = audit.compare(reference, candidate, interpolation_step=2)
+        self.assertEqual(result['status'], 'unmatched')
+        self.assertIsNone(result['fractionWithinOneLevel'])
+        candidate.update(interpolation=2 / 3, targetInterpolation=2 / 3)
+        self.assertEqual(audit.compare(reference, candidate)['status'], 'unmatched')
+
+    def test_legacy_reports_cannot_prove_an_intermediate_frame(self):
+        with self.assertRaisesRegex(ValueError, 'version 2'):
+            audit.compare(capture(), capture(), interpolation_step=1)
+        intermediate = capture()
+        intermediate.update(version=2, interpolation=1 / 3)
+        with self.assertRaises(ValueError):
+            audit.validate(intermediate)
+        for value in (0, 0.5, True, float('nan'), float('inf')):
+            intermediate.update(targetInterpolation=value, interpolation=value)
+            with self.assertRaises(ValueError):
+                audit.validate(intermediate)
+        complete = capture()
+        complete.update(version=2, targetInterpolation=1)
+        self.assertEqual(audit.compare(capture(), complete, interpolation_step=3)['status'], 'pass')
+
+    def test_intermediate_fixture_enables_desktop_interpolation_and_preserves_request(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = types.SimpleNamespace(label='house-third', entrance=187, scene=52, room=0, yaw=0,
+                                         x=1, y=0, z=95, age=1, frame=60, seed=12345,
+                                         interpolation_step=1, out=Path(directory))
+            audit.fixture(args)
+            import json
+            config = json.loads((args.out / 'shipofharkinian.json').read_text())
+            self.assertEqual(config['CVars']['gSettings']['InterpolationFPS'], 60)
+            self.assertEqual(config['CVars']['gDeveloperTools']['RenderAudit']['InterpolationStep'], 1)
 
     def test_failed_blank_and_malformed_captures_are_rejected(self):
         for mutation in ({'reason': 'missed target simulation frame'}, {'pixels': [0] * 76800},
