@@ -5,6 +5,7 @@ import json
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from functools import partial
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -71,6 +72,16 @@ class WebDistributionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Damaged ROM conversion bundle'):
             web.package(self.source, self.output)
         self.assertFalse(self.output.exists())
+
+    def test_windows_sdk_wrappers_use_python_without_a_shell(self):
+        sdk = self.root / 'SDK & tools'
+        sdk.mkdir()
+        wrapper = sdk / 'emcmake.bat'
+        wrapper.write_text('unused wrapper')
+        script = sdk / 'emcmake.py'
+        script.write_text('print("fixture")')
+        with patch.object(web.shutil, 'which', return_value=str(wrapper)):
+            self.assertEqual(web.executable('emcmake'), [web.sys.executable, str(script)])
 
     def test_http_serves_wasm_mime_and_raw_bundles_under_a_subdirectory(self):
         web.package(self.source, self.output)

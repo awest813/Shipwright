@@ -150,9 +150,14 @@ def executable(name):
     result = shutil.which(name)
     if not result:
         raise ValueError(f'{name} was not found. Install the prerequisites and activate emsdk {SDK_VERSION} in this shell.')
-    # Windows SDK entry points can be .bat; explicit cmd invocation preserves
-    # paths containing spaces, without involving a shell for ordinary commands.
-    return ['cmd', '/d', '/c', result] if result.lower().endswith(('.bat', '.cmd')) else [result]
+    # Call the SDK's adjacent Python entry point instead of a Windows batch
+    # shell, so paths and CMake arguments containing spaces or & stay arguments.
+    if result.lower().endswith(('.bat', '.cmd')):
+        script = Path(result).with_suffix('.py')
+        if not script.is_file():
+            raise ValueError(f'{name} is a batch wrapper without its SDK Python entry point. Activate the official emsdk shell.')
+        return [sys.executable, str(script)]
+    return [result]
 
 
 def build(args):
