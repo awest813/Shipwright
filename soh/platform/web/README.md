@@ -76,7 +76,8 @@ WASD = movement, Z = target, arrow keys = C buttons, Esc = settings.
 **Touch controls** toggles an on-screen movement joystick and N64 buttons. They also appear
 automatically on browsers reporting a coarse pointer. Use **Settings** to open the in-game menu;
 touch controls hide while that menu is open. At narrow widths, category and section selectors
-leave the settings the full available width. These controls require matching updated shell and
+leave settings the full available width and height. Closing the menu restores the game's aspect
+ratio. These controls require matching updated shell and
 engine files; their device compatibility is still being tested.
 
 Import a compatible randomizer spoiler JSON before startup or through the runtime toolbar,
@@ -90,6 +91,15 @@ The page has to be served over HTTPS or from `localhost` for ROM conversion, whi
 browser's crypto API.
 
 ## Files
+
+The web artifact also includes `depth-test.html`. Open it on the same local server and press
+**Run depth tests** to verify the renderer's C++ WebGL depth encoding and GL state restoration.
+This fixture does not load a ROM. It checks the readback implementation, not full-game fidelity
+or performance. To rebuild it separately with the activated Emscripten SDK:
+
+```sh
+em++ scripts/web-depth.test.cpp -ICMake/web/include -std=c++17 -O2 -sUSE_WEBGL2=1 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=0 --shell-file scripts/web-depth.test.html -o build-web/depth-test.html
+```
 
 - `shell.html`: the page around the game: storage mount, ROM / archive upload, start button.
 - `pack_assets.py`: packs `soh/assets/yml` into the per-version bundles and `rom-versions.json`.

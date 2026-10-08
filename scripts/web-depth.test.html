@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Shipwright WebGL depth verification</title>
+<style>body { font: 16px system-ui; color: #eee; background: #18202c; padding: 24px; } button { padding: 12px; } pre { white-space: pre-wrap; }</style>
+<h1>WebGL depth verification</h1>
+<p>Tests the C++ depth readback used by the web renderer, including precision, batches, default framebuffers, and GL state restoration.</p>
+<button id="run" disabled onclick="this.disabled = true; Module._RunDepthTests()">Run depth tests</button>
+<pre id="report">Loading test runtime…</pre>
+<canvas id="canvas" width="32" height="32" hidden></canvas>
+<script>
+var Module = {
+  canvas: document.getElementById('canvas'),
+  onRuntimeInitialized() {
+    document.getElementById('run').disabled = false;
+    document.getElementById('report').textContent = 'Ready';
+  },
+  printErr(message) { document.getElementById('report').textContent += '\n' + message; }
+};
+</script>
+{{{ SCRIPT }}}
+</html>

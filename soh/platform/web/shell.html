@@ -38,6 +38,14 @@
   body.touch-enabled #web-tools { bottom: auto; top: max(8px, env(safe-area-inset-top)); }
   body.native-menu-open #web-tools { top: auto; bottom: max(8px, env(safe-area-inset-bottom)); }
   body.native-menu-open #web-tools > :not(#settings-game):not(#web-status) { display: none; }
+  @media (max-width: 599px) {
+    body.native-menu-open #canvas {
+      inset: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      width: calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right));
+      height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+      height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    }
+  }
   #extras { border-top: 1px solid #30363d; margin-top: 16px; padding-top: 12px; }
   #extras summary { cursor: pointer; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -109,6 +117,7 @@
   const frameTimes = [];
   let lastFrameReport = 0;
   let canvasAspect = 0;
+  let canvasAspectCooldown = 0;
   let statusTimeout = 0;
   let touchEnabled = false;
   let gameMenuVisible = false;
@@ -538,12 +547,18 @@
         document.body.classList.toggle("native-menu-open", menuVisible);
         resetTouchInput();
         document.getElementById("touch-controls").hidden = !touchEnabled || menuVisible;
+        // Let SDL resize after closing the full-height phone menu before sampling
+        // the game canvas again. Menu dimensions must not become the game aspect.
+        if (!menuVisible) canvasAspectCooldown = 3;
+        // SDL listens for window resize events, rather than CSS-only changes.
+        if (window.innerWidth < 600) requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
       }
       const aspect = Module.canvas.width / Module.canvas.height;
-      if (aspect > 0 && aspect !== canvasAspect) {
+      if (!menuVisible && canvasAspectCooldown === 0 && aspect > 0 && aspect !== canvasAspect) {
         Module.canvas.style.setProperty("--canvas-aspect", aspect);
         canvasAspect = aspect;
       }
+      if (!menuVisible && canvasAspectCooldown > 0) canvasAspectCooldown--;
       const now = performance.now();
       if (benchmark) {
         benchmark.intervals.push(now - benchmark.lastFrame);

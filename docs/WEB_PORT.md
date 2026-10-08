@@ -83,11 +83,30 @@ playable gameplay in Link's house, the normal child-save spawn location; movemen
 Completion requires a playable scene, save/reload verification, rendering comparisons with the
 desktop build, frame-time measurements during gameplay, and checks of supported extras.
 
-New mobile changes awaiting rebuilt runtime verification: direct touch input into controller
-port 1, a multi-touch joystick and N64 buttons, a toolbar Settings button, and a compact native
-menu below 600 pixels. Input tests verify short-tap buffering, simultaneous buttons, cancellation,
-signed stick packing and release/disable resets. A libultraship patch supplies the web-only input
-bridge; no desktop bindings are changed. Physical phone and controller checks are still pending.
+CI run 37727627931 passed all five jobs. Its web engine started from the cached archive, and
+the on-screen Start and A buttons opened the existing vanilla save. The Settings button hid the
+touch overlay and opened the compact menu at a 390×844 viewport. The shell now expands that
+menu to the phone viewport, notifies SDL of the CSS resize, and preserves the game aspect while
+the menu is open. Closing the menu restored the 390×292 game canvas. Input tests verify
+short-tap buffering, simultaneous buttons, cancellation, signed stick packing and release/disable
+resets. A libultraship patch supplies the web-only input bridge. Physical phone, joystick and
+controller checks are still pending.
+
+A subsequent 30-second interior sample of that engine averaged 55.71 FPS (714×534 canvas).
+Browser timestamps associated with presented frames had an 18.0 ms median and 18.3 ms p95;
+draw completion delay after the browser timestamp had a 9.7 ms p95. This sample is below the
+target and requires further pacing investigation; it does not supersede the earlier samples
+or establish a cause. The report is preserved locally as `build-tools/performance-touch-build.json`.
+The supplied USA Rev 2 ROM also converted successfully and reached the title sequence on
+the original port-8080 preview with this updated engine.
+
+A WebGL depth-to-RGBA readback is implemented and awaiting full-engine verification. Its
+standalone C++/Wasm browser fixture passed all 27 checks: precision, single/batched queries, row coordinates,
+default framebuffer, out-of-bounds queries, and GL state restoration checks. A prototype that
+blitted individual depth pixels returned the wrong row on the tested renderer; the implemented
+path copies the full-size depth buffer before sampling. Its game performance and sun/lens-flare
+occlusion still need to be measured. Native renderer paths are unchanged. The fixture ships as
+`depth-test.html` in the next web artifact; its browser results are independent of the shell tests.
 Randomizer generation feedback is implemented and awaiting an updated engine: generation start,
 success and failure messages, disabled seed actions while generating, and persistence on finish.
 Shell tests exercise interruption of a performance sample, blocked imports and control recovery
@@ -335,9 +354,9 @@ Both are submodules owned by other repos. Land those changes upstream
 - Wider play-testing with real game data (the exit criterion: Kokiri Forest through the Deku Tree,
   save, reload, continue); initial vanilla and randomizer gameplay is verified.
 - Sustained 60 FPS benchmarks and matched desktop rendering/gameplay comparisons.
-- Proper `GetPixelDepth` (depth-to-RGBA pass) and an MSAA path that WebGL2 can resolve.
+- Full-engine validation of `GetPixelDepth` (depth-to-RGBA pass) and an MSAA path that WebGL2 can resolve.
 - Runtime coverage of mods and enhancement combinations; a Web Speech text-to-speech backend.
-- Runtime and hardware validation of mobile/touch controls and the compact settings menu.
+- Wider runtime and hardware validation of mobile/touch controls and the compact settings menu.
 - A pthreads variant (COOP/COEP) for audio/render overlap and WasmFS + OPFS.
 - WebSocket transport for Anchor; Crowd Control and Sail stay desktop-only.
 - Upstreaming the libultraship and Torch patches.
