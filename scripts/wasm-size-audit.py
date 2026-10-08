@@ -121,9 +121,15 @@ def main():
         if args.symbols:
             for line in args.symbols.read_text(encoding='utf-8').splitlines():
                 index, name = line.split(':', 1)
-                symbols[int(index)] = name
+                index = int(index)
+                if index in symbols:
+                    raise ValueError('duplicate symbol-map function index')
+                symbols[index] = name
         data = args.wasm.read_bytes()
         imports, bodies = inspect(data, symbols)
+        count = imports + len(bodies)
+        if args.symbols and (len(symbols) != count or any(index < 0 or index >= count for index in symbols)):
+            raise ValueError('symbol map does not cover this module\'s function indexes')
     except (OSError, ValueError) as error:
         parser.exit(2, f'Wasm size audit failed: {error}\n')
     oversized = [body for body in bodies if body['bodyBytes'] > args.max_body_bytes]
