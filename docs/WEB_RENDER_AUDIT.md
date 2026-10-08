@@ -291,3 +291,11 @@ the game-update span and must not be added to the four exclusive spans. These ar
 measurements, not GPU execution timers. No additional depth query is issued. Interpolation-only
 presentations discard stale simulation timing, and older engines report unknown phase samples.
 The shell regression checks this behavior; actual full-engine phase reports remain pending.
+
+The `2689adb` Windows engine captured the requested 640×480 house framebuffer successfully.
+Its initial unattended forest run had a different player/camera state and was excluded from
+accuracy scoring. A rerun with empty controller mappings reproduced the established frame-600
+forest state and all 76,800 native pixels exactly. This cross-commit native output regression
+check is `build-tools/native-2689a-output-parity-noinput.json`; it is not a web fidelity score.
+The native glow check records buffer depth 64104 versus light depth 28908, with the preceding
+presentation at frame 599, interpolation 1. Matching web captures are still pending.
