@@ -191,6 +191,25 @@ stayed at 512 MiB, with 383,213,336 allocator bytes used at both endpoints and n
 or rendering-context change. The report is
 `build-tools/performance-5564-cached-vanilla-forest-normal-viewport.json`. Host snapshots before
 and after recorded 40% CPU, no compiler processes and about 4.4/3.9 GiB free physical memory.
+
+The next shell change keeps the conversion overlay visible until the archive has been saved,
+then reloads and starts the cached archive automatically. A path-specific, two-minute session
+marker is consumed before startup; missing archives, stale markers, failed storage and failed
+engines cannot trigger automatic startup. If session storage is unavailable or saving fails,
+the existing game remains playable. All 46 shell tests pass, including these recovery paths.
+On the isolated origin with the existing `5564e71` engine, the supplied ROM reconverted and
+reached the title sequence from one Start click, then File 1 loaded normally. All three saves,
+global save data, four spoilers and ImGui settings survived byte-identically; game startup
+removed three empty/zero temporary file-select CVars from the config. The exported comparison
+is `build-tools/save-conversion-restart-5564.json`.
+The fresh-ROM/restarted house sample held Wasm at 536,870,912 bytes at both endpoints and used
+380,072,952 / 380,111,952 allocator bytes. It measured 59.88 FPS / 59.91 browser callbacks/s,
+presentation p95 22.8 ms, maximum 60.6 ms and total CPU p95 11.1 ms. Settings/dimensions
+matched the prior house samples. The report is
+`build-tools/performance-5564-fresh-rom-restarted-house.json`; host CPU snapshots were 88% and
+47%, with no compiler processes. This validates recovery of the gameplay memory reservation,
+but conversion still temporarily needs its larger heap. Lower-memory devices and broader
+frame-pacing/fidelity coverage remain unverified.
 The recovered `6990278` main preview exported its settings by keyboard, and resetting its
 viewport back to the default size completed successfully while the title sequence was running.
 That isolated success does not establish repeated resize stability or identify the earlier crash.

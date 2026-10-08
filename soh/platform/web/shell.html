@@ -118,6 +118,7 @@
   let stopped = false; // the game stopped (exit during startup, abort or crash)
   let storageWorks = true;
   let stagedRomPath = null; // version directory of a ROM waiting to be converted
+  let conversionFinishing = false;
   let persistSoon = 0;
   let busy = false;
   const frameTimes = [];
@@ -687,6 +688,45 @@
     return syncing;
   }
 
+  function conversionResumeKey() {
+    return `shipwright-converted-start:${window.location.pathname}`;
+  }
+
+  // Linear Wasm memory cannot shrink. A saved conversion can restart with the smaller gameplay heap.
+  async function finishConvertedStartup() {
+    let saved = false;
+    try { saved = await persist(); }
+    catch (error) {
+      console.error("Saving the converted archive failed", error);
+      storageWorks = false;
+    }
+    conversionFinishing = false;
+    if (!started || stopped) return;
+    if (saved && storageWorks) {
+      try {
+        sessionStorage.setItem(conversionResumeKey(), String(Date.now()));
+        window.location.reload();
+        return;
+      } catch (error) {
+        // Session storage may be unavailable even when IndexedDB works; keep this game playable.
+        try { sessionStorage.removeItem(conversionResumeKey()); } catch (ignored) {}
+      }
+    }
+    showGameControls();
+    if (!saved || !storageWorks) {
+      showMessage("Browser storage failed. Export your saves before closing this tab; recent changes may not survive a reload.", true);
+    }
+  }
+
+  function resumeConvertedStartup() {
+    try {
+      const stamp = Number(sessionStorage.getItem(conversionResumeKey()));
+      sessionStorage.removeItem(conversionResumeKey());
+      const elapsed = Date.now() - stamp;
+      if (stamp > 0 && elapsed >= 0 && elapsed < 120000 && storageWorks && !startButton.disabled) startGame();
+    } catch (error) {}
+  }
+
   var Module = {
     consumeWebInput: consumeTouchInput,
     webControllerRumble,
@@ -713,6 +753,7 @@
       setInterval(updateControllers, 1000);
       showMessage(storageWorks ? "" : "Your browser didn't let this page use storage (private window?), so nothing will be kept after it closes.", !storageWorks);
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+      resumeConvertedStartup();
     },
     print: (text) => console.log(text),
     printErr: (text) => console.warn(text),
@@ -815,7 +856,9 @@
     // The game wrote oot.o2r / oot-mq.o2r from the staged ROM; the ROM and asset descriptions can go.
     onArchiveExtracted: () => {
       clearStagedRom();
-      persist();
+      conversionFinishing = true;
+      showMessage("Finishing ROM conversion and preparing gameplay…");
+      return finishConvertedStartup();
     },
   };
 
@@ -1010,7 +1053,16 @@
     } finally { busy = false; setControlsEnabled(!running && !stopped); }
   });
 
-  startButton.addEventListener("click", () => {
+  function showGameControls() {
+    overlay.style.display = "none";
+    document.getElementById("web-tools").hidden = false;
+    document.getElementById("web-status").textContent = "";
+    document.getElementById("seed-game-input").disabled = false;
+    if (typeof Module._WebTouchInputSupported === "function" && window.matchMedia && window.matchMedia("(pointer: coarse)").matches) setTouchEnabled(true);
+    Module.canvas.focus();
+  }
+
+  function startGame() {
     if (running || !ready || stopped || busy || startButton.disabled) return;
     running = true;
     setControlsEnabled(false);
@@ -1027,15 +1079,11 @@
         // main() exited during startup; it has already explained why in a dialog.
         stop("The game couldn't start.");
       }
-      if (stopped) return;
-      overlay.style.display = "none";
-      document.getElementById("web-tools").hidden = false;
-      document.getElementById("web-status").textContent = "";
-      document.getElementById("seed-game-input").disabled = false;
-      if (typeof Module._WebTouchInputSupported === "function" && window.matchMedia && window.matchMedia("(pointer: coarse)").matches) setTouchEnabled(true);
-      Module.canvas.focus();
+      if (stopped || conversionFinishing) return;
+      showGameControls();
     }, 50));
-  });
+  }
+  startButton.addEventListener("click", startGame);
 
   document.addEventListener("visibilitychange", () => { if (document.hidden && running) persist(); });
   window.addEventListener("pagehide", () => { if (running) persist(); });

@@ -38,6 +38,8 @@ function harness() {
       mkdirTree(path) { const parts = path.split('/'); for (let i = 2; i <= parts.length; i++) dirs.add(parts.slice(0, i).join('/')); },
       writeFile: (path, bytes) => files.set(path, new Uint8Array(bytes)),
       readFile: path => files.get(path),
+      unlink(path) { if (!files.delete(path)) throw Error('missing file'); },
+      rmdir(path) { if (!dirs.delete(path)) throw Error('missing directory'); },
       rename(from, to) { if (!files.has(from) || files.has(to)) throw Error('invalid rename'); files.set(to, files.get(from)); files.delete(from); },
       readdir(path) { return ['.', '..', ...new Set([...files.keys(), ...dirs].filter(p => p.startsWith(path + '/')).map(p => p.slice(path.length + 1).split('/')[0]))]; },
       stat: path => ({ mode: dirs.has(path) ? 1 : 0 }), isDir: mode => mode === 1,
@@ -223,6 +225,95 @@ test('concurrent persistence waits for the follow-up flush', async () => {
   assert.equal(h.syncs.length, 1);
   h.syncs.shift()(null);
   assert.equal(await second, true);
+});
+
+function convertedStartupHarness() {
+  const h = harness(), markers = new Map(); let reloads = 0;
+  h.context.sessionStorage = {
+    getItem: key => markers.get(key) ?? null,
+    setItem: (key, value) => markers.set(key, value),
+    removeItem: key => markers.delete(key),
+  };
+  h.context.window.location = { pathname: '/index.html', reload() { reloads++; } };
+  h.context.setInterval = () => 0;
+  h.context.setTimeout = () => 0;
+  h.context.clearTimeout = () => {};
+  h.files.set('/data/oot.o2r', new Uint8Array([1]));
+  h.evaluate('ready = running = started = true');
+  return { ...h, markers, reloads: () => reloads };
+}
+
+test('converted startup drops staged files and waits for durable storage before reloading', async () => {
+  const h = convertedStartupHarness();
+  h.files.set('/tmp/rom.z64', new Uint8Array([1]));
+  h.context.FS.mkdirTree('/app/assets/ntsc_1-2');
+  h.files.set('/app/assets/ntsc_1-2/scene.yml', new Uint8Array([2]));
+  h.evaluate('stagedRomPath = "ntsc_1-2"');
+  const finished = h.evaluate('Module.onArchiveExtracted()');
+  assert.equal(h.files.has('/tmp/rom.z64'), false);
+  assert.equal(h.files.has('/app/assets/ntsc_1-2/scene.yml'), false);
+  assert.equal(h.evaluate('stagedRomPath'), null);
+  assert.equal(h.evaluate('conversionFinishing'), true);
+  assert.equal(h.reloads(), 0); assert.equal(h.markers.size, 0);
+  h.syncs.shift()(null);
+  await finished;
+  assert.equal(h.reloads(), 1);
+  assert.ok(Number(h.markers.get('shipwright-converted-start:/index.html')) > 0);
+});
+
+test('converted startup keeps gameplay and a storage warning available after a failed flush', async () => {
+  const h = convertedStartupHarness();
+  const finished = h.evaluate('Module.onArchiveExtracted()');
+  h.syncs.shift()(Error('storage full'));
+  await finished;
+  assert.equal(h.reloads(), 0); assert.equal(h.markers.size, 0);
+  assert.equal(h.elements.get('overlay').style.display, 'none');
+  assert.equal(h.elements.get('web-tools').hidden, false);
+  assert.match(h.elements.get('web-status').textContent, /Browser storage failed/);
+  assert.equal(h.evaluate('started && !stopped && !conversionFinishing'), true);
+});
+
+test('session storage denial keeps a converted game playable without reloading', async () => {
+  const h = convertedStartupHarness();
+  h.context.sessionStorage.setItem = () => { throw Error('denied'); };
+  const finished = h.evaluate('Module.onArchiveExtracted()');
+  h.syncs.shift()(null); await finished;
+  assert.equal(h.reloads(), 0); assert.equal(h.markers.size, 0);
+  assert.equal(h.elements.get('overlay').style.display, 'none');
+  assert.equal(h.evaluate('started && !stopped'), true);
+});
+
+test('converted startup consumes a recent marker and starts the cached archive exactly once', () => {
+  const h = convertedStartupHarness(), frames = [];
+  h.evaluate('running = started = false; let mainCalls = 0; Module.callMain = () => { mainCalls++; started = true; }');
+  h.context.requestAnimationFrame = callback => frames.push(callback);
+  h.context.setTimeout = callback => { callback(); return 0; };
+  h.markers.set('shipwright-converted-start:/index.html', String(Date.now()));
+  h.evaluate('Module.onRuntimeInitialized()');
+  assert.equal(h.evaluate('running'), true); assert.equal(h.markers.size, 0);
+  assert.equal(frames.length, 1);
+  frames.shift()();
+  assert.equal(h.evaluate('mainCalls'), 1);
+  assert.equal(h.elements.get('overlay').style.display, 'none');
+  h.evaluate('Module.onRuntimeInitialized()');
+  assert.equal(frames.length, 0); assert.equal(h.evaluate('mainCalls'), 1);
+});
+
+test('stale markers, missing archives, unavailable storage and failed engines never resume', async () => {
+  for (const reason of ['stale', 'missing', 'storage']) {
+    const h = convertedStartupHarness();
+    h.evaluate('running = started = false');
+    h.markers.set('shipwright-converted-start:/index.html', String(Date.now() - (reason === 'stale' ? 180000 : 0)));
+    if (reason === 'missing') h.files.delete('/data/oot.o2r');
+    if (reason === 'storage') h.evaluate('storageWorks = false');
+    h.context.requestAnimationFrame = () => assert.fail('unexpected automatic start');
+    h.evaluate('Module.onRuntimeInitialized()');
+    assert.equal(h.evaluate('running'), false); assert.equal(h.markers.size, 0);
+  }
+  const h = convertedStartupHarness();
+  const finished = h.evaluate('Module.onArchiveExtracted()');
+  h.evaluate('stopped = true'); h.syncs.shift()(null); await finished;
+  assert.equal(h.reloads(), 0); assert.equal(h.markers.size, 0);
 });
 
 test('backup import validates all paths before writing files', async () => {
