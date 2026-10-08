@@ -50,6 +50,17 @@ controllers, randomizer generation/import and saves, PC enhancements, and browse
 on Chromebook, laptop, desktop, Android/mobile and iPhone. Browser viewport emulation alone is
 not evidence of physical-device compatibility; record actual device/browser tests separately.
 
+The `95cdb36` engine generated a complete seed in the browser (finalSeed 1197554378,
+442 locations, hash 15-35-34-88-80) and stored its spoiler at an absolute `/data/Randomizer/`
+path. Reload testing exposed a second issue: the shell always reselected an older imported
+seed. The shell now preserves a valid selected generated spoiler, while an explicit pre-start
+import records the newly selected path in the config before persistence. Four regression checks
+cover startup selection, legacy imports, config preservation and malformed settings; all 26
+shell tests pass. Browser verification retained the generated seed after reload, created a new
+randomizer save in File 2 and reached gameplay with working movement. Exported save data records
+the same finalSeed and all five hash indexes. Generation still pauses the single-threaded game;
+full seed completion/progression and broader settings coverage remain unverified.
+
 Four matched frame-60 rendering fixtures passed the 94% diagnostic threshold against the
 same-commit Windows desktop build: child/adult Link's house, Kokiri Forest and the Deku Tree
 entrance. All pixels were within one RGB555 level per channel; both house captures were exact.

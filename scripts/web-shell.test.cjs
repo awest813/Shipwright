@@ -221,6 +221,51 @@ test('a seed storage failure does not report successful engine import', async ()
   assert.equal(h.elements.get('seed-game-input').disabled, false);
 });
 
+test('startup preserves a selected generated seed when an older imported seed exists', () => {
+  const h = harness();
+  const selected = '/data/Randomizer/generated.json';
+  h.files.set(selected, new TextEncoder().encode('{}'));
+  h.files.set('/data/Randomizer/imported-seed.json', new TextEncoder().encode('{}'));
+  h.files.set('/data/shipofharkinian.json', new TextEncoder().encode(JSON.stringify({ CVars: { gGeneral: { SpoilerLog: selected } } })));
+  h.evaluate('requestAnimationFrame = () => {}; let restoredSeeds = 0; Module._WebLoadRandomizerSeed = () => { restoredSeeds++; }; Module.onGameStarted()');
+  assert.equal(h.evaluate('restoredSeeds'), 0);
+});
+
+test('startup restores legacy imported seeds with no selected config', () => {
+  const h = harness();
+  h.files.set('/data/Randomizer/imported-seed.json', new TextEncoder().encode('{}'));
+  h.evaluate('requestAnimationFrame = () => {}; let restoredSeeds = 0; Module._WebLoadRandomizerSeed = () => { restoredSeeds++; }; Module.onGameStarted()');
+  assert.equal(h.evaluate('restoredSeeds'), 1);
+});
+
+test('a pre-start import selects the new seed durably while preserving other settings', async () => {
+  const h = harness(); h.evaluate('ready = true');
+  h.files.set('/data/shipofharkinian.json', new TextEncoder().encode(JSON.stringify({ ConfigVersion: 7, Window: { Width: 640 }, CVars: { gSettings: { InterpolationFPS: 60 }, gGeneral: { SpoilerLog: '/data/Randomizer/old.json', RandomizerDroppedFile: '/data/Randomizer/old.json', RandomizerNewFileDropped: 1 } } })));
+  const text = '{"version":"9.2.3","finalSeed":123}';
+  const imported = h.elements.get('seed-input').listeners.change({ target: { files: [{ size: text.length, text: async () => text }] } });
+  await new Promise(resolve => setImmediate(resolve)); h.syncs.shift()(null); await imported;
+  const config = JSON.parse(new TextDecoder().decode(h.files.get('/data/shipofharkinian.json')));
+  assert.deepEqual(config.Window, { Width: 640 });
+  assert.equal(config.CVars.gSettings.InterpolationFPS, 60);
+  assert.equal(config.CVars.gGeneral.SpoilerLog, '/data/Randomizer/imported-seed.json');
+  assert.equal(config.CVars.gGeneral.RandomizerNewFileDropped, 0);
+  assert.equal(config.CVars.gGeneral.RandomizerDroppedFile, '');
+  assert.equal(h.evaluate('shouldRestoreImportedSeed()'), true);
+  assert.match(h.elements.get('message').textContent, /Seed stored/);
+});
+
+test('a malformed config blocks pre-start import before replacing a stored seed', async () => {
+  const h = harness(); h.evaluate('ready = true');
+  h.files.set('/data/shipofharkinian.json', new TextEncoder().encode('{"CVars":[]}'));
+  const oldSeed = new TextEncoder().encode('{"version":"9.2.3","finalSeed":456}');
+  h.files.set('/data/Randomizer/imported-seed.json', oldSeed);
+  const text = '{"version":"9.2.3","finalSeed":123}';
+  await h.elements.get('seed-input').listeners.change({ target: { files: [{ size: text.length, text: async () => text }] } });
+  assert.deepEqual(h.files.get('/data/Randomizer/imported-seed.json'), oldSeed);
+  assert.match(h.elements.get('message').textContent, /valid config object/);
+  assert.equal(h.syncs.length, 0);
+});
+
 test('touch taps survive one poll, simultaneous buttons hold and cancellation releases', () => {
   const h = harness(); h.evaluate('started = true; setTouchEnabled(true)');
   const event = pointerId => ({ pointerId, preventDefault() {} });

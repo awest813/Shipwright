@@ -591,7 +591,7 @@
       document.getElementById("settings-game").disabled = typeof Module._WebToggleMenu !== "function";
       document.getElementById("touch-toggle").disabled = typeof Module._WebTouchInputSupported !== "function";
       requestAnimationFrame(trackBrowserFrame);
-      if (hasFile(`${DATA_DIR}/Randomizer/imported-seed.json`) && typeof Module._WebLoadRandomizerSeed === "function") {
+      if (shouldRestoreImportedSeed() && typeof Module._WebLoadRandomizerSeed === "function") {
         Module._WebLoadRandomizerSeed();
       }
     },
@@ -753,6 +753,30 @@
     finally { busy = false; setControlsEnabled(!running && !stopped); }
   });
 
+  function readSeedConfig() {
+    const path = `${DATA_DIR}/shipofharkinian.json`;
+    const config = hasFile(path) ? JSON.parse(new TextDecoder().decode(FS.readFile(path))) : {};
+    for (const value of [config, config && config.CVars, config && config.CVars && config.CVars.gGeneral]) {
+      if (value !== undefined && (!value || typeof value !== "object" || Array.isArray(value))) {
+        throw new Error("the saved settings are not a valid config object");
+      }
+    }
+    return config;
+  }
+
+  function shouldRestoreImportedSeed() {
+    if (!hasFile(`${DATA_DIR}/Randomizer/imported-seed.json`)) return false;
+    try {
+      const selected = readSeedConfig().CVars?.gGeneral?.SpoilerLog;
+      // File select restores a selected generated spoiler itself. An older imported file
+      // must not replace it on every boot. Keep the fallback for older import-only backups.
+      return !selected || selected === `${DATA_DIR}/Randomizer/imported-seed.json` || !hasFile(selected);
+    } catch (error) {
+      console.warn("Could not inspect the selected randomizer seed", error);
+      return false;
+    }
+  }
+
   for (const id of ["seed-input", "seed-game-input"]) {
     document.getElementById(id).addEventListener("change", async (event) => {
       const file = event.target.files[0]; event.target.value = "";
@@ -762,8 +786,19 @@
         if (file.size > 16 * 1024 * 1024) throw new Error("seed exceeds 16 MB");
         const text = await file.text(), seed = JSON.parse(text);
         if (!seed || typeof seed !== "object" || !("version" in seed) || !("finalSeed" in seed)) throw new Error("select a randomizer spoiler JSON containing version and finalSeed");
+        let config;
+        if (!started) {
+          config = readSeedConfig();
+          config.CVars ??= {};
+          config.CVars.gGeneral ??= {};
+          Object.assign(config.CVars.gGeneral, {
+            SpoilerLog: `${DATA_DIR}/Randomizer/imported-seed.json`,
+            RandomizerDroppedFile: "", RandomizerNewFileDropped: 0,
+          });
+        }
         FS.mkdirTree(`${DATA_DIR}/Randomizer`);
         FS.writeFile(`${DATA_DIR}/Randomizer/imported-seed.json`, new TextEncoder().encode(text));
+        if (config) FS.writeFile(`${DATA_DIR}/shipofharkinian.json`, new TextEncoder().encode(JSON.stringify(config)));
         if (!await persist()) return;
         if (started) {
           if (typeof Module._WebLoadRandomizerSeed !== "function" || !Module._WebLoadRandomizerSeed()) throw new Error("the game could not accept this seed (wait for any current seed generation to finish)");
