@@ -250,8 +250,19 @@ be identified. A local real-SDK runtime-diagnostics build ran successfully with 
 its 13,383-byte Wasm was byte-identical to a build with otherwise identical flags and no
 map. A read-only binary inspection of `fedab66` found a 3,284,081-byte function body
 (index 6436, 29 locals), recorded in `build-tools/wasm-largest-functions-fedab.json`.
-Its source function and relevance to the observed pressure remain unidentified pending
-a matching full-engine map; the size alone does not establish a runtime defect.
+CI run 37842495121 passed all five jobs for `0234b22`. Its full-engine map identifies
+that unchanged body as `RegionTable_Init()` (3,284,081 bytes, 29 locals, index 6436).
+The body contains the otherwise separate world-region setup routines, including 1,057
+`Region::Region` construction call sites. Its size still does not establish the cause
+of the observed runtime stall. Evidence is `build-tools/wasm-largest-functions-0234b.json`
+and `build-tools/wasm-region-table-structure-0234b.json`.
+A real Emscripten 6.0.11 / Binaryen 133 experiment produced identical runtime output in
+all variants: ordinary calls and `noinline` alone both lost the helper in the final map;
+global and local volatile function-pointer calls retained it. The pending web boundary
+change forwards each of the same 35 region initializers through a local volatile pointer,
+preserving their order and avoiding per-frame logic changes. Full-engine size, identical
+seed generation, startup behavior and gameplay checks remain pending. Local experiment:
+`build-tools/web-inline-boundary-probe-result.json`.
 
 The main `8080/polish.html` and index previews now use the verified `5564e71` engine with
 the durable conversion restart shell, preserving their surrounding page styling. The

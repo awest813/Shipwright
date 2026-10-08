@@ -868,6 +868,19 @@ bool CanPlantBean(const RandomizerGet bean) {
 Rando::Context* ctx;
 std::shared_ptr<Rando::Logic> logic;
 
+// Keep world-graph setup in separate region functions on web. The final Wasm optimizer
+// otherwise merges all single-caller initializers into a multi-megabyte function, which
+// is costly for browsers to compile. A volatile pointer retains the call boundary without
+// changing region order or adding indirection to per-frame logic.
+static void InitializeRegion(void (*initialize)()) {
+#ifdef __EMSCRIPTEN__
+    void (*volatile initializer)() = initialize;
+    initializer();
+#else
+    initialize();
+#endif
+}
+
 void RegionTable_Init() {
     using namespace Rando;
     ctx = Context::GetInstance().get();
@@ -881,43 +894,43 @@ void RegionTable_Init() {
     // locations which appear in both MQ and Vanilla dungeons don't get set in both areas.
     areaTable.fill(Region("Invalid Region", SCENE_ID_MAX, {}, {}, {}));
 
-    RegionTable_Init_Root();
+    InitializeRegion(RegionTable_Init_Root);
     // Overworld
-    RegionTable_Init_KokiriForest();
-    RegionTable_Init_LostWoods();
-    RegionTable_Init_SacredForestMeadow();
-    RegionTable_Init_HyruleField();
-    RegionTable_Init_LakeHylia();
-    RegionTable_Init_LonLonRanch();
-    RegionTable_Init_Market();
-    RegionTable_Init_TempleOfTime();
-    RegionTable_Init_CastleGrounds();
-    RegionTable_Init_Kakariko();
-    RegionTable_Init_Graveyard();
-    RegionTable_Init_DeathMountainTrail();
-    RegionTable_Init_GoronCity();
-    RegionTable_Init_DeathMountainCrater();
-    RegionTable_Init_ZoraRiver();
-    RegionTable_Init_ZorasDomain();
-    RegionTable_Init_ZorasFountain();
-    RegionTable_Init_GerudoValley();
-    RegionTable_Init_GerudoFortress();
-    RegionTable_Init_ThievesHideout();
-    RegionTable_Init_HauntedWasteland();
-    RegionTable_Init_DesertColossus();
+    InitializeRegion(RegionTable_Init_KokiriForest);
+    InitializeRegion(RegionTable_Init_LostWoods);
+    InitializeRegion(RegionTable_Init_SacredForestMeadow);
+    InitializeRegion(RegionTable_Init_HyruleField);
+    InitializeRegion(RegionTable_Init_LakeHylia);
+    InitializeRegion(RegionTable_Init_LonLonRanch);
+    InitializeRegion(RegionTable_Init_Market);
+    InitializeRegion(RegionTable_Init_TempleOfTime);
+    InitializeRegion(RegionTable_Init_CastleGrounds);
+    InitializeRegion(RegionTable_Init_Kakariko);
+    InitializeRegion(RegionTable_Init_Graveyard);
+    InitializeRegion(RegionTable_Init_DeathMountainTrail);
+    InitializeRegion(RegionTable_Init_GoronCity);
+    InitializeRegion(RegionTable_Init_DeathMountainCrater);
+    InitializeRegion(RegionTable_Init_ZoraRiver);
+    InitializeRegion(RegionTable_Init_ZorasDomain);
+    InitializeRegion(RegionTable_Init_ZorasFountain);
+    InitializeRegion(RegionTable_Init_GerudoValley);
+    InitializeRegion(RegionTable_Init_GerudoFortress);
+    InitializeRegion(RegionTable_Init_ThievesHideout);
+    InitializeRegion(RegionTable_Init_HauntedWasteland);
+    InitializeRegion(RegionTable_Init_DesertColossus);
     // Dungeons
-    RegionTable_Init_DekuTree();
-    RegionTable_Init_DodongosCavern();
-    RegionTable_Init_JabuJabusBelly();
-    RegionTable_Init_ForestTemple();
-    RegionTable_Init_FireTemple();
-    RegionTable_Init_WaterTemple();
-    RegionTable_Init_SpiritTemple();
-    RegionTable_Init_ShadowTemple();
-    RegionTable_Init_BottomOfTheWell();
-    RegionTable_Init_IceCavern();
-    RegionTable_Init_GerudoTrainingGround();
-    RegionTable_Init_GanonsCastle();
+    InitializeRegion(RegionTable_Init_DekuTree);
+    InitializeRegion(RegionTable_Init_DodongosCavern);
+    InitializeRegion(RegionTable_Init_JabuJabusBelly);
+    InitializeRegion(RegionTable_Init_ForestTemple);
+    InitializeRegion(RegionTable_Init_FireTemple);
+    InitializeRegion(RegionTable_Init_WaterTemple);
+    InitializeRegion(RegionTable_Init_SpiritTemple);
+    InitializeRegion(RegionTable_Init_ShadowTemple);
+    InitializeRegion(RegionTable_Init_BottomOfTheWell);
+    InitializeRegion(RegionTable_Init_IceCavern);
+    InitializeRegion(RegionTable_Init_GerudoTrainingGround);
+    InitializeRegion(RegionTable_Init_GanonsCastle);
 
     // Set parent regions
     for (uint32_t i = RR_ROOT; i < RR_MAX; i++) {
