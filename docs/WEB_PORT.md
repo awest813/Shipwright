@@ -97,7 +97,30 @@ elapsed time into event handling, matrix interpolation and graphics submission; 
 elapsed wall-clock measurements, including preemption and synchronous GL waits, not GPU timers.
 All 35 shell tests pass, including context snapshot isolation, unavailable older engines and
 invalid phase samples. CI run 37805092020 passed all five jobs for `974db0a`, including the
-complete web engine. Interactive verification of these diagnostics remains pending.
+complete web engine. The diagnostics ran in the browser and exported matching start/end
+contexts for `974db0a`: SIMD enabled, OpenGL, 60 FPS interpolation, single-sample 714×535
+rendering, texture filter 0 and alternate assets enabled. The restored generated File 2
+retained its seed hash, loaded and responded to movement on both `9886d25` and `974db0a`.
+
+A quiet 30-second `9886d25` sample measured 59.21 FPS, with frame interval p95 21.9 ms and
+maximum 148.5 ms. The `974db0a` phase sample measured 57.26 FPS, p95 24.5 ms and maximum
+806.9 ms. Its browser callback gap reached 782.5 ms, versus a maximum measured combined
+engine CPU cost of 89.1 ms. Presentation phase p95 values were 0.1 ms for events, 0.2 ms
+for interpolation and 8.6 ms for graphics submission. This points further investigation
+toward renderer work and gaps between callbacks; it does not identify the source of those
+gaps. Reports are `build-tools/performance-9886-generated-seed-house-quiet.json` and
+`build-tools/performance-974-generated-seed-house-phases.json`. Both samples used a 714×692
+viewport and 714×535 canvas, one running game, brief initial movement and no screenshots or
+browser inspection during the remaining timed interval. The viewport override reports DPR 1,
+whereas the earlier scalar samples reported DPR 1.25; no isolated SIMD speedup is established.
+Sustained 60 FPS remains unproven.
+
+The next renderer candidate omits explicit `glFlush()` at RAF frame boundaries, following
+[MDN's WebGL guidance](https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices).
+It checks the actual Emscripten loop timing mode and keeps the flush for timer-driven loops:
+the pinned SDL/EGL implementation switches to timers when VSync is disabled. Native rendering
+retains its flush. The patch applies cleanly; compilation, matched rendering and performance
+validation are pending.
 
 The `95cdb36` engine generated a complete seed in the browser (finalSeed 1197554378,
 442 locations, hash 15-35-34-88-80) and stored its spoiler at an absolute `/data/Randomizer/`
