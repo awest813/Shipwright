@@ -154,7 +154,28 @@ and the actual Emscripten main-loop timing mode/value at sample start/end. Memor
 are separate from rendering configuration comparisons, and older engines report unknown values.
 These counters exclude JS/GPU/other process memory. All 41 shell tests pass. A real SDK/Wasm
 test also passed allocator growth/release, retained Wasm memory size after free and timer-mode
-queries; CI runs it before building the full game. Full-engine runtime validation is pending.
+queries; CI runs it before building the full game. CI run 37823271572 subsequently passed all
+five jobs for `5564e7176`, including the SDK tests and full web engine. Full-engine runtime
+validation on the isolated test origin reconverted the supplied USA Rev 2 ROM and loaded the
+vanilla save into Link's house (`build-tools/web-rom-start-gameplay-5564.png`). The engine
+reported RAF timing mode 1/value 1. A quiet 30-second sample at a 1280×720 viewport, DPR 1.25
+and 959×720 internal rendering measured 58.39 FPS after fresh conversion, with a 459 ms
+maximum presentation interval. Wasm reserved 1,068,171,264 bytes and the allocator used
+418,985,096 bytes at sample start. Reloading the cached archive and returning to the same
+house measured 60.03 FPS / 60.03 browser callbacks/s, maximum 46.3 ms, with 536,870,912 bytes
+reserved and 379,708,648 allocator bytes used. Reports are
+`build-tools/performance-5564-{vanilla-house,cached-vanilla-house}-normal-viewport.json`.
+Host snapshots still showed 70–86% CPU before these samples with no compiler processes;
+these observations do not establish performance across scenes or clean host conditions.
+
+Extraction source review found that `Companion::Process` never deleted its archive wrapper,
+and `ZWrapper` never deleted its miniz ZIP object. The next web patch gives both explicit
+ownership and adds an SDK/Wasm regression check to CI. With the actual writer and an 8 MiB
+incompressible payload, the old writer retained 16,276,920 allocator bytes after one archive
+and failed the memory check. The patched writer retained 1,504 bytes through three cycles,
+and every archived payload read back byte for byte. The full-engine fresh-ROM check remains
+pending for that patch. Freeing these objects does not shrink already-grown Wasm memory;
+recovering the fresh-conversion reservation still requires separate startup work.
 The recovered `6990278` main preview exported its settings by keyboard, and resetting its
 viewport back to the default size completed successfully while the title sequence was running.
 That isolated success does not establish repeated resize stability or identify the earlier crash.

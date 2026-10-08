@@ -1,0 +1,66 @@
+diff --git a/src/archive/ZWrapper.h b/src/archive/ZWrapper.h
+--- a/src/archive/ZWrapper.h
++++ b/src/archive/ZWrapper.h
+@@ -2,6 +2,7 @@
+ 
+ #include <vector>
+ #include <string>
++#include <memory>
+ #include "BinaryWrapper.h"
+ 
+ namespace miniz_cpp {
+@@ -11,10 +12,11 @@
+ class ZWrapper : public BinaryWrapper {
+ public:
+     explicit ZWrapper(const std::string& path);
++    ~ZWrapper() override;
+ 
+     int32_t CreateArchive(void) override;
+     bool AddFile(const std::string& path, std::vector<char> data) override;
+     int32_t Close(void) override;
+ 
+-    miniz_cpp::zip_file* mZip;
++    std::unique_ptr<miniz_cpp::zip_file> mZip;
+ };
+diff --git a/src/archive/ZWrapper.cpp b/src/archive/ZWrapper.cpp
+--- a/src/archive/ZWrapper.cpp
++++ b/src/archive/ZWrapper.cpp
+@@ -11,8 +11,10 @@
+ 
+ ZWrapper::ZWrapper(const std::string& path) {
+     this->mPath = path;
+-    this->mZip = new miniz_cpp::zip_file;
++    this->mZip = std::make_unique<miniz_cpp::zip_file>();
+ }
++
++ZWrapper::~ZWrapper() = default;
+ 
+ int32_t ZWrapper::CreateArchive() {
+     SPDLOG_INFO("Loaded ZIP (O2R) archive: {}", mPath.c_str());
+diff --git a/src/Companion.cpp b/src/Companion.cpp
+--- a/src/Companion.cpp
++++ b/src/Companion.cpp
+@@ -1594,6 +1594,7 @@
+ #ifdef NAUDIO_SUPPORT
+     AudioManager::Instance = new AudioManager();
+ #endif
++    std::unique_ptr<BinaryWrapper> archiveOwner;
+     BinaryWrapper* wrapper = nullptr;
+ 
+     if (mShouldProcess) {
+@@ -1610,6 +1611,7 @@
+             }
+         }
+ 
++        archiveOwner.reset(wrapper);
+         if (wrapper) {
+             wrapper->CreateArchive();
+         }
+@@ -1812,6 +1814,7 @@
+         this->gCurrentAssetName = "Writing archive to disk...";
+         wrapper->Close();
+     }
++    this->gCurrentWrapper = nullptr;
+ 
+     // Write entries hash
+     std::ofstream file(this->gDestinationDirectory / "torch.hash.yml", std::ios::binary);

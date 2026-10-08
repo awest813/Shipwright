@@ -622,6 +622,22 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
             "SHELL:--preload-file ${CMAKE_BINARY_DIR}/gamecontrollerdb.txt@/app/gamecontrollerdb.txt"
             "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/assets/yml/config.yml@/app/assets/config.yml"
         )
+        option(SOH_WEB_ARCHIVE_MEMORY_TEST "Build the Wasm archive lifetime check" OFF)
+        if(SOH_WEB_ARCHIVE_MEMORY_TEST)
+            add_executable(web-archive-memory-test ${CMAKE_SOURCE_DIR}/scripts/web-archive-memory.test.cpp)
+            target_link_libraries(web-archive-memory-test PRIVATE torch)
+            target_link_options(web-archive-memory-test PRIVATE
+                -sALLOW_MEMORY_GROWTH=1
+                -sINITIAL_MEMORY=16MB
+                -sMAXIMUM_MEMORY=128MB
+                -sENVIRONMENT=node
+                -sEXIT_RUNTIME=1
+            )
+            set_target_properties(web-archive-memory-test PROPERTIES
+                CXX_STANDARD 20
+                RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+        endif()
     else()
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
         set(CPU_OPTION -msse2 -mfpmath=sse)

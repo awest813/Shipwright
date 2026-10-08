@@ -132,8 +132,9 @@ jobs:
         node build-tools/web-controller-smoke.js
         em++ scripts/web-runtime-diagnostics.test.cpp -Isoh/platform/web -std=c++17 -O2 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=16MB -sMAXIMUM_MEMORY=128MB -sENVIRONMENT=node -sEXIT_RUNTIME=1 -o build-tools/web-runtime-diagnostics.test.js
         node build-tools/web-runtime-diagnostics.test.js
-        emcmake cmake --no-warn-unused-cli -H. -Bbuild-web -GNinja -DCMAKE_BUILD_TYPE:STRING=Release -DSOH_PREBUILT_O2R=$PWD/build-tools/soh.o2r
+        emcmake cmake --no-warn-unused-cli -H. -Bbuild-web -GNinja -DCMAKE_BUILD_TYPE:STRING=Release -DSOH_PREBUILT_O2R=$PWD/build-tools/soh.o2r -DSOH_WEB_ARCHIVE_MEMORY_TEST=ON
         cmake --build build-web -j4
+        node build-web/web-archive-memory-test.js
         em++ scripts/web-depth.test.cpp -ICMake/web/include -std=c++17 -O2 -sUSE_WEBGL2=1 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=0 --shell-file scripts/web-depth.test.html -o build-web/depth-test.html
         mkdir soh-web
         cp build-web/soh/soh-*.html soh-web/index.html
