@@ -200,3 +200,11 @@ The next audit build records each glow light's world position, color, radius and
 queries. The optional `glowLights` diagnostics stay outside the state-match gate, allowing
 backend-dependent glow decisions to be compared instead of rejecting the very discrepancy
 under investigation. Rendering and comparison tolerance remain unchanged.
+
+The `c04bc56` native OpenGL capture at the same adult-forest frame 600 and two-thirds
+interpolation records one white glow light at [25, -10, 1014], radius 100, with `drawGlow`
+true. Its matched state and all 76,800 RGB555 pixels are identical to the quiet `2ffbcb9`
+native reference, confirming that these read-only diagnostics did not change that output.
+Evidence: `build-tools/render-native-c04bc-adult-forest-late-two-thirds.json` and
+`build-tools/render-glow-diagnostics-native-no-output-change-c04bc.json`. The same-commit
+web capture and glow-decision comparison remain pending.
