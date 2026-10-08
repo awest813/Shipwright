@@ -148,6 +148,11 @@ def fixture(args):
                                    'pos': {'x': args.x, 'y': args.y, 'z': args.z},
                                    'rotY': args.yaw, 'bootToPoint': True}},
     }
+    # Pixel fixtures are unattended, zero-input runs. Prevent background keyboard or
+    # connected gamepad activity from installing default bindings and moving the player.
+    config['CVars']['gSettings']['Controllers'] = {
+        f'Port{port}': {'HasConfig': 1} for port in range(1, 5)
+    }
     if (width, height) != (320, 240):
         config['CVars']['gSettings']['AdvancedResolution'] = {
             'Enabled': 1, 'VerticalResolutionToggle': 1, 'VerticalPixelCount': height,

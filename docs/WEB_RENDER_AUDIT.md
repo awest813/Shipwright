@@ -21,6 +21,9 @@ Use a new directory for every fixture; the script refuses to replace an existing
 These are temporary debug saves, not ordinary progression evidence. Zero is adult age; one is
 child age. Boot-to-warp initializes a debug inventory and midday. Audit mode fixes the scene RNG
 seed and captures the requested complete simulation frame (default 60), without input.
+Generated pixel fixtures set all four controller ports to an existing empty mapping config,
+so background keyboard or connected gamepad activity cannot move Link during an unattended
+capture. Restore the original settings before normal gameplay or controller testing.
 Use the room associated with the spawn in the ROM's scene entrance list, not just the scene's
 default room. Review the rendered view: matched metadata and a passing pixel score can still
 come from an unsuitable fixture. Zora's Domain's entrance spawn, for example, is in room 1.
