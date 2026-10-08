@@ -2,6 +2,7 @@
 #include <ship/utils/StringHelper.h>
 #include <fast/Fast3dWindow.h>
 #include <ship/Context.h>
+#include <algorithm>
 
 #include "SohInputEditorWindow.h"
 #include "soh/OTRGlobals.h"
@@ -19,6 +20,16 @@ extern "C" {
 #endif
 
 #define SCALE_IMGUI_SIZE(value) ((value / 13.0f) * ImGui::GetFontSize())
+
+// Keep each mapping's edit/axis/remove controls together, including in narrow embedded menus.
+static void WrapMappingControls(float width, float mappingStartX) {
+    if (ImGui::GetContentRegionAvail().x >= width)
+        return;
+    ImGui::NewLine();
+    const float left = ImGui::GetCursorPosX();
+    const float right = left + ImGui::GetContentRegionAvail().x;
+    ImGui::SetCursorPosX(std::max(left, std::min(mappingStartX, right - width)));
+}
 
 using namespace UIWidgets;
 
@@ -237,7 +248,8 @@ void SohInputEditorWindow::DrawInputChip(const char* buttonName, ImVec4 color = 
     ImGui::EndDisabled();
 }
 
-void SohInputEditorWindow::DrawButtonLineAddMappingButton(uint8_t port, N64ButtonMask bitmask) {
+void SohInputEditorWindow::DrawButtonLineAddMappingButton(uint8_t port, N64ButtonMask bitmask, float mappingStartX) {
+    WrapMappingControls(SCALE_IMGUI_SIZE(20.0f), mappingStartX);
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(1.0f, 0.5f));
     auto popupId = StringHelper::Sprintf("addButtonMappingPopup##%d-%d", port, bitmask);
     if (ImGui::Button(StringHelper::Sprintf("%s###addButtonMappingButton%d-%d", ICON_FA_PLUS, port, bitmask).c_str(),
@@ -266,7 +278,8 @@ void SohInputEditorWindow::DrawButtonLineAddMappingButton(uint8_t port, N64Butto
     }
 }
 
-void SohInputEditorWindow::DrawButtonLineEditMappingButton(uint8_t port, N64ButtonMask bitmask, std::string id) {
+void SohInputEditorWindow::DrawButtonLineEditMappingButton(uint8_t port, N64ButtonMask bitmask, std::string id,
+                                                           float mappingStartX) {
     auto mapping = Ship::Context::GetRawInstance()
                        ->GetControlDeck()
                        ->GetControllerByPort(port)
@@ -294,6 +307,12 @@ void SohInputEditorWindow::DrawButtonLineEditMappingButton(uint8_t port, N64Butt
     auto buttonHoveredColor = ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
     auto physicalInputDisplayName =
         StringHelper::Sprintf("%s %s", icon.c_str(), mapping->GetPhysicalInputName().c_str());
+    auto sdlAxisDirectionToButtonMapping = std::dynamic_pointer_cast<Ship::SDLAxisDirectionToButtonMapping>(mapping);
+    const float axisControlWidth =
+        sdlAxisDirectionToButtonMapping ? ImGui::CalcTextSize(ICON_FA_COG).x + SCALE_IMGUI_SIZE(10.0f) : 0.0f;
+    WrapMappingControls(ImGui::CalcTextSize(physicalInputDisplayName.c_str()).x + SCALE_IMGUI_SIZE(12.0f) +
+                            ImGui::CalcTextSize(ICON_FA_TIMES).x + SCALE_IMGUI_SIZE(10.0f) + axisControlWidth,
+                        mappingStartX);
     GetButtonColorsForDeviceType(mapping->GetPhysicalDeviceType(), buttonColor, buttonHoveredColor);
     ImGui::PushStyleColor(ImGuiCol_Button, buttonColor);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, buttonHoveredColor);
@@ -331,7 +350,6 @@ void SohInputEditorWindow::DrawButtonLineEditMappingButton(uint8_t port, N64Butt
     ImGui::PopStyleVar();
     ImGui::SameLine(0, 0);
 
-    auto sdlAxisDirectionToButtonMapping = std::dynamic_pointer_cast<Ship::SDLAxisDirectionToButtonMapping>(mapping);
     if (sdlAxisDirectionToButtonMapping != nullptr) {
         ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
         auto buttonColor = ImGui::GetStyleColorVec4(ImGuiCol_Button);
@@ -471,14 +489,16 @@ void SohInputEditorWindow::DrawButtonLine(const char* buttonName, uint8_t port, 
     ImGui::SameLine(SCALE_IMGUI_SIZE(32.0f));
     DrawInputChip(buttonName, color);
     ImGui::SameLine(SCALE_IMGUI_SIZE(86.0f));
+    const float mappingStartX = ImGui::GetCursorPosX();
     for (auto id : mBitmaskToMappingIds[port][bitmask]) {
-        DrawButtonLineEditMappingButton(port, bitmask, id);
+        DrawButtonLineEditMappingButton(port, bitmask, id, mappingStartX);
     }
-    DrawButtonLineAddMappingButton(port, bitmask);
+    DrawButtonLineAddMappingButton(port, bitmask, mappingStartX);
 }
 
 void SohInputEditorWindow::DrawStickDirectionLineAddMappingButton(uint8_t port, uint8_t stick,
-                                                                  Ship::Direction direction) {
+                                                                  Ship::Direction direction, float mappingStartX) {
+    WrapMappingControls(SCALE_IMGUI_SIZE(20.0f), mappingStartX);
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(1.0f, 0.5f));
     auto popupId = StringHelper::Sprintf("addStickDirectionMappingPopup##%d-%d-%d", port, stick, direction);
     if (ImGui::Button(
@@ -521,7 +541,8 @@ void SohInputEditorWindow::DrawStickDirectionLineAddMappingButton(uint8_t port, 
 }
 
 void SohInputEditorWindow::DrawStickDirectionLineEditMappingButton(uint8_t port, uint8_t stick,
-                                                                   Ship::Direction direction, std::string id) {
+                                                                   Ship::Direction direction, std::string id,
+                                                                   float mappingStartX) {
     std::shared_ptr<Ship::ControllerAxisDirectionMapping> mapping = nullptr;
     if (stick == Ship::LEFT) {
         mapping = Ship::Context::GetRawInstance()
@@ -558,6 +579,9 @@ void SohInputEditorWindow::DrawStickDirectionLineEditMappingButton(uint8_t port,
     auto buttonHoveredColor = ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
     auto physicalInputDisplayName =
         StringHelper::Sprintf("%s %s", icon.c_str(), mapping->GetPhysicalInputName().c_str());
+    WrapMappingControls(ImGui::CalcTextSize(physicalInputDisplayName.c_str()).x + SCALE_IMGUI_SIZE(12.0f) +
+                            ImGui::CalcTextSize(ICON_FA_TIMES).x + SCALE_IMGUI_SIZE(10.0f),
+                        mappingStartX);
     GetButtonColorsForDeviceType(mapping->GetPhysicalDeviceType(), buttonColor, buttonHoveredColor);
     ImGui::PushStyleColor(ImGuiCol_Button, buttonColor);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, buttonHoveredColor);
@@ -644,10 +668,11 @@ void SohInputEditorWindow::DrawStickDirectionLine(const char* axisDirectionName,
     ImGui::PopStyleColor();
     ImGui::EndDisabled();
     ImGui::SameLine(0.0f, SCALE_IMGUI_SIZE(4.0f));
+    const float mappingStartX = ImGui::GetCursorPosX();
     for (auto id : mStickDirectionToMappingIds[port][stick][direction]) {
-        DrawStickDirectionLineEditMappingButton(port, stick, direction, id);
+        DrawStickDirectionLineEditMappingButton(port, stick, direction, id, mappingStartX);
     }
-    DrawStickDirectionLineAddMappingButton(port, stick, direction);
+    DrawStickDirectionLineAddMappingButton(port, stick, direction, mappingStartX);
 }
 
 void SohInputEditorWindow::DrawStickSection(uint8_t port, uint8_t stick, int32_t id,

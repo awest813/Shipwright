@@ -41,12 +41,13 @@ class SohInputEditorWindow final : public Ship::GuiWindow {
     void DrawStickDirectionLine(const char* axisDirectionName, uint8_t port, uint8_t stick, Ship::Direction direction,
                                 ImVec4 color);
     void DrawButtonLine(const char* buttonName, uint8_t port, N64ButtonMask bitmask, ImVec4 color);
-    void DrawButtonLineEditMappingButton(uint8_t port, N64ButtonMask bitmask, std::string id);
-    void DrawButtonLineAddMappingButton(uint8_t port, N64ButtonMask bitmask);
+    void DrawButtonLineEditMappingButton(uint8_t port, N64ButtonMask bitmask, std::string id, float mappingStartX);
+    void DrawButtonLineAddMappingButton(uint8_t port, N64ButtonMask bitmask, float mappingStartX);
 
-    void DrawStickDirectionLineEditMappingButton(uint8_t port, uint8_t stick, Ship::Direction direction,
-                                                 std::string id);
-    void DrawStickDirectionLineAddMappingButton(uint8_t port, uint8_t stick, Ship::Direction direction);
+    void DrawStickDirectionLineEditMappingButton(uint8_t port, uint8_t stick, Ship::Direction direction, std::string id,
+                                                 float mappingStartX);
+    void DrawStickDirectionLineAddMappingButton(uint8_t port, uint8_t stick, Ship::Direction direction,
+                                                float mappingStartX);
     void DrawStickSection(uint8_t port, uint8_t stick, int32_t id, ImVec4 color);
 
     void DrawRumbleSection(uint8_t port);

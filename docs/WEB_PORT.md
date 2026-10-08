@@ -214,6 +214,21 @@ The recovered `6990278` main preview exported its settings by keyboard, and rese
 viewport back to the default size completed successfully while the title sequence was running.
 That isolated success does not establish repeated resize stability or identify the earlier crash.
 
+CI run 37831941731 passed all five jobs for `fedab6633`, including the complete web
+engine and the actual SDK archive-memory regression. All three archive cycles retained
+1,504 allocator bytes and every payload round-tripped exactly. Full-engine fresh-ROM
+validation of that ownership patch is still pending.
+
+The main `8080/polish.html` and index previews now use the verified `5564e71` engine with
+the durable conversion restart shell, preserving their surrounding page styling. The
+original main settings were exported before importing the validated ten-file backup.
+At a 390×844 viewport, the settings menu uses the available height, but long controller
+mapping rows clip their trailing edit/remove/add controls. The pending controller change
+wraps complete mapping groups and add buttons within the available content width; its
+full-engine compilation and portrait/desktop runtime checks remain pending. The viewport
+was reset successfully and the native menu closed; viewport checks do not establish
+physical-device or Bluetooth-controller compatibility.
+
 A game-free 30-second browser timing sample subsequently measured 60.10 callbacks/s
 (p99 16.9 ms, maximum 17.5 ms), with only the unloaded main preview and timing page open.
 Host inspection found an unrelated MaddenNative build using nine compiler processes, 100%
