@@ -22,9 +22,9 @@ These are temporary debug saves, not ordinary progression evidence. Zero is adul
 child age. Boot-to-warp initializes a debug inventory and midday. Audit mode fixes the scene RNG
 seed and captures the requested complete simulation frame (default 60), without input.
 
-For Windows desktop testing, run the matching desktop binary from a separate temporary working
-directory containing the generated `shipofharkinian.json` and the required bundled assets and
-archives. Windows's portable build uses its working directory for app files; `SHIP_HOME` is
+For Windows desktop testing, run the matching desktop binary from an isolated folder outside
+Windows's Temp folder and OneDrive, containing the generated `shipofharkinian.json` and the
+required bundled assets and archives. Windows's portable build uses its working directory for app files; `SHIP_HOME` is
 not a Windows override. Keep the user's regular desktop saves/config separate. The fixture's
 `RenderAudit.Exit` closes the native application after capture. No capture occurs in a normal
 run where `gDeveloperTools.RenderAudit.Enabled` is absent or zero.
@@ -81,5 +81,39 @@ checks. Sustained gameplay frame-time reports are required in actual browsers an
 desktop, laptop, Chromebook, mobile and iPhone devices. Viewport emulation and synthetic
 comparator tests do not prove these requirements.
 
-The capture implementation and initial fixture currently await rebuilt-engine runtime
-verification. No desktop/web similarity score has been established yet.
+The `9f75a4b` web engine exported the child-house fixture at simulation frame 60 with 76,800
+pixels, scene 52, age 1 and the fixed seed. The exported image is upright and nonblank. It used
+the desktop-generated USA Rev 2 archive (SHA-256
+`7ae3743570dc2da1d5be4e6b99c229a1de2c802ed0a8d7827d2e1a212f83b0f6`). The desktop
+startup journal identified missing extractor assets in the initial test folder. Launching from
+the fully extracted desktop artifact, with the isolated fixture config and same ROM archive,
+produced successful captures. All desktop runs exited normally after capture.
+
+The same web engine also exported valid frame-60 captures of adult Link in the house, child
+Link in Kokiri Forest (scene 85) and the Deku Tree entrance (scene 0). An independent restart
+of the forest fixture produced exactly matching state metadata and all 76,800 RGB555 pixels.
+That establishes web fixture repeatability only. Reports and images are preserved locally as
+`build-tools/web-{links-house,links-house-adult,kokiri-forest,deku-tree}.json` and corresponding
+`*-frame60.png` files; the repeat check is in `build-tools/comparison-forest-repeat/report.json`.
+The matching `9f75a4b` Windows desktop captures passed all four comparisons: every pixel was
+within one RGB555 level in every channel. House captures for both ages were exact. Forest and
+Deku Tree captures had mean absolute eight-bit channel errors of approximately 0.006284 and
+0.000036 respectively; their maximum difference was one quantized level (8.23). Scene, camera,
+player state, seed, settings and commit checks all passed. Reports and paired images are in
+`build-tools/comparison-house-desktop-web` and
+`build-tools/comparison-{links-house-adult,kokiri-forest,deku-tree}-desktop-web`.
+
+This exceeds the 94% fixture threshold for these four frame-60 samples. It does not establish
+94% gameplay accuracy, coverage of all rendering effects or intermediate interpolation,
+normal dungeon progression, or sustained 60 FPS across browsers and devices.
+
+Two further matched samples at simulation frame 240 passed with all pixels within tolerance.
+Kokiri Forest's mean absolute eight-bit channel error was approximately 0.003713, with a maximum
+of one quantized level. The Deku Tree entrance was exact. Reports are in
+`build-tools/comparison-{kokiri-forest,deku-tree}-frame240-desktop-web`. These later samples
+extend the animation/particle timing check without adding new scene or gameplay coverage.
+
+The subsequent `95cdb36` web and Windows artifacts also produced exact matched child-house
+captures (`build-tools/comparison-house-95-desktop-web`). That run passed all five CI jobs.
+Both localhost preview pages now use its commit-specific engine filename. The regular test
+origin backup was restored after capture verification.

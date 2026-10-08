@@ -50,8 +50,12 @@ controllers, randomizer generation/import and saves, PC enhancements, and browse
 on Chromebook, laptop, desktop, Android/mobile and iPhone. Browser viewport emulation alone is
 not evidence of physical-device compatibility; record actual device/browser tests separately.
 
-The 94% fidelity target has **not been measured**, and full scene/device coverage at sustained
-60 FPS has **not been achieved**. Initial timed Chromium samples are now available:
+Four matched frame-60 rendering fixtures passed the 94% diagnostic threshold against the
+same-commit Windows desktop build: child/adult Link's house, Kokiri Forest and the Deku Tree
+entrance. All pixels were within one RGB555 level per channel; both house captures were exact.
+See [the render audit](WEB_RENDER_AUDIT.md) for the metric and limits. Port-wide rendering/gameplay
+accuracy remains unproven, and full scene/device coverage at sustained 60 FPS has **not been
+achieved**. Initial timed Chromium samples are now available:
 
 | 30-second sample (714×535 canvas) | Average FPS | Frame-time p95 | Maximum interval |
 |---|---:|---:|---:|
