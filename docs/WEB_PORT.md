@@ -294,6 +294,17 @@ all frames were scene 85 with no menu, 512 MiB Wasm and 39,408 bytes of allocato
 See `build-tools/performance-2ffb-main-cached-forest-default-viewport.json`. This lower
 outdoor result remains below a strict 60 FPS average target and is retained alongside
 passing prior samples.
+At a 390 x 844 viewport, the visible on-screen Start button opened and closed pause;
+a 1.4-second pointer hold to the right of the joystick center moved Link and returned
+the knob to neutral after release. Screenshot: `build-tools/web-touch-pointer-movement-portrait-2ffb.png`.
+With the touch overlay enabled, a quiet forest sample presented 1,797 frames at 59.88 FPS /
+59.95 callbacks per second, p95 presentation 23.8 ms and maximum 54.0 ms. It rendered
+390 x 292, used 512 MiB Wasm and grew allocator use by 3,152 bytes, with stable settings,
+scene 85 and no menu frames. Report: `build-tools/performance-2ffb-main-portrait-touch-forest.json`.
+The viewport and touch overlay were reset afterward. This exercises responsive layout
+and the browser pointer pipeline on desktop Chromium; physical touch/Safari behavior remains
+unverified.
+
 
 The same-commit adult-forest rendering comparison passes at 98.49% within the documented
 tolerance, with remaining differences concentrated around Navi's glow; see
