@@ -92,6 +92,9 @@ delay for timeout mode and a callback interval for animation-frame mode. Allocat
 can fall after freeing resources while Wasm memory stays grown. These counters exclude
 JavaScript, GPU and other process memory; they do not diagnose a browser crash by themselves.
 They are separate from `contextChanged`, and older engines report `null`.
+Web builds also emit a separate `soh-<commit>.html.symbols` file in the artifact. It maps
+Wasm function indexes in crash stacks to function names and helps inspect unusually large
+compiled functions. Keep the map with its matching Wasm revision; it is not loaded by the page.
 Keep the tab visible and continue playing during the sample. Hidden-tab or cancelled reports
 are marked incomplete. These measurements describe successful presentation callbacks; they
 do not establish rendering accuracy or GPU execution time.

@@ -180,3 +180,17 @@ desktop/web house capture at frame 600 and two-thirds interpolation is exact acr
 76,800 RGB555 pixels. The paired images show the expected single Link pose; this extends
 late animation/interpolation coverage without proving every later presentation is correct.
 Artifacts are in `build-tools/comparison-house-late-two-thirds-b53-desktop-web`.
+
+The `2ffbcb9` controller-layout build passed all five CI jobs in run 37837227864.
+An adult Kokiri Forest capture at frame 600 and two-thirds interpolation first had
+unmatched player/camera metadata and was not scored. That native run overlapped browser
+movement; a quiet native rerun without browser input matched the web state exactly.
+The valid pair passes with 75,638 / 76,800 pixels (98.486979%) within one RGB555 level,
+mean absolute eight-bit channel error 0.464844 and maximum channel error 57.580645.
+The mesh, HUD and background images agree closely; the out-of-tolerance difference image
+is concentrated around Navi's glow. That difference needs further investigation, including
+glow/depth-query behavior; this sample does not establish lossless rendering or 94%
+port-wide fidelity. Reports and reviewed images are in
+`build-tools/comparison-adult-forest-late-two-thirds-2ffb-repeat-desktop-web`.
+Do not send browser/game input during native fixture runs; review the state metadata
+before interpreting pixel scores.

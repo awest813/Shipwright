@@ -139,6 +139,7 @@ jobs:
         mkdir soh-web
         cp build-web/soh/soh-*.html soh-web/index.html
         cp build-web/soh/soh-*.js build-web/soh/soh-*.wasm build-web/soh/soh-*.data soh-web/
+        cp build-web/soh/soh-*.symbols soh-web/
         cp build-web/depth-test.html build-web/depth-test.js build-web/depth-test.wasm soh-web/
         cp soh/platform/web/browser-timing.html soh-web/
         cp -r build-web/soh/assets soh-web/

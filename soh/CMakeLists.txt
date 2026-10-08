@@ -605,6 +605,9 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
 
         # Single-threaded build: std::thread is unavailable, see docs/WEB_PORT.md.
         target_link_options(${PROJECT_NAME} PRIVATE
+            # Keep function names in a sidecar for crash reports and large-function audits.
+            # The served Wasm remains stripped; the map does not change runtime code.
+            --emit-symbol-map
             -sMIN_WEBGL_VERSION=2
             -sMAX_WEBGL_VERSION=2
             -sALLOW_MEMORY_GROWTH=1

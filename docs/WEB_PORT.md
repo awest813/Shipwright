@@ -217,17 +217,62 @@ That isolated success does not establish repeated resize stability or identify t
 CI run 37831941731 passed all five jobs for `fedab6633`, including the complete web
 engine and the actual SDK archive-memory regression. All three archive cycles retained
 1,504 allocator bytes and every payload round-tripped exactly. Full-engine fresh-ROM
-validation of that ownership patch is still pending.
+validation on the isolated origin then converted the supplied USA Rev 2 ROM, automatically
+started the cached archive, loaded File 1 and responded to movement. The exported backup
+preserved all three saves, global save, four spoilers and game settings byte-identically;
+only ImGui window/dock dimensions changed with the default viewport. Evidence is
+`build-tools/{web-fresh-rom-restarted-gameplay-fedab.png,save-conversion-restart-fedab.json}`.
+A quiet 30-second house sample on this engine at the default 714×692 viewport / 714×535
+rendering measured only 25.57 FPS / 26.03 browser callbacks/s, presentation p95 72.5 ms
+and maximum 355.6 ms. Wasm stayed at 512 MiB and allocator usage stayed near 379.6 MB,
+RAF mode/value 1/1, scene 52 only, no menu frames or context change. The report is
+`build-tools/performance-fedab-fresh-rom-restarted-house-default-viewport.json`.
+Windows reported 100% CPU immediately afterward; a later host snapshot recorded only
+373,616 KiB free physical memory with no compiler processes. Unloading the test game
+restored roughly 4.8 GiB free and 23% CPU. These observations do not identify which
+allocation or host activity caused the pressure, and the slow sample remains a recorded
+performance failure rather than evidence of sustained 60 FPS.
+A follow-up cached-startup sample in the same house and dimensions measured 60.06 FPS /
+60.06 browser callbacks/s, presentation p95 21.8 ms and maximum 29.0 ms. Total CPU elapsed
+p95 was 10.7 ms, maximum 16.4 ms, with unchanged settings, scene 52 only and no menu frames.
+Wasm stayed at 512 MiB and allocator usage at about 380.2 MB. Host snapshots recorded
+75% / 42% CPU, roughly 4.1 / 3.4 GiB free and no compiler processes. This confirms a
+successful sample after cached startup; it does not explain the fresh-run pressure or
+prove sustained performance across scenes/devices. The report is
+`build-tools/performance-fedab-cached-vanilla-house-default-viewport.json`.
+Normal play on this engine also exited the house, descended the ladder and moved through
+Kokiri Forest with camera/collision transitions (`build-tools/web-normal-forest-fedab.png`).
+This extends transition coverage; sword/shield collection and Deku Tree combat remain pending.
+
+The next build emits an Emscripten function-name sidecar and includes it in the web
+artifact, so Wasm function indexes in crash stacks and large-function measurements can
+be identified. A local real-SDK runtime-diagnostics build ran successfully with the map;
+its 13,383-byte Wasm was byte-identical to a build with otherwise identical flags and no
+map. A read-only binary inspection of `fedab66` found a 3,284,081-byte function body
+(index 6436, 29 locals), recorded in `build-tools/wasm-largest-functions-fedab.json`.
+Its source function and relevance to the observed pressure remain unidentified pending
+a matching full-engine map; the size alone does not establish a runtime defect.
 
 The main `8080/polish.html` and index previews now use the verified `5564e71` engine with
 the durable conversion restart shell, preserving their surrounding page styling. The
 original main settings were exported before importing the validated ten-file backup.
 At a 390×844 viewport, the settings menu uses the available height, but long controller
 mapping rows clip their trailing edit/remove/add controls. The pending controller change
-wraps complete mapping groups and add buttons within the available content width; its
-full-engine compilation and portrait/desktop runtime checks remain pending. The viewport
-was reset successfully and the native menu closed; viewport checks do not establish
-physical-device or Bluetooth-controller compatibility.
+wraps complete mapping groups and add buttons within the available content width.
+CI run 37837227864 passed all five jobs for `2ffbcb9`, including the full web engine.
+The main preview was then promoted to that engine. At 390×844, the formerly clipped
+C-up add button and the wrapped analog-stick Down add button both opened their mapping
+popups and Cancel worked. The wide 714×692 layout retains complete C-button rows. The
+viewport reset and menu close succeeded; exported save/spoiler files stayed identical,
+while configuration changed only the active settings header and ImGui window geometry.
+Evidence is `build-tools/{web-controller-bindings-portrait-wrapped-2ffb.png,
+web-controller-mapping-popup-portrait-2ffb.png,web-controller-analog-portrait-wrapped-2ffb.png,
+web-controller-bindings-desktop-2ffb.png,save-controller-popup-cancellation-2ffb.json}`.
+Viewport checks do not establish physical-device or Bluetooth-controller compatibility.
+The same-commit adult-forest rendering comparison passes at 98.49% within the documented
+tolerance, with remaining differences concentrated around Navi's glow; see
+[WEB_RENDER_AUDIT.md](WEB_RENDER_AUDIT.md). All ten regular backup files restored exactly
+after the temporary fixture (`build-tools/save-restore-after-adult-forest-2ffb.json`).
 
 A game-free 30-second browser timing sample subsequently measured 60.10 callbacks/s
 (p99 16.9 ms, maximum 17.5 ms), with only the unloaded main preview and timing page open.
