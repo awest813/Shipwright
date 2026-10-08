@@ -277,7 +277,15 @@ unchanged. The pending `0006-mapping-capture-lifetime.patch` adds cancellation o
 buttons and both sticks, resetting captured keyboard/mouse input without editing mappings.
 The web input editor invokes it once after a mapping popup closes or is dismissed, including
 when the editor is hidden. Full-engine compilation and Cancel → gameplay regression checks
-remain pending; closing a popup alone is insufficient evidence that controls work.
+remain pending; closing a popup alone is insufficient evidence that controls work. Reloading the main
+preview restored movement with a 1.5-second D press (`build-tools/web-movement-recovered-after-reload-2ffb.png`).
+A subsequent quiet main-preview house sample presented 1,799 frames in 30.02 seconds:
+59.93 FPS / callbacks per second, p95 presentation interval 23.3 ms, maximum 47.3 ms,
+and total CPU elapsed p95 13.7 ms. The unchanged context used a 512 MiB Wasm memory,
+714 x 535 rendering at a 714 x 692 viewport, DPR 1.25, menu frames zero and 60 FPS interpolation.
+Allocator use increased 1,392 bytes. The exported report is
+`build-tools/performance-2ffb-main-cached-house-default-viewport.json`. This supports the
+average FPS target for this sample; occasional long frames and wider coverage remain.
 
 The same-commit adult-forest rendering comparison passes at 98.49% within the documented
 tolerance, with remaining differences concentrated around Navi's glow; see
