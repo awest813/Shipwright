@@ -244,3 +244,11 @@ a 640×480 game framebuffer, then the legacy version 2 capture guard rejected it
 Evidence: `build-tools/render-native-c04bc-house-hd-config-probe.json`. This validates the
 fixed-resolution configuration, not HD pixel fidelity; the version 3 engine still needs a
 full build and matching desktop/web capture.
+
+Main-URL `c04bc56` regular File 1 F5/save, movement to the table and F7/load returned Link
+to the bed immediately. The following 30-second house sample averaged 59.206847 presented FPS
+(1,789 presentations), 59.306131 browser callbacks/s, presentation p95 26.7 ms and max 225 ms.
+CPU max was 49.5 ms; the maximum callback gap was 216.4 ms. SIMD, MSAA 1 and 714×535 render
+settings stayed unchanged, with 512 MiB Wasm memory. This sample does not meet sustained 60 FPS.
+Evidence: `build-tools/performance-c04bc-main-house-after-session-state.json` and
+`build-tools/web-main-session-state-restored-c04bc.png`.
