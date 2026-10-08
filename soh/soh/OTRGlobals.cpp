@@ -1890,7 +1890,8 @@ extern "C" void Graph_WebPresentFrame(float interpolation) {
     ImGui::PopStyleColor();
     if (presented) {
         const bool menuVisible = wnd->GetGui()->GetMenuOrMenubarVisible();
-        EM_ASM({ if (Module.onFramePresented) Module.onFramePresented(!!$0); }, menuVisible);
+        const int scene = gPlayState != nullptr ? gPlayState->sceneNum : -1;
+        EM_ASM({ if (Module.onFramePresented) Module.onFramePresented(!!$0, $1); }, menuVisible, scene);
     }
 }
 #endif

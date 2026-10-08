@@ -45,7 +45,7 @@
 </head>
 <body>
 <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
-<div id="web-tools" hidden><span id="web-status" class="status" role="status"></span><span id="controller-game-status" class="status" role="status"></span><span id="fps" class="status" aria-live="off">Measuring FPS…</span><button id="fullscreen">Fullscreen</button><button id="settings-game">Settings</button><button id="touch-toggle" aria-pressed="false">Touch controls</button><button id="backup-game">Export saves</button><label class="button">Import seed<input id="seed-game-input" type="file" accept=".json" disabled></label></div>
+<div id="web-tools" hidden><span id="web-status" class="status" role="status"></span><span id="controller-game-status" class="status" role="status"></span><span id="fps" class="status" aria-live="off">Measuring FPS…</span><button id="fullscreen">Fullscreen</button><button id="settings-game">Settings</button><button id="touch-toggle" aria-pressed="false">Touch controls</button><button id="benchmark-game">Measure FPS</button><button id="benchmark-report" hidden>Export FPS report</button><button id="backup-game">Export saves</button><label class="button">Import seed<input id="seed-game-input" type="file" accept=".json" disabled></label></div>
 <div id="touch-controls" hidden aria-label="Touch game controls">
   <div id="touch-stick" role="group" aria-label="Movement joystick"><span id="touch-stick-knob"></span></div>
   <div id="touch-buttons">
@@ -116,6 +116,54 @@
   const touchPointers = new Map();
   let stickPointer = null;
   let stickX = 0, stickY = 0;
+  let benchmark = null, benchmarkTimeout = 0;
+  let benchmarkReport = null;
+
+  function finishBenchmark(reason = "completed") {
+    if (!benchmark) return;
+    clearTimeout(benchmarkTimeout);
+    const now = performance.now(), durationMs = now - benchmark.startedAt;
+    const sorted = benchmark.intervals.slice().sort((a, b) => a - b);
+    const percentile = fraction => sorted.length ? sorted[Math.ceil(sorted.length * fraction) - 1] : null;
+    benchmarkReport = {
+      format: "shipwright-web-performance", version: 1, reason,
+      startedAt: benchmark.startedDate, durationMs, targetFps: 60,
+      presentedFrames: benchmark.frames, averageFps: durationMs > 0 ? benchmark.frames * 1000 / durationMs : 0,
+      frameTimeMs: { p50: percentile(0.5), p95: percentile(0.95), p99: percentile(0.99), max: sorted.at(-1) ?? null },
+      timeSinceLastPresentationMs: now - benchmark.lastFrame,
+      overBudgetFrames: sorted.filter(ms => ms > 1000 / 60 + 2).length,
+      budgetWithJitterMs: 1000 / 60 + 2, menuFrames: benchmark.menuFrames,
+      sceneFrames: benchmark.sceneFrames,
+      viewport: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
+      canvas: { width: Module.canvas.width, height: Module.canvas.height },
+      userAgent: navigator.userAgent,
+    };
+    benchmark = null;
+    document.getElementById("benchmark-game").textContent = "Measure FPS";
+    document.getElementById("benchmark-report").hidden = false;
+    showMessage(reason === "completed" ? `Timed report: ${benchmarkReport.averageFps.toFixed(1)} FPS average. Export the report for frame times.` :
+      `FPS measurement ended: ${reason}. This report is incomplete.`, reason !== "completed");
+  }
+
+  document.getElementById("benchmark-game").addEventListener("click", () => {
+    if (benchmark) { finishBenchmark("cancelled"); return; }
+    if (!started || stopped || document.hidden || gameMenuVisible) return;
+    const now = performance.now();
+    benchmark = { startedAt: now, startedDate: new Date().toISOString(), lastFrame: now, frames: 0,
+      intervals: [], menuFrames: 0, sceneFrames: {} };
+    benchmarkReport = null;
+    document.getElementById("benchmark-report").hidden = true;
+    document.getElementById("benchmark-game").textContent = "Cancel FPS measurement";
+    showMessage("Measuring presentation for 30 seconds. Keep playing with this tab visible.");
+    benchmarkTimeout = setTimeout(() => finishBenchmark(), 30000);
+    Module.canvas.focus();
+  });
+  document.getElementById("benchmark-report").addEventListener("click", () => {
+    if (benchmarkReport) download("shipwright-performance.json", JSON.stringify(benchmarkReport, null, 2), "application/json");
+    Module.canvas.focus();
+  });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) finishBenchmark("tab hidden"); });
+  window.addEventListener("pagehide", () => finishBenchmark("page closed"));
 
   function resetTouchInput() {
     touchPointers.clear(); touchLatched = 0;
@@ -269,6 +317,7 @@
   function stop(text) {
     if (stopped) return;
     stopped = true;
+    finishBenchmark("game stopped");
     overlay.style.display = "";
     setControlsEnabled(false);
     startButton.disabled = true;
@@ -444,11 +493,13 @@
     onAbort: (what) => stop(`The game stopped: ${what}.`),
     onGameStarted: () => {
       started = true;
+      document.getElementById("settings-game").disabled = typeof Module._WebToggleMenu !== "function";
+      document.getElementById("touch-toggle").disabled = typeof Module._WebTouchInputSupported !== "function";
       if (hasFile(`${DATA_DIR}/Randomizer/imported-seed.json`) && typeof Module._WebLoadRandomizerSeed === "function") {
         Module._WebLoadRandomizerSeed();
       }
     },
-    onFramePresented: (menuVisible = false) => {
+    onFramePresented: (menuVisible = false, scene = null) => {
       if (gameMenuVisible !== menuVisible) {
         gameMenuVisible = menuVisible;
         document.body.classList.toggle("native-menu-open", menuVisible);
@@ -461,6 +512,13 @@
         canvasAspect = aspect;
       }
       const now = performance.now();
+      if (benchmark) {
+        benchmark.intervals.push(now - benchmark.lastFrame);
+        benchmark.lastFrame = now; benchmark.frames++;
+        if (menuVisible) benchmark.menuFrames++;
+        const sceneId = Number.isInteger(scene) ? String(scene) : "unknown";
+        benchmark.sceneFrames[sceneId] = (benchmark.sceneFrames[sceneId] || 0) + 1;
+      }
       frameTimes.push(now);
       while (frameTimes.length > 1 && frameTimes[0] < now - 2000) frameTimes.shift();
       if (now - lastFrameReport > 1000 && frameTimes.length > 1) {

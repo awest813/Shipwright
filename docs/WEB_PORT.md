@@ -50,7 +50,25 @@ controllers, randomizer generation/import and saves, PC enhancements, and browse
 on Chromebook, laptop, desktop, Android/mobile and iPhone. Browser viewport emulation alone is
 not evidence of physical-device compatibility; record actual device/browser tests separately.
 
-The 94% fidelity and sustained 60 FPS targets have **not been measured or achieved yet**.
+The 94% fidelity target has **not been measured**, and full scene/device coverage at sustained
+60 FPS has **not been achieved**. Initial timed Chromium samples are now available:
+
+| 30-second sample (714×535 canvas) | Average FPS | Frame-time p95 | Maximum interval |
+|---|---:|---:|---:|
+| Link's house, some movement | 60.02 | 21.9 ms | 37.1 ms |
+| Kokiri Forest, ladder descent and movement | 59.98 | 25.2 ms | 51.5 ms |
+
+These measure successful draw callbacks, including simulation/render work and callback jitter;
+they do not measure GPU execution time. The engine used for these samples does not yet identify
+scene IDs in the report, so scope was established by screenshots and visible gameplay. Reports
+are preserved locally in `build-tools/performance-link-house.json` and
+`build-tools/performance-kokiri-forest.json`. A new engine callback adds scene IDs for subsequent
+reports. Wider performance coverage and frame pacing remain to be investigated.
+Vanilla gameplay transitioned into Kokiri Forest, rendered Saria's greeting, descended the
+ladder and traversed the outdoor area. The pause menu confirmed "Game saved"; an exported save
+contains savedSceneNum 85 (Kokiri Forest). Reloading this later gameplay checkpoint remains to
+be checked.
+
 Completion requires a playable scene, save/reload verification, rendering comparisons with the
 desktop build, frame-time measurements during gameplay, and checks of supported extras.
 

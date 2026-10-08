@@ -58,6 +58,12 @@ save/settings files, so export a backup first when keeping existing progress mat
 the web toolbar provides save export, fullscreen, and measured presentation FPS. The engine still
 simulates at the original game tick rate; 60 FPS uses matrix interpolation.
 
+Use **Measure FPS** during gameplay for a 30-second presentation sample, then **Export FPS
+report** to save the average FPS, frame-time percentiles, stalls and rendering dimensions.
+Keep the tab visible and continue playing during the sample. Hidden-tab or cancelled reports
+are marked incomplete. These measurements describe successful presentation callbacks; they
+do not establish rendering accuracy or GPU execution time.
+
 Pair Bluetooth controllers in the operating system, or connect a controller by USB. Press a
 button while the game tab is focused so the browser exposes it through the Gamepad API, then
 configure bindings in Settings > Controls. Connection status reports browser detection; it

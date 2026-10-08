@@ -9,7 +9,7 @@ function harness() {
   const elements = new Map();
   function element(id) {
     if (!elements.has(id)) elements.set(id, {
-      style: {}, classList: { toggle() {}, add() {}, remove() {} }, listeners: {}, disabled: false, dataset: {},
+      style: { setProperty(name, value) { this[name] = value; } }, classList: { toggle() {}, add() {}, remove() {} }, listeners: {}, disabled: false, dataset: {}, width: 640, height: 480,
       addEventListener(name, fn) { this.listeners[name] = fn; }, focus() {}, click() {},
       setAttribute(name, value) { this[name] = value; }, setPointerCapture() {},
       getBoundingClientRect: () => ({ left: 0, top: 0, width: 120, height: 120 }),
@@ -202,4 +202,43 @@ test('touch stick clamps diagonals, packs signed axes and resets on release or d
   assert.equal(h.evaluate('Module.consumeWebInput(false)'), 0x80);
   h.evaluate('setTouchEnabled(false)');
   assert.equal(h.evaluate('Module.consumeWebInput(false)'), 0);
+});
+
+test('timed presentation report measures actual frame times and records scene scope', () => {
+  const h = harness();
+  h.context.now = 0; h.context.performance = { now: () => h.context.now };
+  h.evaluate('started = true; running = true');
+  h.elements.get('benchmark-game').listeners.click();
+  for (let i = 1; i <= 1800; i++) {
+    h.context.now = i * 1000 / 60;
+    h.evaluate('Module.onFramePresented(false, 52)');
+  }
+  h.evaluate('finishBenchmark()');
+  assert.equal(h.evaluate('benchmarkReport.averageFps'), 60);
+  assert.equal(h.evaluate('benchmarkReport.presentedFrames'), 1800);
+  assert.equal(h.evaluate('benchmarkReport.sceneFrames[52]'), 1800);
+  assert.equal(h.evaluate('benchmarkReport.menuFrames'), 0);
+  assert.equal(h.evaluate('benchmarkReport.overBudgetFrames'), 0);
+  assert.ok(Math.abs(h.evaluate('benchmarkReport.frameTimeMs.p95') - 1000 / 60) < 1e-8);
+  h.evaluate('clearTimeout(statusTimeout)');
+});
+
+test('presentation report includes long stalls and marks interrupted runs incomplete', () => {
+  const h = harness();
+  h.context.now = 0; h.context.performance = { now: () => h.context.now };
+  h.evaluate('started = true; running = true');
+  h.elements.get('benchmark-game').listeners.click();
+  for (const now of [16, 32, 500]) {
+    h.context.now = now; h.evaluate('Module.onFramePresented(true)');
+  }
+  h.context.now = 750;
+  h.evaluate('finishBenchmark("tab hidden")');
+  assert.equal(h.evaluate('benchmarkReport.reason'), 'tab hidden');
+  assert.equal(h.evaluate('benchmarkReport.averageFps'), 4);
+  assert.equal(h.evaluate('benchmarkReport.frameTimeMs.max'), 468);
+  assert.equal(h.evaluate('benchmarkReport.timeSinceLastPresentationMs'), 250);
+  assert.equal(h.evaluate('benchmarkReport.overBudgetFrames'), 1);
+  assert.equal(h.evaluate('benchmarkReport.menuFrames'), 3);
+  assert.equal(h.evaluate('benchmarkReport.sceneFrames.unknown'), 3);
+  assert.match(h.elements.get('web-status').textContent, /incomplete/);
 });
