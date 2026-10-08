@@ -441,6 +441,10 @@ extern void ProcessSaveStateRequests(void);
 static void RunFrame() {
     u32 size;
     char faultMsg[0x50];
+#ifdef __EMSCRIPTEN__
+    // Finish consuming the previous display list before a state load rewrites game memory.
+    ProcessSaveStateRequests();
+#endif
 
     switch (runFrameContext.state) {
         case 0:
@@ -493,7 +497,9 @@ static void RunFrame() {
             // uint64_t diff = (ticksB - ticksA) / (freq / 1000);
             // printf("Frame simulated in %ims\n", diff);
             runFrameContext.state = 1;
+#ifndef __EMSCRIPTEN__
             ProcessSaveStateRequests();
+#endif
             return;
         nextFrame:;
         }

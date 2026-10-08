@@ -2,6 +2,7 @@
 #include "OTRAudio.h"
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
