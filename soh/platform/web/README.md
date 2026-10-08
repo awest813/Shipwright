@@ -65,7 +65,8 @@ disabling keeps the archive, and changes apply at the next Start. Updating a dis
 it disabled. Backups exclude ROMs, game archives, and mods. Import replaces matching
 save/settings files, so export a backup first when keeping existing progress matters. During play,
 the web toolbar provides save export, fullscreen, and measured presentation FPS. The engine still
-simulates at the original game tick rate; 60 FPS uses matrix interpolation.
+simulates at the original game tick rate; 60 FPS uses matrix interpolation. Tab navigates the
+web controls, and Enter/Space activates their buttons without sending those presses to the game.
 
 Use **Measure FPS** during gameplay for a 30-second presentation sample, then **Export FPS
 report** to save the average FPS, frame-time percentiles, stalls and rendering dimensions.
@@ -123,7 +124,7 @@ browser's crypto API.
 For matched desktop/web diagnostic captures, see
 [`docs/WEB_RENDER_AUDIT.md`](../../../docs/WEB_RENDER_AUDIT.md). This opt-in fixture uses a
 temporary debug warp and fixed simulation frame. Updated audit builds can also request
-one-third/two-thirds interpolation captures; that workflow still needs runtime verification.
+one-third/two-thirds interpolation captures; matched house and water samples passed on `a7ef6e7`.
 These fixtures do not establish full-game accuracy or browser frame pacing.
 
 `browser-timing.html` measures browser callback cadence without loading the game or WebGL.

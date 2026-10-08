@@ -27,7 +27,8 @@ come from an unsuitable fixture. Zora's Domain's entrance spawn, for example, is
 
 For Windows desktop testing, run the matching desktop binary from an isolated folder outside
 Windows's Temp folder and OneDrive, containing the generated `shipofharkinian.json` and the
-required bundled assets and archives. Windows's portable build uses its working directory for app files; `SHIP_HOME` is
+required bundled assets and archives. Archive-backed runs still require the bundled
+`assets/config.yml`; ROM conversion requires the complete extractor assets. Windows's portable build uses its working directory for app files; `SHIP_HOME` is
 not a Windows override. Keep the user's regular desktop saves/config separate. The fixture's
 `RenderAudit.Exit` closes the native application after capture. No capture occurs in a normal
 run where `gDeveloperTools.RenderAudit.Enabled` is absent or zero.
@@ -56,8 +57,8 @@ Pass the same `--interpolation-step` to `compare` to assert the requested fracti
 comparisons require version 2 captures, so an older engine's complete-frame capture cannot
 satisfy that request. Existing version 1 complete-frame reports remain supported. The web audit
 requests the fraction on the target simulation frame; this checks matrix/texture interpolation
-output at a known fraction, rather than browser timing. Intermediate-frame runtime validation
-is pending. The fixture enables N64 resolution mode and disables MSAA/alternate assets.
+output at a known fraction, rather than browser timing. The fixture enables N64 resolution mode
+and disables MSAA/alternate assets.
 Capture readback stalls are excluded from ordinary FPS samples: a running sample is marked
 incomplete when a capture occurs.
 
@@ -160,5 +161,16 @@ maximum deviation observed on the scalar build. State metadata and commit match 
 comparisons. Reports and paired images are in `build-tools/comparison-house-9886-desktop-web`
 and `build-tools/comparison-zoras-domain-water-9886-frame240`. These two full-frame samples
 support retaining the SIMD candidate for further testing; they do not prove an FPS improvement
-or intermediate-frame fidelity. The intermediate audit changes pass nine Python comparison
-tests and 36 shell tests; full-engine compilation and runtime validation are pending.
+or intermediate-frame fidelity.
+
+The intermediate audit build `a7ef6e7` passed all five CI jobs in run 37809387311.
+Matched desktop/web house captures at frame 60 are exact at both one-third and two-thirds
+interpolation. The desktop images differ at 640 pixels between these fractions, confirming
+that the fixtures exercise changing interpolation output. Zora's Domain room 1 at frame 240
+also passes at both fractions: all 76,800 pixels are within one RGB555 level, with mean absolute
+eight-bit channel errors of approximately 0.000428 and 0.000821 respectively. Reports and
+paired images are in `build-tools/comparison-house-{third,two-thirds}-a7-desktop-web` and
+`build-tools/comparison-zoras-domain-water-{third,two-thirds}-a7-desktop-web`.
+These four samples check intermediate rendering output, not browser pacing or every animation.
+The comparison suite passes nine tests. The shell suite passes 39 tests, including keyboard
+routing that preserves toolbar activation while releasing keys held in gameplay.

@@ -119,8 +119,20 @@ The next renderer candidate omits explicit `glFlush()` at RAF frame boundaries, 
 [MDN's WebGL guidance](https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices).
 It checks the actual Emscripten loop timing mode and keeps the flush for timer-driven loops:
 the pinned SDL/EGL implementation switches to timers when VSync is disabled. Native rendering
-retains its flush. The patch applies cleanly; compilation, matched rendering and performance
-validation are pending.
+retains its flush. CI run 37812619890 passed all five jobs for `b53ef2f`, including the complete
+web engine. Matched rendering and performance validation of this change are pending.
+
+The `a7ef6e7` intermediate audit build passed all five CI jobs. House frame 60 is exact against
+desktop at both one-third and two-thirds interpolation; the desktop images change at 640 pixels
+between fractions. Zora's Domain room 1 at frame 240 passes at both fractions with all 76,800
+pixels within one RGB555 level. These samples validate interpolation output at fixed fractions,
+not browser pacing or port-wide fidelity. Details are in [WEB_RENDER_AUDIT.md](WEB_RENDER_AUDIT.md).
+
+Runtime testing also exposed SDL consuming Enter on the web toolbar. The shell now keeps native
+HTML keyboard activation and typing available in the start panel and toolbar, while forwarding
+releases for keys held in gameplay. Keyboard Start, backup import and render-capture export
+worked with the compiled `a7ef6e7` engine. Three regression checks cover routing, focus changes
+and blur; all 39 shell tests pass.
 
 The `95cdb36` engine generated a complete seed in the browser (finalSeed 1197554378,
 442 locations, hash 15-35-34-88-80) and stored its spoiler at an absolute `/data/Randomizer/`

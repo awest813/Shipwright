@@ -64,6 +64,58 @@ function rumbleHarness() {
   return { ...h, timers, pads, effects, resets, pad };
 }
 
+function keyboardHarness() {
+  const h = harness(), pressed = new Set();
+  function dispatch(type, code, controls = false) {
+    const event = { type, code, key: code, prevented: false, stopped: false,
+      target: { closest: () => controls ? {} : null },
+      stopImmediatePropagation() { this.stopped = true; },
+    };
+    for (const listener of h.windowListeners.get(type)) listener(event);
+    // SDL's window listener consumes forwarded input and prevents native actions.
+    if (!event.stopped) {
+      if (type === 'keydown') pressed.add(code);
+      if (type === 'keyup') pressed.delete(code);
+      event.prevented = true;
+    }
+    return event;
+  }
+  return { ...h, pressed, dispatch };
+}
+
+test('web keyboard controls retain native activation and typing while the game receives canvas keys', () => {
+  const h = keyboardHarness();
+  for (const code of ['Enter', 'Space', 'Tab', 'ArrowDown', 'KeyS']) {
+    for (const type of ['keydown', 'keypress', 'keyup']) {
+      const event = h.dispatch(type, code, true);
+      assert.equal(event.stopped, true); assert.equal(event.prevented, false);
+    }
+  }
+  assert.equal(h.pressed.size, 0);
+  h.dispatch('keydown', 'KeyW'); assert.equal(h.pressed.has('KeyW'), true);
+  h.dispatch('keyup', 'KeyW'); assert.equal(h.pressed.size, 0);
+});
+
+test('a game key releases after focus enters controls and a UI key never becomes held in the game', () => {
+  const h = keyboardHarness();
+  h.dispatch('keydown', 'KeyW');
+  assert.equal(h.dispatch('keydown', 'KeyW', true).stopped, false);
+  assert.equal(h.dispatch('keyup', 'KeyW', true).stopped, false);
+  assert.equal(h.pressed.size, 0);
+  h.dispatch('keydown', 'Enter', true);
+  assert.equal(h.dispatch('keydown', 'Enter').stopped, true);
+  assert.equal(h.dispatch('keyup', 'Enter').stopped, true);
+  assert.equal(h.pressed.size, 0);
+});
+
+test('blur clears keyboard routing before subsequent game input', () => {
+  const h = keyboardHarness();
+  h.dispatch('keydown', 'KeyX', true);
+  for (const listener of h.windowListeners.get('blur')) listener();
+  assert.equal(h.dispatch('keydown', 'KeyX').stopped, false);
+  assert.equal(h.pressed.has('KeyX'), true);
+});
+
 test('rumble targets sparse browser indexes, scales both motors and renews bounded effects', () => {
   const h = rumbleHarness(); h.pad(2); h.pad(5);
   assert.equal(h.evaluate('Module.webControllerRumble(5, 65535, 32768)'), 1);

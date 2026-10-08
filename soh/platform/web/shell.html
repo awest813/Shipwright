@@ -138,6 +138,35 @@
   let renderAuditPath = null;
   let performanceContext = null;
 
+  // SDL listens on the window. Leave native HTML keyboard behavior available in
+  // the web controls, but always forward releases for keys held in the game.
+  const webControlKeys = new Set(), gameKeys = new Set();
+  function routeWebKeyboardEvent(event) {
+    const key = event.code || event.key;
+    const inWebControls = !!event.target?.closest?.("#panel, #web-tools");
+    if (event.type === "keydown") {
+      if (webControlKeys.has(key) || (inWebControls && !gameKeys.has(key))) {
+        webControlKeys.add(key);
+        event.stopImmediatePropagation();
+      } else {
+        gameKeys.add(key);
+      }
+    } else if (webControlKeys.has(key)) {
+      if (event.type === "keyup") webControlKeys.delete(key);
+      event.stopImmediatePropagation();
+    } else if (event.type === "keyup") {
+      gameKeys.delete(key);
+    } else if (inWebControls && !gameKeys.has(key)) {
+      event.stopImmediatePropagation();
+    }
+  }
+  for (const type of ["keydown", "keypress", "keyup"]) {
+    window.addEventListener(type, routeWebKeyboardEvent, true);
+  }
+  function resetKeyboardRouting() { webControlKeys.clear(); gameKeys.clear(); }
+  window.addEventListener("blur", resetKeyboardRouting);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) resetKeyboardRouting(); });
+
   function capturePerformanceContext() {
     performanceContext = null;
     if (typeof Module._WebReportPerformanceContext !== "function") return null;
