@@ -94,6 +94,19 @@ void RenderAuditCapture(const std::shared_ptr<Fast::Interpreter>& interpreter, f
     result["camera"] = { { "eye", { camera->eye.x, camera->eye.y, camera->eye.z } },
                          { "at", { camera->at.x, camera->at.y, camera->at.z } },
                          { "fov", camera->fov } };
+    // Record the engine's glow decision without issuing extra depth queries or changing the frame.
+    // These backend-dependent diagnostics are deliberately outside matched simulation-state metadata.
+    auto glowLights = nlohmann::json::array();
+    for (const auto* node = gPlayState->lightCtx.listHead; node != nullptr; node = node->next) {
+        if (node->info->type != LIGHT_POINT_GLOW)
+            continue;
+        const auto& point = node->info->params.point;
+        glowLights.push_back({ { "position", { point.x, point.y, point.z } },
+                               { "color", { point.color[0], point.color[1], point.color[2] } },
+                               { "radius", point.radius },
+                               { "drawGlow", point.drawGlow != 0 } });
+    }
+    result["glowLights"] = std::move(glowLights);
     result["room"] = gPlayState->roomCtx.curRoom.num;
     result["settings"] = { { "textureFilter", CVarGetInteger(CVAR_TEXTURE_FILTER, 0) },
                            { "alternateAssets", CVarGetInteger(CVAR_SETTING("AltAssets"), 1) } };

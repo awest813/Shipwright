@@ -194,3 +194,9 @@ port-wide fidelity. Reports and reviewed images are in
 `build-tools/comparison-adult-forest-late-two-thirds-2ffb-repeat-desktop-web`.
 Do not send browser/game input during native fixture runs; review the state metadata
 before interpreting pixel scores.
+
+The next audit build records each glow light's world position, color, radius and existing
+`drawGlow` decision. This reads simulation memory only and issues no additional GPU depth
+queries. The optional `glowLights` diagnostics stay outside the state-match gate, allowing
+backend-dependent glow decisions to be compared instead of rejecting the very discrepancy
+under investigation. Rendering and comparison tolerance remain unchanged.
