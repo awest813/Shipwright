@@ -215,3 +215,32 @@ native reference, confirming that these read-only diagnostics did not change tha
 Evidence: `build-tools/render-native-c04bc-adult-forest-late-two-thirds.json` and
 `build-tools/render-glow-diagnostics-native-no-output-change-c04bc.json`. The same-commit
 web capture and glow-decision comparison remain pending.
+
+The `c04bc56` web/Windows/Linux/macOS/assets build passed all five CI jobs. In the actual
+Windows Chromium preview, an analog-down mapping capture was canceled before loading regular
+File 1; D then moved Link from the bed to the table without a reload. A subsequent C-up capture
+opened normally, was canceled, and A moved Link back toward the bed. The before/after backups
+have identical `CVars.gSettings.Controllers`, all four Save files and every non-config file.
+Only menu settings changed. Evidence: `build-tools/controller-capture-cancel-real-browser-c04bc.json`
+and `build-tools/web-analog-cancel-movement-c04bc.png`. Both main entry pages now use the tested
+engine. Physical controller capture and Bluetooth pairing remain separate, unverified checks.
+
+The same-commit `c04bc56` web forest capture now matches the native simulation state and
+repeats the 98.486979% pixel score. Native records `drawGlow: true`; web records false for
+the same white light at [25, -10, 1014], radius 100. This confirms that the differing glow
+draw decision needs investigation. Comparison: `build-tools/comparison-adult-forest-late-two-thirds-c04bc-desktop-web`.
+After the temporary fixture, all ten original backup files were restored byte for byte
+(`build-tools/save-restore-after-glow-fixture-c04bc.json`).
+
+The next diagnostic records existing projected glow coordinates, clip depth, light/depth-buffer
+comparison values and whether a depth query occurred, capped at 32 lights. It also records the
+preceding presented simulation frame and interpolation when the glow check runs. No extra
+GPU query is issued and no draw decision is overridden. These values stay outside the matched
+state gate. Matching native/web captures are still required before attributing the discrepancy
+to readback precision or presentation timing.
+
+The HD configuration was exercised against the existing `c04bc56` native engine: it produced
+a 640×480 game framebuffer, then the legacy version 2 capture guard rejected it as expected.
+Evidence: `build-tools/render-native-c04bc-house-hd-config-probe.json`. This validates the
+fixed-resolution configuration, not HD pixel fidelity; the version 3 engine still needs a
+full build and matching desktop/web capture.

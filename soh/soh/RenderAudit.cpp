@@ -22,6 +22,34 @@ extern "C" {
 }
 
 static bool captured = false;
+static nlohmann::json glowDepthChecks = nlohmann::json::array();
+static nlohmann::json glowDepthPresentation;
+static unsigned int lastPresentedFrame = 0;
+static float lastPresentedInterpolation = 0.0f;
+
+extern "C" int RenderAuditBeginGlowCheck(unsigned int frame) {
+    if (!CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Enabled"), 0))
+        return 0;
+    glowDepthChecks.clear();
+    glowDepthPresentation = { { "simulationFrame", frame },
+                              { "previousPresentedFrame", lastPresentedFrame },
+                              { "previousInterpolation", lastPresentedInterpolation } };
+    return 1;
+}
+
+extern "C" void RenderAuditRecordGlowDepth(int worldX, int worldY, int worldZ, float pixelX, float pixelY,
+                                           float clipDepth, int lightDepth, int bufferDepth, int checked,
+                                           int drawGlow) {
+    if (glowDepthChecks.size() >= 32)
+        return;
+    glowDepthChecks.push_back({ { "position", { worldX, worldY, worldZ } },
+                                { "pixel", { pixelX, pixelY } },
+                                { "clipDepth", clipDepth },
+                                { "lightDepth", lightDepth },
+                                { "bufferDepth", bufferDepth },
+                                { "checked", checked != 0 },
+                                { "drawGlow", drawGlow != 0 } });
+}
 
 void RenderAuditRecordPopup(const std::string& title, const std::string& message) {
     if (!CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Enabled"), 0))
@@ -49,6 +77,12 @@ float RenderAuditTargetInterpolation() {
 }
 
 void RenderAuditCapture(const std::shared_ptr<Fast::Interpreter>& interpreter, float interpolation) {
+    if (captured || !CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Enabled"), 0))
+        return;
+    if (gPlayState != nullptr) {
+        lastPresentedFrame = gPlayState->gameplayFrames;
+        lastPresentedInterpolation = interpolation;
+    }
     if (!RenderAuditWantsFrame())
         return;
     if (!interpreter || !interpreter->mRapi || !GET_PLAYER(gPlayState))
@@ -111,6 +145,8 @@ void RenderAuditCapture(const std::shared_ptr<Fast::Interpreter>& interpreter, f
                                { "drawGlow", point.drawGlow != 0 } });
     }
     result["glowLights"] = std::move(glowLights);
+    result["glowDepthChecks"] = glowDepthChecks;
+    result["glowDepthPresentation"] = glowDepthPresentation;
     result["room"] = gPlayState->roomCtx.curRoom.num;
     result["settings"] = { { "textureFilter", CVarGetInteger(CVAR_TEXTURE_FILTER, 0) },
                            { "alternateAssets", CVarGetInteger(CVAR_SETTING("AltAssets"), 1) } };

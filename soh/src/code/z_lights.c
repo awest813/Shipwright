@@ -6,6 +6,7 @@
 
 #include "soh/frame_interpolation.h"
 #include "soh/OTRGlobals.h"
+#include "soh/RenderAudit.h"
 #include "soh/Enhancements/savestate_serialize.h"
 
 #define LIGHTS_BUFFER_SIZE 32
@@ -375,6 +376,7 @@ void Lights_GlowCheck(PlayState* play) {
     f32 wY;
     s32 wZ;
     s32 zBuf;
+    const int auditGlowDepth = RenderAuditBeginGlowCheck(play->gameplayFrames);
 
     node = play->lightCtx.listHead;
 
@@ -405,6 +407,13 @@ void Lights_GlowCheck(PlayState* play) {
                 if (wZ < (zBuf >> 3)) {
                     params->drawGlow = true;
                 }
+                if (auditGlowDepth) {
+                    RenderAuditRecordGlowDepth(params->x, params->y, params->z, x, y, multDest.z * wDest, wZ, zBuf / 4,
+                                               true, params->drawGlow);
+                }
+            } else if (auditGlowDepth) {
+                RenderAuditRecordGlowDepth(params->x, params->y, params->z, x, y, multDest.z * wDest, 0, 0, false,
+                                           params->drawGlow);
             }
         }
         node = node->next;
