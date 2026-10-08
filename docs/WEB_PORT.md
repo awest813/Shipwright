@@ -263,6 +263,16 @@ change forwards each of the same 35 region initializers through a local volatile
 preserving their order and avoiding per-frame logic changes. Full-engine size, identical
 seed generation, startup behavior and gameplay checks remain pending. Local experiment:
 `build-tools/web-inline-boundary-probe-result.json`.
+Before the boundary build, the isolated `2ffbcb9` preview regenerated the original seed
+string `7238872525` with the saved settings. It produced final seed 1197554378 and hash
+15-35-34-88-80. All non-provenance spoiler fields matched the original `95cdb36` output
+exactly, including all 442 locations, settings, hints and playthrough; the only changed
+field was `git_commit`. All save files were unchanged. The comparison record is
+`build-tools/randomizer-reference-seed-regenerated-2ffb.json`, with the generated spoiler
+and exact settings snapshot saved separately for the boundary-build comparison.
+This also confirms in-browser generation completion; it does not resolve its main-thread
+blocking behavior. A UI observation timed out during generation and recovered afterward.
+
 
 The main `8080/polish.html` and index previews now use the verified `5564e71` engine with
 the durable conversion restart shell, preserving their surrounding page styling. The
