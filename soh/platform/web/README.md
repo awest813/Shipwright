@@ -79,6 +79,11 @@ Matching updated engines also report `simulationCpuTimeMs`, `presentationCpuTime
 `totalCpuTimeMs`. Simulation samples count actual game ticks; presentation samples include
 event handling, interpolation and graphics submission. CPU elapsed time includes synchronous
 GL waits and does not measure GPU execution time. Older engines leave these sample counts zero.
+Updated reports split presentation time into events, interpolation and graphics submission in
+`presentationPhaseCpuTimeMs`. `contextAtStart` and `contextAtEnd` record the engine revision,
+SIMD status, renderer, rendering settings and internal dimensions; `contextChanged` flags a
+change during the sample. Older engines report unknown context as `null`. Compare samples
+with the same settings and dimensions before attributing a difference to an optimization.
 Keep the tab visible and continue playing during the sample. Hidden-tab or cancelled reports
 are marked incomplete. These measurements describe successful presentation callbacks; they
 do not establish rendering accuracy or GPU execution time.

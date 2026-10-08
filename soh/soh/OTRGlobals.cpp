@@ -1869,6 +1869,46 @@ extern "C" EMSCRIPTEN_KEEPALIVE void WebToggleMenu(void) {
 // Keeping just the current list avoids copying the game's large graphics pools.
 static Gfx* webCommands = nullptr;
 
+extern "C" EMSCRIPTEN_KEEPALIVE int WebReportPerformanceContext(void) {
+    if (OTRGlobals::Instance == nullptr || !OTRGlobals::Instance->context)
+        return 0;
+    auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(OTRGlobals::Instance->context->GetWindow());
+    if (!wnd)
+        return 0;
+    auto interpreter = wnd->GetInterpreterWeak().lock();
+    if (!interpreter || !interpreter->mRapi)
+        return 0;
+    const std::string renderer = interpreter->mRapi->GetName();
+#ifdef __wasm_simd128__
+    constexpr int simdEnabled = 1;
+#else
+    constexpr int simdEnabled = 0;
+#endif
+    EM_ASM(
+        {
+            if (Module.onWebPerformanceContext)
+                Module.onWebPerformanceContext({
+                    buildVersion : UTF8ToString($0),
+                    gitCommit : UTF8ToString($1),
+                    simdEnabled : !!$2,
+                    renderer : UTF8ToString($3),
+                    settings : {
+                        n64Resolution : !!$4,
+                        msaaSamples : $5,
+                        interpolationFps : $6,
+                        textureFilter : $7,
+                        alternateAssets : !!$8
+                    },
+                    renderingDimensions : { width : $9, height : $10 }
+                });
+        },
+        gBuildVersion, gGitCommitHash, simdEnabled, renderer.c_str(), CVarGetInteger(CVAR_SETTING("LowResMode"), 0),
+        interpreter->mMsaaLevel, OTRGlobals::Instance->GetInterpolationFPS(), CVarGetInteger(CVAR_TEXTURE_FILTER, 0),
+        CVarGetInteger(CVAR_SETTING("AltAssets"), 1), static_cast<int>(interpreter->mCurDimensions.width),
+        static_cast<int>(interpreter->mCurDimensions.height));
+    return 1;
+}
+
 extern "C" void Graph_WebPresentFrame(float interpolation, double simulationMs) {
     if (webCommands == nullptr)
         return;
@@ -1877,6 +1917,7 @@ extern "C" void Graph_WebPresentFrame(float interpolation, double simulationMs) 
         return;
     const double presentationStart = emscripten_get_now();
     wnd->HandleEvents();
+    const double eventsMs = emscripten_get_now() - presentationStart;
     wnd->SetTargetFps(60);
     auto interpreter = wnd->GetInterpreterWeak().lock();
     if (!interpreter)
@@ -1890,12 +1931,16 @@ extern "C" void Graph_WebPresentFrame(float interpolation, double simulationMs) 
     const int divisor = std::max<int>(R_UPDATE_RATE, 1);
     interpreter->mInterpolationIndex = std::clamp<int>((int)std::round(interpolation * divisor) - 1, 0, divisor - 1);
     interpreter->mInterpolationT = interpolation;
+    const double interpolationStart = emscripten_get_now();
     auto replacements =
         interpolation >= 1.0f ? std::unordered_map<Mtx*, MtxF>() : FrameInterpolation_Interpolate(interpolation);
+    const double interpolationMs = emscripten_get_now() - interpolationStart;
     auto theme =
         static_cast<UIWidgets::Colors>(CVarGetInteger(CVAR_SETTING("Menu.Theme"), UIWidgets::Colors::LightBlue));
     ImGui::PushStyleColor(ImGuiCol_TitleBgActive, UIWidgets::ColorValues.at(theme));
+    const double graphicsStart = emscripten_get_now();
     bool presented = wnd->DrawAndRunGraphicsCommands(webCommands, replacements);
+    const double graphicsMs = emscripten_get_now() - graphicsStart;
     ImGui::PopStyleColor();
     if (presented) {
         RenderAuditCapture(interpreter, interpolation);
@@ -1907,9 +1952,9 @@ extern "C" void Graph_WebPresentFrame(float interpolation, double simulationMs) 
         EM_ASM(
             {
                 if (Module.onFramePresented)
-                    Module.onFramePresented(!!$0, $1, $2, $3);
+                    Module.onFramePresented(!!$0, $1, $2, $3, { events : $4, interpolation : $5, graphics : $6 });
             },
-            menuVisible, scene, simulationMs, presentationCpuMs);
+            menuVisible, scene, simulationMs, presentationCpuMs, eventsMs, interpolationMs, graphicsMs);
     }
 }
 #endif

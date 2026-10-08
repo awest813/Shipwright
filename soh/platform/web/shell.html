@@ -136,6 +136,19 @@
   let lastRafTime = null;
   let randomizerGenerating = false;
   let renderAuditPath = null;
+  let performanceContext = null;
+
+  function capturePerformanceContext() {
+    performanceContext = null;
+    if (typeof Module._WebReportPerformanceContext !== "function") return null;
+    try {
+      Module._WebReportPerformanceContext();
+      return performanceContext ? JSON.parse(JSON.stringify(performanceContext)) : null;
+    } catch (error) {
+      console.warn("Performance context is unavailable", error);
+      return null;
+    }
+  }
 
   function trackBrowserFrame(time) {
     if (benchmark) {
@@ -152,6 +165,7 @@
     if (!benchmark) return;
     clearTimeout(benchmarkTimeout);
     const now = performance.now(), durationMs = now - benchmark.startedAt;
+    const contextAtEnd = capturePerformanceContext();
     const sorted = benchmark.intervals.slice().sort((a, b) => a - b);
     const percentile = fraction => sorted.length ? sorted[Math.ceil(sorted.length * fraction) - 1] : null;
     const summarize = samples => {
@@ -173,6 +187,11 @@
       simulationCpuTimeMs: summarize(benchmark.simulationCpuTimes),
       presentationCpuTimeMs: summarize(benchmark.presentationCpuTimes),
       totalCpuTimeMs: summarize(benchmark.totalCpuTimes),
+      presentationPhaseCpuTimeMs: Object.fromEntries(Object.entries(benchmark.phaseCpuTimes)
+        .map(([name, samples]) => [name, summarize(samples)])),
+      contextAtStart: benchmark.contextAtStart, contextAtEnd,
+      contextChanged: benchmark.contextAtStart && contextAtEnd ?
+        JSON.stringify(benchmark.contextAtStart) !== JSON.stringify(contextAtEnd) : null,
       overBudgetFrames: sorted.filter(ms => ms > 1000 / 60 + 2).length,
       budgetWithJitterMs: 1000 / 60 + 2, menuFrames: benchmark.menuFrames,
       sceneFrames: benchmark.sceneFrames,
@@ -195,6 +214,8 @@
       intervals: [], browserIntervals: [], completionDelays: [], lastBrowserFrame: lastRafTime,
       browserCallbacks: 0, callbackIntervals: [],
       simulationCpuTimes: [], presentationCpuTimes: [], totalCpuTimes: [],
+      phaseCpuTimes: { events: [], interpolation: [], graphics: [] },
+      contextAtStart: capturePerformanceContext(),
       menuFrames: 0, sceneFrames: {} };
     benchmarkReport = null;
     document.getElementById("benchmark-report").hidden = true;
@@ -692,7 +713,8 @@
           `Render audit failed: ${report.reason}. Export the report for details.`, report.reason !== "captured");
       } catch (error) { showMessage(`Render audit could not be read: ${error.message}`, true); }
     },
-    onFramePresented: (menuVisible = false, scene = null, simulationMs = -1, presentationCpuMs = null) => {
+    onWebPerformanceContext: context => { performanceContext = context; },
+    onFramePresented: (menuVisible = false, scene = null, simulationMs = -1, presentationCpuMs = null, phases = null) => {
       if (gameMenuVisible !== menuVisible) {
         gameMenuVisible = menuVisible;
         document.body.classList.toggle("native-menu-open", menuVisible);
@@ -719,6 +741,9 @@
         if (Number.isFinite(presentationCpuMs) && presentationCpuMs >= 0) {
           benchmark.presentationCpuTimes.push(presentationCpuMs);
           benchmark.totalCpuTimes.push(presentationCpuMs + (hasSimulation ? simulationMs : 0));
+        }
+        for (const [name, samples] of Object.entries(benchmark.phaseCpuTimes)) {
+          if (Number.isFinite(phases?.[name]) && phases[name] >= 0) samples.push(phases[name]);
         }
         if (lastRafTime !== null) {
           if (benchmark.lastBrowserFrame !== null && lastRafTime > benchmark.lastBrowserFrame) {

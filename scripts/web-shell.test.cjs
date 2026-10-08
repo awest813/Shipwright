@@ -464,6 +464,61 @@ test('CPU timing distinguishes simulation ticks, interpolation frames and older 
   h.evaluate('clearTimeout(statusTimeout)');
 });
 
+test('performance contexts freeze engine identity and identify changed rendering settings', () => {
+  const h = harness(); h.evaluate('started = true; running = true');
+  const context = { buildVersion: '9.2.3', gitCommit: 'test-commit', simdEnabled: true,
+    renderer: 'OpenGL', settings: { msaaSamples: 1, interpolationFps: 60 },
+    renderingDimensions: { width: 714, height: 535 } };
+  h.context.testContext = context;
+  h.evaluate('Module._WebReportPerformanceContext = () => Module.onWebPerformanceContext(testContext)');
+  h.elements.get('benchmark-game').listeners.click();
+  context.settings.msaaSamples = 2;
+  context.renderingDimensions.width = 844;
+  h.evaluate('finishBenchmark()');
+  assert.equal(h.evaluate('benchmarkReport.contextAtStart.gitCommit'), 'test-commit');
+  assert.equal(h.evaluate('benchmarkReport.contextAtStart.simdEnabled'), true);
+  assert.equal(h.evaluate('benchmarkReport.contextAtStart.settings.msaaSamples'), 1);
+  assert.equal(h.evaluate('benchmarkReport.contextAtEnd.settings.msaaSamples'), 2);
+  assert.equal(h.evaluate('benchmarkReport.contextAtStart.renderingDimensions.width'), 714);
+  assert.equal(h.evaluate('benchmarkReport.contextAtEnd.renderingDimensions.width'), 844);
+  assert.equal(h.evaluate('benchmarkReport.contextChanged'), true);
+  h.elements.get('benchmark-game').listeners.click();
+  h.evaluate('finishBenchmark()');
+  assert.equal(h.evaluate('benchmarkReport.contextChanged'), false);
+  h.evaluate('clearTimeout(statusTimeout)');
+});
+
+test('missing or failed engine context is unknown and does not reuse a previous snapshot', () => {
+  const h = harness(); h.evaluate('started = true; running = true');
+  h.evaluate('performanceContext = { gitCommit: "stale" }');
+  h.elements.get('benchmark-game').listeners.click(); h.evaluate('finishBenchmark()');
+  assert.equal(h.evaluate('benchmarkReport.contextAtStart'), null);
+  assert.equal(h.evaluate('benchmarkReport.contextAtEnd'), null);
+  assert.equal(h.evaluate('benchmarkReport.contextChanged'), null);
+  h.evaluate('Module._WebReportPerformanceContext = () => { throw Error("unavailable") }');
+  h.elements.get('benchmark-game').listeners.click(); h.evaluate('finishBenchmark()');
+  assert.equal(h.evaluate('benchmarkReport.contextAtStart'), null);
+  assert.equal(h.evaluate('benchmarkReport.contextChanged'), null);
+  h.evaluate('clearTimeout(statusTimeout)');
+});
+
+test('presentation phase timing excludes missing, negative and nonfinite samples', () => {
+  const h = harness(); h.evaluate('started = true; running = true');
+  h.elements.get('benchmark-game').listeners.click();
+  h.evaluate('Module.onFramePresented(false, 52, 2, 6, { events: 0.1, interpolation: 0.5, graphics: 5 })');
+  h.evaluate('Module.onFramePresented(false, 52, -1, 7, { events: -1, interpolation: NaN, graphics: Infinity })');
+  h.evaluate('Module.onFramePresented(false, 52)');
+  h.evaluate('finishBenchmark()');
+  assert.equal(h.evaluate('benchmarkReport.presentationPhaseCpuTimeMs.events.samples'), 1);
+  assert.equal(h.evaluate('benchmarkReport.presentationPhaseCpuTimeMs.events.max'), 0.1);
+  assert.equal(h.evaluate('benchmarkReport.presentationPhaseCpuTimeMs.interpolation.samples'), 1);
+  assert.equal(h.evaluate('benchmarkReport.presentationPhaseCpuTimeMs.interpolation.max'), 0.5);
+  assert.equal(h.evaluate('benchmarkReport.presentationPhaseCpuTimeMs.graphics.samples'), 1);
+  assert.equal(h.evaluate('benchmarkReport.presentationPhaseCpuTimeMs.graphics.max'), 5);
+  assert.equal(h.evaluate('benchmarkReport.presentedFrames'), 3);
+  h.evaluate('clearTimeout(statusTimeout)');
+});
+
 test('render capture export is limited to audit reports and interrupts FPS measurement', () => {
   const h = harness();
   h.evaluate('ready = true; started = true; running = true');

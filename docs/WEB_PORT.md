@@ -85,8 +85,18 @@ long pauses during integration testing; their cause remains unproven.
 
 The next build enables standard WebAssembly SIMD via `SOH_WEB_SIMD`, preserving the existing
 strict floating-point flags and avoiding relaxed SIMD. `-DSOH_WEB_SIMD=OFF` retains the scalar
-configuration for comparisons. Full-game fidelity, performance improvement and device/browser
-coverage of this optimization remain to be measured before replacing the verified preview.
+configuration for comparisons. CI run 37800329180 passed all five jobs for `9886d25`, including
+the full web engine and compiled controller test. Full-game fidelity, performance improvement
+and device/browser coverage of this optimization remain to be measured before replacing the
+verified preview.
+
+The next diagnostic build records engine revision, SIMD status, renderer, settings and internal
+dimensions at the start and end of each FPS sample. A changed context is flagged rather than
+silently combining different rendering configurations. It also separates presentation CPU
+elapsed time into event handling, matrix interpolation and graphics submission; these remain
+elapsed wall-clock measurements, including preemption and synchronous GL waits, not GPU timers.
+All 35 shell tests pass, including context snapshot isolation, unavailable older engines and
+invalid phase samples. Full-engine compilation and interactive verification remain pending.
 
 The `95cdb36` engine generated a complete seed in the browser (finalSeed 1197554378,
 442 locations, hash 15-35-34-88-80) and stored its spoiler at an absolute `/data/Randomizer/`
