@@ -518,7 +518,9 @@ void Play_Init(GameState* thisx) {
     gTrnsnUnkState = 0;
     play->transitionMode = TRANS_MODE_OFF;
     FrameAdvance_Init(&play->frameAdvCtx);
-    Rand_Seed((u32)osGetTime());
+    Rand_Seed(CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Enabled"), 0)
+                  ? (u32)CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Seed"), 12345)
+                  : (u32)osGetTime());
     Matrix_Init(&play->state);
     play->state.main = Play_Main;
     play->state.destroy = Play_Destroy;

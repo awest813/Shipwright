@@ -53,7 +53,7 @@
 </head>
 <body>
 <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
-<div id="web-tools" hidden><span id="web-status" class="status" role="status"></span><span id="controller-game-status" class="status" role="status"></span><span id="fps" class="status" aria-live="off">Measuring FPS…</span><button id="fullscreen">Fullscreen</button><button id="settings-game">Settings</button><button id="touch-toggle" aria-pressed="false">Touch controls</button><button id="benchmark-game">Measure FPS</button><button id="benchmark-report" hidden>Export FPS report</button><button id="backup-game">Export saves</button><label class="button">Import seed<input id="seed-game-input" type="file" accept=".json" disabled></label></div>
+<div id="web-tools" hidden><span id="web-status" class="status" role="status"></span><span id="controller-game-status" class="status" role="status"></span><span id="fps" class="status" aria-live="off">Measuring FPS…</span><button id="fullscreen">Fullscreen</button><button id="settings-game">Settings</button><button id="touch-toggle" aria-pressed="false">Touch controls</button><button id="benchmark-game">Measure FPS</button><button id="benchmark-report" hidden>Export FPS report</button><button id="render-audit-export" hidden>Export render capture</button><button id="backup-game">Export saves</button><label class="button">Import seed<input id="seed-game-input" type="file" accept=".json" disabled></label></div>
 <div id="touch-controls" hidden aria-label="Touch game controls">
   <div id="touch-stick" role="group" aria-label="Movement joystick"><span id="touch-stick-knob"></span></div>
   <div id="touch-buttons">
@@ -129,6 +129,7 @@
   let benchmarkReport = null;
   let lastRafTime = null;
   let randomizerGenerating = false;
+  let renderAuditPath = null;
 
   function trackBrowserFrame(time) {
     if (benchmark) {
@@ -198,6 +199,10 @@
   });
   document.getElementById("benchmark-report").addEventListener("click", () => {
     if (benchmarkReport) download("shipwright-performance.json", JSON.stringify(benchmarkReport, null, 2), "application/json");
+    Module.canvas.focus();
+  });
+  document.getElementById("render-audit-export").addEventListener("click", () => {
+    if (renderAuditPath) download(renderAuditPath.split("/").at(-1), FS.readFile(renderAuditPath), "application/json");
     Module.canvas.focus();
   });
   document.addEventListener("visibilitychange", () => { if (document.hidden) finishBenchmark("tab hidden"); });
@@ -554,6 +559,20 @@
       showMessage(success ? "Seed generated. Choose a new randomizer file in file select." :
         "Seed generation failed. Review your randomizer settings and try again.", !success);
       persist();
+    },
+    onRenderAuditCaptured: path => {
+      if (!/^\/data\/RenderAudit\/[A-Za-z0-9_-]{1,80}\.json$/.test(path)) {
+        showMessage("Invalid render audit capture path.", true); return;
+      }
+      try {
+        const report = JSON.parse(new TextDecoder().decode(FS.readFile(path)));
+        if (report.format !== "shipwright-render-capture" || report.version !== 1) throw Error("Invalid capture report");
+        finishBenchmark("render audit capture");
+        renderAuditPath = path;
+        document.getElementById("render-audit-export").hidden = false;
+        showMessage(report.reason === "captured" ? "Render audit captured. Export it for desktop comparison." :
+          `Render audit failed: ${report.reason}. Export the report for details.`, report.reason !== "captured");
+      } catch (error) { showMessage(`Render audit could not be read: ${error.message}`, true); }
     },
     onFramePresented: (menuVisible = false, scene = null, simulationMs = -1, presentationCpuMs = null) => {
       if (gameMenuVisible !== menuVisible) {

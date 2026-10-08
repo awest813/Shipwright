@@ -288,6 +288,24 @@ test('CPU timing distinguishes simulation ticks, interpolation frames and older 
   h.evaluate('clearTimeout(statusTimeout)');
 });
 
+test('render capture export is limited to audit reports and interrupts FPS measurement', () => {
+  const h = harness();
+  h.evaluate('ready = true; started = true; running = true');
+  h.files.set('/data/RenderAudit/house.json', new TextEncoder().encode(JSON.stringify({
+    format: 'shipwright-render-capture', version: 1, reason: 'captured',
+  })));
+  h.elements.get('benchmark-game').listeners.click();
+  h.evaluate('Module.onRenderAuditCaptured("/data/RenderAudit/house.json")');
+  assert.equal(h.evaluate('benchmarkReport.reason'), 'render audit capture');
+  assert.equal(h.elements.get('render-audit-export').hidden, false);
+  assert.match(h.elements.get('web-status').textContent, /Export it for desktop comparison/);
+  h.elements.get('render-audit-export').listeners.click();
+  assert.equal(h.elements.get('download').download, 'house.json');
+  h.evaluate('Module.onRenderAuditCaptured("/data/Save/file1.sav")');
+  assert.match(h.elements.get('web-status').textContent, /Invalid render audit capture path/);
+  assert.equal(h.evaluate('renderAuditPath'), '/data/RenderAudit/house.json');
+});
+
 test('randomizer generation reports state, blocks seed import and restores controls on failure', async () => {
   const h = harness(); h.evaluate('ready = true; started = true; running = true');
   h.elements.get('benchmark-game').listeners.click();

@@ -1,5 +1,6 @@
 ﻿#include "OTRGlobals.h"
 #include "OTRAudio.h"
+#include "RenderAudit.h"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -1847,7 +1848,9 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
         std::unordered_map<Mtx*, MtxF> mtx_replacements =
             (time == denom) ? std::unordered_map<Mtx*, MtxF>() : FrameInterpolation_Interpolate((float)time / denom);
         intp->mInterpolationT = (float)time / denom;
-        wnd->DrawAndRunGraphicsCommands(Commands, mtx_replacements);
+        if (wnd->DrawAndRunGraphicsCommands(Commands, mtx_replacements)) {
+            RenderAuditCapture(wnd->GetInterpreterWeak().lock(), (float)time / denom);
+        }
         intp->mInterpolationIndex++;
     }
     ImGui::PopStyleColor();
@@ -1880,6 +1883,8 @@ extern "C" void Graph_WebPresentFrame(float interpolation, double simulationMs) 
         return;
     if (GfxDebuggerIsDebugging())
         interpolation = 1.0f;
+    if (RenderAuditWantsFrame())
+        interpolation = 1.0f;
     // Animated texture segments are generated at GetInterpolationFPS(); select the matching
     // segment even when a browser refresh was dropped rather than counting callbacks.
     const int divisor = std::max<int>(R_UPDATE_RATE, 1);
@@ -1893,6 +1898,7 @@ extern "C" void Graph_WebPresentFrame(float interpolation, double simulationMs) 
     bool presented = wnd->DrawAndRunGraphicsCommands(webCommands, replacements);
     ImGui::PopStyleColor();
     if (presented) {
+        RenderAuditCapture(interpreter, interpolation);
         const bool menuVisible = wnd->GetGui()->GetMenuOrMenubarVisible();
         const int scene = gPlayState != nullptr ? gPlayState->sceneNum : -1;
         // CPU elapsed time includes event handling, interpolation and graphics submission,
