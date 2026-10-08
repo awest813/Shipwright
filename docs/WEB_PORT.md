@@ -176,6 +176,21 @@ and failed the memory check. The patched writer retained 1,504 bytes through thr
 and every archived payload read back byte for byte. The full-engine fresh-ROM check remains
 pending for that patch. Freeing these objects does not shrink already-grown Wasm memory;
 recovering the fresh-conversion reservation still requires separate startup work.
+
+Normal play on `5564e71` subsequently left the house through its doorway, descended the
+ladder, targeted Saria and completed her opening conversation. The normal pause/save flow
+displayed `Game saved`; exported File 1 changed while Files 2/3, global save data, all four
+randomizer spoilers and settings remained byte-identical. Evidence is
+`build-tools/{web-vanilla-saria-dialogue-5564.png,web-normal-forest-save-5564.png,save-normal-progression-5564.json}`.
+Settings search and the pre-rendered/fixed-camera dependency responded correctly; both
+temporary camera settings were restored to zero before leaving the house. This does not
+establish replacement 3D-backdrop mod fidelity.
+A quiet 30-second forest sample at the same default viewport/rendering settings measured
+59.89 FPS / 59.92 browser callbacks/s, presentation p95 24.1 ms and maximum 52.4 ms. Wasm
+stayed at 512 MiB, with 383,213,336 allocator bytes used at both endpoints and no menu frames
+or rendering-context change. The report is
+`build-tools/performance-5564-cached-vanilla-forest-normal-viewport.json`. Host snapshots before
+and after recorded 40% CPU, no compiler processes and about 4.4/3.9 GiB free physical memory.
 The recovered `6990278` main preview exported its settings by keyboard, and resetting its
 viewport back to the default size completed successfully while the title sequence was running.
 That isolated success does not establish repeated resize stability or identify the earlier crash.
