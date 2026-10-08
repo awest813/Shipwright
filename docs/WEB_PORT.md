@@ -6,6 +6,22 @@ page converts the player's ROM into `oot.o2r` in the browser. Everything past th
 load needs real game data and has not been play-tested yet. Build and usage instructions are
 in [soh/platform/web/README.md](../soh/platform/web/README.md).
 
+### October 7, 2026 audit (in progress)
+
+The shipped CI baseline recognizes the supported USA Rev 2 ROM but fails extraction with
+`Torch produced no archive`. `Companion::Init` skips `Process` under Emscripten; the port now
+calls it explicitly. This fix still needs verification in a rebuilt browser binary.
+
+Changes awaiting runtime verification: browser-paced 60 Hz matrix interpolation with original
+simulation timing, high precision GLES shaders, save/settings backup transfer, `.o2r` mod upload,
+fullscreen controls, and an FPS counter based on successful draw calls. Shell tests cover byte-order
+normalization, backup path validation, export filtering, concurrent persistence, and malformed
+asset bundles; run `node --test scripts/web-shell.test.cjs`.
+
+The 94% fidelity and sustained 60 FPS targets have **not been measured or achieved yet**.
+Completion requires a playable scene, save/reload verification, rendering comparisons with the
+desktop build, frame-time measurements during gameplay, and checks of supported extras.
+
 This document began as an audit of the codebase (SoH `94f950f8`, libultraship `62e973a`,
 Torch `2ab12fe`). Sections 1 and 2 are that original audit and design, kept as a record; a few
 details differ from what was built. Section 3 tracks what has actually been done, and section 6

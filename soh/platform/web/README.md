@@ -3,7 +3,7 @@
 Ship of Harkinian compiled to WebAssembly with Emscripten. `docs/WEB_PORT.md` in the repository has
 the audit, design, progress and roadmap.
 
-Current state: single-threaded, WebGL2, interpolation off, networking unavailable. The page turns
+Current state: single-threaded, WebGL2, browser-paced interpolation targeting 60 FPS, networking unavailable. The page turns
 the player's ROM into `oot.o2r` / `oot-mq.o2r` in the browser, or accepts archives made by desktop SoH
 of the same version.
 
@@ -51,6 +51,12 @@ does not work.
 Saves reach browser storage within a quarter of a second of being written. Other files, such as
 settings, follow within 10 seconds and whenever the tab is hidden. In a private window the browser
 may refuse storage altogether; the page says so, and nothing is kept after it closes.
+
+Open **Saves, mods & controls** before startup to export/import saves and settings or install
+compatible `.o2r` mods. Backups exclude ROMs, game archives, and mods. Import replaces matching
+save/settings files, so export a backup first when keeping existing progress matters. During play,
+the web toolbar provides save export, fullscreen, and measured presentation FPS. The engine still
+simulates at the original game tick rate; 60 FPS uses matrix interpolation.
 
 The page has to be served over HTTPS or from `localhost` for ROM conversion, which needs the
 browser's crypto API.

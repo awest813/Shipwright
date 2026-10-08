@@ -36,6 +36,7 @@ FetchContent_Declare(
     nlohmann_json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
     GIT_TAG v3.12.0
+    GIT_SHALLOW TRUE
     OVERRIDE_FIND_PACKAGE
 )
 FetchContent_MakeAvailable(nlohmann_json)
@@ -60,6 +61,7 @@ FetchContent_Declare(
     libzip
     GIT_REPOSITORY https://github.com/nih-at/libzip.git
     GIT_TAG v1.11.4
+    GIT_SHALLOW TRUE
     OVERRIDE_FIND_PACKAGE
 )
 FetchContent_MakeAvailable(libzip)
@@ -73,6 +75,7 @@ FetchContent_Declare(
     Opus
     GIT_REPOSITORY https://github.com/xiph/opus.git
     GIT_TAG v1.5.2
+    GIT_SHALLOW TRUE
     OVERRIDE_FIND_PACKAGE
 )
 FetchContent_MakeAvailable(Opus)
@@ -82,6 +85,7 @@ FetchContent_Declare(
     OpusFile
     GIT_REPOSITORY https://github.com/xiph/opusfile.git
     GIT_TAG v0.12
+    GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(OpusFile)
 add_library(opusfile STATIC

@@ -511,10 +511,13 @@ static void RunFrame() {
 }
 
 #ifdef __EMSCRIPTEN__
-// Called by the browser once per display refresh. The game advances at 60 / R_UPDATE_RATE ticks
-// per second, so only run a frame when the next tick is due.
+extern void Graph_WebPresentFrame(float interpolation);
+
+// Simulation retains the original tick rate; present one interpolated frame per browser refresh.
 static void Graph_WebFrame(void) {
     static double nextTick = 0.0;
+    static double tickTime = 0.0;
+    static double nextPresent = 0.0;
     double now = emscripten_get_now();
     double interval = 1000.0 * (R_UPDATE_RATE > 0 ? R_UPDATE_RATE : 1) / 60.0;
 
@@ -524,12 +527,22 @@ static void Graph_WebFrame(void) {
     }
     // A tick is usually a whole number of display refreshes (50 ms = 3 at 60 Hz), and callback times
     // jitter by a fraction of a millisecond, so allow some slack rather than slipping a refresh.
-    if (now + 4.0 < nextTick) {
+    if (now + 2.0 < nextPresent) {
         return;
     }
-    // After a stall (background tab, long load) resync instead of running a burst of catch-up ticks.
-    nextTick = (now - nextTick > interval * 4) ? now + interval : nextTick + interval;
-    RunFrame();
+    const double presentInterval = 1000.0 / 60.0;
+    nextPresent =
+        (now - nextPresent > presentInterval * 4) ? now + presentInterval : nextPresent + presentInterval;
+    if (now + 4.0 >= nextTick) {
+        // Resync after a stall instead of running a burst of catch-up ticks.
+        tickTime = (now - nextTick > interval * 4) ? now : nextTick;
+        nextTick = tickTime + interval;
+        RunFrame();
+    }
+    float interpolation = (float)((now - tickTime + presentInterval) / interval);
+    if (interpolation < 0.0f) interpolation = 0.0f;
+    if (interpolation > 1.0f) interpolation = 1.0f;
+    Graph_WebPresentFrame(interpolation);
 }
 #endif
 

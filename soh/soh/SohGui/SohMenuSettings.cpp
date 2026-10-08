@@ -380,7 +380,7 @@ void SohMenu::AddMenuSettings() {
                 .Max(8)
                 .DefaultValue(1));
 #endif
-#ifndef __EMSCRIPTEN__ // the web build presents one frame per game tick, see docs/WEB_PORT.md
+#ifndef __EMSCRIPTEN__ // Browser presentation targets 60 Hz; the browser controls vsync.
     auto fps = CVarGetInteger(CVAR_SETTING("InterpolationFPS"), 20);
     const char* fpsFormat = fps == 20 ? "Original (%d)" : "%d";
     AddWidget(path, "Current FPS", WIDGET_CVAR_SLIDER_INT)

@@ -25,10 +25,16 @@
   #message { min-height: 1.5em; font-size: 13px; }
   #message.error { color: var(--error); }
   code { background: #0d1117; padding: 1px 4px; border-radius: 4px; }
+  #web-tools { position: fixed; top: 8px; right: 8px; z-index: 2; display: flex; gap: 6px; }
+  #web-tools[hidden] { display: none; }
+  #extras { border-top: 1px solid #30363d; margin-top: 16px; padding-top: 12px; }
+  #extras summary { cursor: pointer; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 </style>
 </head>
 <body>
 <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+<div id="web-tools" hidden><span id="fps" class="status" aria-live="off">Measuring FPS…</span><button id="fullscreen">Fullscreen</button><button id="backup-game">Export saves</button></div>
 <div id="overlay">
   <div id="panel">
     <h1>Ship of Harkinian</h1>
@@ -47,6 +53,16 @@
     </div>
     <div id="message" role="status" aria-live="polite">Loading the game files…</div>
     <button id="start" disabled>Start</button>
+    <details id="extras">
+      <summary>Saves, mods & controls</summary>
+      <p>Keyboard and gamepad bindings are configurable in the game menu (Esc). F5/F6 manage save states when enabled; Tab switches alternate assets.</p>
+      <div class="actions">
+        <button id="backup" disabled>Export saves & settings</button>
+        <label class="button disabled">Import backup<input id="backup-input" type="file" accept=".json" disabled></label>
+        <label class="button disabled">Add mods<input id="mods-input" type="file" accept=".o2r" multiple disabled></label>
+      </div>
+      <p id="mods-status" class="status">Mods load at startup. Use .o2r mods compatible with this version.</p>
+    </details>
   </div>
 </div>
 <script>
@@ -65,6 +81,43 @@
   let storageWorks = true;
   let stagedRomPath = null; // version directory of a ROM waiting to be converted
   let persistSoon = 0;
+  let busy = false;
+  const frameTimes = [];
+  let lastFrameReport = 0;
+
+  function backupPath(path) {
+    return /^(Save|Randomizer|presets)\/[A-Za-z0-9_. /-]+$/.test(path) &&
+      !path.split("/").some(part => part === ".." || part === "." || !part) ||
+      ["shipofharkinian.json", "imgui.ini", "timesplitdata.json"].includes(path);
+  }
+
+  function download(name, bytes, type) {
+    const url = URL.createObjectURL(new Blob([bytes], { type }));
+    const link = document.createElement("a");
+    link.href = url; link.download = name; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function exportBackup() {
+    if (!ready) return;
+    const files = [];
+    function visit(dir, relative) {
+      for (const name of FS.readdir(dir)) {
+        if (name === "." || name === "..") continue;
+        const path = `${dir}/${name}`, rel = relative ? `${relative}/${name}` : name;
+        if (FS.isDir(FS.stat(path).mode)) {
+          if (["Save", "Randomizer", "presets"].includes(rel) || relative) visit(path, rel);
+        } else if (backupPath(rel)) {
+          const bytes = FS.readFile(path);
+          let binary = "";
+          for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+          files.push({ path: rel, data: btoa(binary) });
+        }
+      }
+    }
+    visit(DATA_DIR, "");
+    download("shipwright-backup.json", JSON.stringify({ format: "shipwright-web-backup", version: 1, files }), "application/json");
+  }
 
   function showMessage(text, isError) {
     message.textContent = text;
@@ -102,7 +155,13 @@
       el.className = present ? "status ok" : "status";
       any = any || present;
     }
-    startButton.disabled = !ready || running || stopped || (!any && !stagedRomPath);
+    startButton.disabled = !ready || busy || running || stopped || (!any && !stagedRomPath);
+    document.getElementById("backup").disabled = !ready || busy || stopped;
+    if (ready) {
+      FS.mkdirTree(`${DATA_DIR}/mods`);
+      const mods = FS.readdir(`${DATA_DIR}/mods`).filter(name => name.endsWith(".o2r"));
+      document.getElementById("mods-status").textContent = mods.length ? `Installed mods: ${mods.join(", ")}` : "Mods load at startup. Use .o2r mods compatible with this version.";
+    }
   }
 
   // N64 dumps come in three byte orders; Torch's version table hashes big-endian (.z64) dumps.
@@ -137,6 +196,7 @@
 
   // Unpacks a bundle made by pack_assets.py: gzip of (u32 path length, path, u32 size, data)*.
   async function installAssetBundle(version) {
+    if (!/^[a-z0-9_-]+$/.test(version)) throw new Error("invalid ROM asset version");
     let data = new Uint8Array(await (await fetchOk(`assets/${version}.bundle.gz`)).arrayBuffer());
     // Some servers send .gz files with Content-Encoding: gzip, and then the browser already unpacked it.
     if (data[0] === 0x1f && data[1] === 0x8b) {
@@ -146,13 +206,21 @@
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     const decoder = new TextDecoder();
     const base = `/app/assets/${version}`;
+    const entries = [];
     for (let pos = 0; pos < data.length;) {
+      if (pos + 4 > data.length) throw new Error("truncated asset bundle");
       const pathLength = view.getUint32(pos, true); pos += 4;
+      if (!pathLength || pos + pathLength + 4 > data.length) throw new Error("invalid asset bundle path");
       const path = decoder.decode(data.subarray(pos, pos + pathLength)); pos += pathLength;
+      if (path.startsWith("/") || path.includes("\\") || path.split("/").some(part => !part || part === "." || part === "..")) throw new Error("invalid asset bundle path");
       const size = view.getUint32(pos, true); pos += 4;
+      if (size > data.length - pos) throw new Error("truncated asset bundle entry");
       const full = `${base}/${path}`;
+      entries.push({ full, bytes: data.subarray(pos, pos + size) }); pos += size;
+    }
+    for (const { full, bytes } of entries) {
       FS.mkdirTree(full.substring(0, full.lastIndexOf("/")));
-      FS.writeFile(full, data.subarray(pos, pos + size)); pos += size;
+      FS.writeFile(full, bytes);
     }
   }
 
@@ -179,19 +247,23 @@
   // Resolves once everything written so far is stored.
   let syncing = null, syncAgain = false;
   function persist() {
-    if (syncing) { syncAgain = true; return syncing; }
-    syncing = new Promise((resolve) => {
-      FS.syncfs(false, (err) => {
+    syncAgain = true;
+    if (syncing) return syncing;
+    syncing = (async () => {
+      let success = true;
+      while (syncAgain) {
+        syncAgain = false;
+        const err = await new Promise(resolve => FS.syncfs(false, resolve));
         if (err) {
           console.error("Saving to browser storage failed", err);
           if (storageWorks && !running) showMessage("Your browser didn't let this page store files, so they will be lost when the page closes.", true);
           storageWorks = false;
+          success = false;
         }
-        syncing = null;
-        resolve(!err);
-        if (syncAgain) { syncAgain = false; persist(); }
-      });
-    });
+      }
+      syncing = null;
+      return success;
+    })();
     return syncing;
   }
 
@@ -221,6 +293,17 @@
     printErr: (text) => console.warn(text),
     onAbort: (what) => stop(`The game stopped: ${what}.`),
     onGameStarted: () => { started = true; },
+    onFramePresented: () => {
+      const now = performance.now();
+      frameTimes.push(now);
+      while (frameTimes.length > 1 && frameTimes[0] < now - 2000) frameTimes.shift();
+      if (now - lastFrameReport > 1000 && frameTimes.length > 1) {
+        const fps = (frameTimes.length - 1) * 1000 / (now - frameTimes[0]);
+        document.getElementById("fps").textContent = `${fps.toFixed(1)} FPS`;
+        Module.webPerformance = { fps, frames: frameTimes.length, windowMs: now - frameTimes[0] };
+        lastFrameReport = now;
+      }
+    },
     // Saves and other files the game writes go to browser storage right away.
     onFileWritten: () => { clearTimeout(persistSoon); persistSoon = setTimeout(persist, 250); },
     // The game wrote oot.o2r / oot-mq.o2r from the staged ROM; the ROM and asset descriptions can go.
@@ -229,6 +312,61 @@
       persist();
     },
   };
+
+  document.getElementById("backup").addEventListener("click", exportBackup);
+  document.getElementById("backup-game").addEventListener("click", exportBackup);
+  document.getElementById("fullscreen").addEventListener("click", async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await Module.canvas.requestFullscreen();
+      Module.canvas.focus();
+    } catch (e) { console.warn("Fullscreen unavailable", e); }
+  });
+
+  document.getElementById("backup-input").addEventListener("change", async (event) => {
+    const file = event.target.files[0]; event.target.value = "";
+    if (!file || !ready || running || busy) return;
+    busy = true; setControlsEnabled(false);
+    try {
+      if (file.size > 32 * 1024 * 1024) throw new Error("backup exceeds 32 MB");
+      const backup = JSON.parse(await file.text());
+      if (backup.format !== "shipwright-web-backup" || backup.version !== 1 || !Array.isArray(backup.files)) throw new Error("unsupported backup format");
+      const paths = new Set(); let total = 0;
+      const files = backup.files.map(entry => {
+        if (typeof entry.path !== "string" || !backupPath(entry.path) || paths.has(entry.path) || typeof entry.data !== "string") throw new Error("invalid backup file path");
+        paths.add(entry.path);
+        const binary = atob(entry.data); total += binary.length;
+        if (total > 24 * 1024 * 1024) throw new Error("backup contents exceed 24 MB");
+        return { path: `${DATA_DIR}/${entry.path}`, bytes: Uint8Array.from(binary, c => c.charCodeAt(0)) };
+      });
+      // Validate the entire package before changing any saved files.
+      for (const entry of files) {
+        FS.mkdirTree(entry.path.substring(0, entry.path.lastIndexOf("/")));
+        FS.writeFile(entry.path, entry.bytes);
+      }
+      if (await persist()) showMessage(`Imported ${files.length} save/settings files.`);
+    } catch (e) { showMessage(`Could not import backup: ${e.message}`, true); }
+    finally { busy = false; setControlsEnabled(!running && !stopped); }
+  });
+
+  document.getElementById("mods-input").addEventListener("change", async (event) => {
+    const files = Array.from(event.target.files); event.target.value = "";
+    if (!files.length || !ready || running || busy) return;
+    busy = true; setControlsEnabled(false);
+    try {
+      const mods = [];
+      for (const file of files) {
+        if (!/^[A-Za-z0-9_. -]+\.o2r$/i.test(file.name)) throw new Error("mod names must end in .o2r and contain only letters, numbers, spaces, dots, dashes or underscores");
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error(`${file.name} is not an .o2r archive`);
+        mods.push({ name: file.name, bytes });
+      }
+      FS.mkdirTree(`${DATA_DIR}/mods`);
+      for (const mod of mods) FS.writeFile(`${DATA_DIR}/mods/${mod.name}`, mod.bytes);
+      if (await persist()) showMessage(`Installed ${mods.length} mod archive(s). Start the game to load them.`);
+    } catch (e) { showMessage(`Could not install mods: ${e.message}`, true); }
+    finally { busy = false; setControlsEnabled(!running && !stopped); }
+  });
 
   // Crashes inside the game (wasm traps, uncaught C++ exceptions) surface here rather than through onAbort.
   window.addEventListener("error", (e) => {
@@ -241,7 +379,8 @@
     input.addEventListener("change", async () => {
       const file = input.files[0];
       input.value = "";
-      if (!file || !ready) return;
+      if (!file || !ready || running || busy) return;
+      busy = true; setControlsEnabled(false);
       const name = input.dataset.archive;
       showMessage(`Storing ${name}…`);
       try {
@@ -253,7 +392,7 @@
         if (await persist()) showMessage(`${name} stored in this browser.`);
       } catch (e) {
         showMessage(`Could not load ${file.name}: ${e.message}`, true);
-      }
+      } finally { busy = false; setControlsEnabled(!running && !stopped); }
     });
   }
 
@@ -261,7 +400,8 @@
     const input = event.target;
     const file = input.files[0];
     input.value = "";
-    if (!file || !ready) return;
+    if (!file || !ready || running || busy) return;
+    busy = true; setControlsEnabled(false);
     const status = document.getElementById("status-rom");
     try {
       if (!window.crypto || !crypto.subtle) throw new Error("the page has to be opened over HTTPS (or from localhost) to read ROMs");
@@ -286,11 +426,11 @@
       status.className = "status";
       refreshArchiveStatus();
       showMessage(`Could not use ${file.name}: ${e.message}`, true);
-    }
+    } finally { busy = false; setControlsEnabled(!running && !stopped); }
   });
 
   startButton.addEventListener("click", () => {
-    if (running || !ready || stopped) return;
+    if (running || !ready || stopped || busy || startButton.disabled) return;
     running = true;
     setControlsEnabled(false);
     // Startup (and converting a ROM) blocks the page, so show what's happening first.
@@ -308,12 +448,17 @@
       }
       if (stopped) return;
       overlay.style.display = "none";
+      document.getElementById("web-tools").hidden = false;
       Module.canvas.focus();
     }, 50));
   });
 
   document.addEventListener("visibilitychange", () => { if (document.hidden && running) persist(); });
   window.addEventListener("pagehide", () => { if (running) persist(); });
+  Module.canvas.addEventListener("webglcontextlost", (event) => {
+    event.preventDefault();
+    stop("The browser lost the graphics context. Export your saves before reloading if storage is unavailable.");
+  });
 
   // While the game is on screen, keep the browser from acting on keys it uses (F5 reload, F11
   // fullscreen, Tab focus, Ctrl+R). F12 stays available for the developer tools.

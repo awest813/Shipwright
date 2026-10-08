@@ -1071,6 +1071,9 @@ bool OTRGlobals::HasOriginal() {
 }
 
 uint32_t OTRGlobals::GetInterpolationFPS() {
+#ifdef __EMSCRIPTEN__
+    return 60;
+#else
     if (CVarGetInteger(CVAR_SETTING("MatchRefreshRate"), 0)) {
         return Ship::Context::GetRawInstance()->GetWindow()->GetCurrentRefreshRate();
     } else if (CVarGetInteger(CVAR_VSYNC_ENABLED, 1) ||
@@ -1079,6 +1082,7 @@ uint32_t OTRGlobals::GetInterpolationFPS() {
                                   CVarGetInteger(CVAR_SETTING("InterpolationFPS"), 20));
     }
     return CVarGetInteger(CVAR_SETTING("InterpolationFPS"), 20);
+#endif
 }
 
 extern "C" void OTRMessage_Init();
@@ -1846,11 +1850,42 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
     ImGui::PopStyleColor();
 }
 
+#ifdef __EMSCRIPTEN__
+// The display list and interpolation records remain alive until the next simulation tick.
+// Keeping just the current list avoids copying the game's large graphics pools.
+static Gfx* webCommands = nullptr;
+
+extern "C" void Graph_WebPresentFrame(float interpolation) {
+    if (webCommands == nullptr) return;
+    auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(OTRGlobals::Instance->context->GetWindow());
+    if (wnd == nullptr) return;
+    wnd->HandleEvents();
+    wnd->SetTargetFps(60);
+    auto interpreter = wnd->GetInterpreterWeak().lock();
+    if (!interpreter) return;
+    if (GfxDebuggerIsDebugging()) interpolation = 1.0f;
+    // Animated texture segments are generated at GetInterpolationFPS(); select the matching
+    // segment even when a browser refresh was dropped rather than counting callbacks.
+    const int divisor = std::max<int>(R_UPDATE_RATE, 1);
+    interpreter->mInterpolationIndex = std::clamp<int>((int)std::round(interpolation * divisor) - 1, 0, divisor - 1);
+    interpreter->mInterpolationT = interpolation;
+    auto replacements = interpolation >= 1.0f ? std::unordered_map<Mtx*, MtxF>()
+                                              : FrameInterpolation_Interpolate(interpolation);
+    auto theme = static_cast<UIWidgets::Colors>(CVarGetInteger(CVAR_SETTING("Menu.Theme"), UIWidgets::Colors::LightBlue));
+    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, UIWidgets::ColorValues.at(theme));
+    bool presented = wnd->DrawAndRunGraphicsCommands(webCommands, replacements);
+    ImGui::PopStyleColor();
+    if (presented) {
+        EM_ASM({ if (Module.onFramePresented) Module.onFramePresented(); });
+    }
+}
+#endif
+
 // C->C++ Bridge
 extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
 #ifdef __EMSCRIPTEN__
-    // Each browser frame shows only the last draw, so present one frame per game tick for now.
-    int target_fps = 20;
+    webCommands = commands;
+    OTRAudio_ProcessFrame();
 #else
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
@@ -1859,7 +1894,6 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
 
     audio.cv_to_thread.notify_one();
     int target_fps = OTRGlobals::Instance->GetInterpolationFPS();
-#endif
     static int last_fps;
     static int last_update_rate;
     static int time;
@@ -1904,9 +1938,6 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
     last_fps = fps;
     last_update_rate = R_UPDATE_RATE;
 
-#ifdef __EMSCRIPTEN__
-    OTRAudio_ProcessFrame();
-#else
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
         while (audio.processing) {
