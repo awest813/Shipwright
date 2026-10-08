@@ -15,8 +15,13 @@ converted that ROM in Chromium, rendered the animated title sequence, opened the
 controller menus, and created a vanilla save through keyboard input. The original localhost
 preview has been replaced with that rebuilt engine. The opening Navi/Deku Tree scene renders
 and advances on input. The generated save was exported successfully with global save data and
-settings. Controllable gameplay, archive persistence after reload, and wider scene coverage
-remain to be verified.
+settings. The introduction completed and keyboard movement worked in Link's house, with spot
+presentation readings around 60 FPS. Contextual HUD text ("Grab") renders next to an object;
+an earlier blank button alone was not sufficient evidence of a rendering defect. The Skip Intro
+enhancement also loaded the restored file directly into Link's house.
+Reload restored the extracted archive as ready, and Start booted without loading a ROM again.
+The created file also appeared in file select after the restart, verifying archive and save
+persistence together. Wider scene coverage remains to be verified.
 
 Changes under runtime verification: browser-paced 60 Hz matrix interpolation with original
 simulation timing, high precision GLES shaders, save/settings backup transfer, `.o2r` mod upload,

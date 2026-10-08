@@ -368,9 +368,12 @@
   document.getElementById("fullscreen").addEventListener("click", async () => {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
-      else await Module.canvas.requestFullscreen();
+      else await document.documentElement.requestFullscreen();
       Module.canvas.focus();
-    } catch (e) { console.warn("Fullscreen unavailable", e); }
+    } catch (e) { showMessage("Fullscreen is unavailable in this browser. You can still play in the tab.", true); }
+  });
+  document.addEventListener("fullscreenchange", () => {
+    document.getElementById("fullscreen").textContent = document.fullscreenElement ? "Exit fullscreen" : "Fullscreen";
   });
 
   document.getElementById("backup-input").addEventListener("change", async (event) => {
