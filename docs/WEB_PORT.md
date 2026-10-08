@@ -124,17 +124,27 @@ position. Gameplay continued after loads. This covers same-room, in-memory state
 normal persistent game saving remains a separate workflow. Compact menus are being expanded
 to windows under 1000 CSS pixels; runtime verification of that new threshold is pending.
 
-A WebGL depth-to-RGBA readback is implemented and awaiting full-engine verification. Its
+A WebGL depth-to-RGBA readback is implemented. Its
 standalone C++/Wasm browser fixture passed all 27 checks: precision, single/batched queries, row coordinates,
 default framebuffer, out-of-bounds queries, and GL state restoration checks. A prototype that
 blitted individual depth pixels returned the wrong row on the tested renderer; the implemented
 path copies the full-size depth buffer before sampling. Its game performance and sun/lens-flare
-occlusion still need to be measured. Native renderer paths are unchanged. The fixture ships as
-`depth-test.html` in the next web artifact; its browser results are independent of the shell tests.
-Randomizer generation feedback is implemented and awaiting an updated engine: generation start,
-success and failure messages, disabled seed actions while generating, and persistence on finish.
-Shell tests exercise interruption of a performance sample, blocked imports and control recovery
-after generation failure.
+occlusion still need matched comparison. CI run 37731868844 passed all five jobs, and its full
+web engine loaded the cached vanilla save, exited Link's house, descended the ladder and moved
+through Kokiri Forest without captured browser graphics warnings. A 30-second outdoor sample
+reported scene 85 for all 1636 presentations: 54.52 FPS against 54.69 browser callbacks/s.
+Browser-callback p95 was 18.3 ms and maximum 162.7 ms; the sample includes occasional stalls.
+The report is `build-tools/performance-depth-engine-forest.json`. This verifies initial full-engine
+play, not sun occlusion accuracy or the 60 FPS target. Native renderer paths are unchanged.
+The fixture ships as `depth-test.html`; its browser results are independent of the 18 shell tests.
+Randomizer generation completed in that engine; the page retained the success message and
+restored seed import. A backup contains the new `02-40-10-20-62.json` spoiler (finalSeed
+1822069680, 442 locations). Generation still blocks main-thread inspection. Testing also exposed
+a path bug: generation writes into `/data/Randomizer`, but the native spoiler CVar used a relative
+`./Randomizer` path, so file select cleared it when checking from the process working directory.
+The web CVar now uses the same app-directory path as the writer; rebuilt-engine verification
+is pending. Shell tests cover sample interruption, blocked imports and control recovery after
+generation failure.
 
 This document began as an audit of the codebase (SoH `94f950f8`, libultraship `62e973a`,
 Torch `2ab12fe`). Sections 1 and 2 are that original audit and design, kept as a record; a few
