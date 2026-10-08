@@ -83,6 +83,8 @@ Import a compatible randomizer spoiler JSON before startup or through the runtim
 then create a new randomizer save in file select. The original JSON is included in save backups.
 Native seed generation remains in the in-game randomizer menu. It completed in Chromium testing,
 but currently blocks the main thread while generating; keep the tab open until it finishes.
+The toolbar reports generation start, completion or failure. Seed import and performance
+measurement are disabled while generation is running.
 
 The page has to be served over HTTPS or from `localhost` for ROM conversion, which needs the
 browser's crypto API.

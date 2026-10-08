@@ -65,12 +65,15 @@ are preserved locally in `build-tools/performance-link-house.json` and
 `build-tools/performance-kokiri-forest.json`. A new engine callback adds scene IDs for subsequent
 reports. Wider performance coverage and frame pacing remain to be investigated.
 The report now also records browser-frame timestamp intervals and completion delays; these
-additional fields await a runtime sample after the next reload. Neither callback timing measure
-proves GPU/compositor presentation deadlines on its own.
+additional fields were verified after reloading the gameplay checkpoint. A 30-second interior
+sample averaged 59.99 FPS: browser-frame p95 was 16.8 ms (maximum 33.4 ms), while draw-completion
+p95 was 21.6 ms and completion delay after the browser callback was 10.1 ms at p95. This shows
+why simulation/render completion jitter alone is insufficient evidence of a skipped display
+frame. Neither callback timing measure proves GPU/compositor presentation deadlines on its own.
 Vanilla gameplay transitioned into Kokiri Forest, rendered Saria's greeting, descended the
 ladder and traversed the outdoor area. The pause menu confirmed "Game saved"; an exported save
-contains savedSceneNum 85 (Kokiri Forest). Reloading this later gameplay checkpoint remains to
-be checked.
+contains savedSceneNum 85 (Kokiri Forest). After reload, that file appeared and resumed into
+playable gameplay in Link's house, the normal child-save spawn location; movement worked.
 
 Completion requires a playable scene, save/reload verification, rendering comparisons with the
 desktop build, frame-time measurements during gameplay, and checks of supported extras.
@@ -80,6 +83,10 @@ port 1, a multi-touch joystick and N64 buttons, a toolbar Settings button, and a
 menu below 600 pixels. Input tests verify short-tap buffering, simultaneous buttons, cancellation,
 signed stick packing and release/disable resets. A libultraship patch supplies the web-only input
 bridge; no desktop bindings are changed. Physical phone and controller checks are still pending.
+Randomizer generation feedback is implemented and awaiting an updated engine: generation start,
+success and failure messages, disabled seed actions while generating, and persistence on finish.
+Shell tests exercise interruption of a performance sample, blocked imports and control recovery
+after generation failure.
 
 This document began as an audit of the codebase (SoH `94f950f8`, libultraship `62e973a`,
 Torch `2ab12fe`). Sections 1 and 2 are that original audit and design, kept as a record; a few

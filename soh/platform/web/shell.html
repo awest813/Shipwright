@@ -37,7 +37,7 @@
   #touch-buttons button:last-child { grid-column: span 3; }
   body.touch-enabled #web-tools { bottom: auto; top: max(8px, env(safe-area-inset-top)); }
   body.native-menu-open #web-tools { top: auto; bottom: max(8px, env(safe-area-inset-bottom)); }
-  body.native-menu-open #web-tools > :not(#settings-game) { display: none; }
+  body.native-menu-open #web-tools > :not(#settings-game):not(#web-status) { display: none; }
   #extras { border-top: 1px solid #30363d; margin-top: 16px; padding-top: 12px; }
   #extras summary { cursor: pointer; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -119,6 +119,7 @@
   let benchmark = null, benchmarkTimeout = 0;
   let benchmarkReport = null;
   let lastRafTime = null;
+  let randomizerGenerating = false;
 
   function trackBrowserFrame(time) {
     lastRafTime = time;
@@ -160,7 +161,7 @@
 
   document.getElementById("benchmark-game").addEventListener("click", () => {
     if (benchmark) { finishBenchmark("cancelled"); return; }
-    if (!started || stopped || document.hidden || gameMenuVisible) return;
+    if (!started || stopped || document.hidden || gameMenuVisible || randomizerGenerating) return;
     const now = performance.now();
     benchmark = { startedAt: now, startedDate: new Date().toISOString(), lastFrame: now, frames: 0,
       intervals: [], browserIntervals: [], completionDelays: [], lastBrowserFrame: lastRafTime,
@@ -514,6 +515,23 @@
         Module._WebLoadRandomizerSeed();
       }
     },
+    onRandomizerGenerationStarted: () => {
+      randomizerGenerating = true;
+      finishBenchmark("randomizer generation");
+      document.getElementById("seed-game-input").disabled = true;
+      document.getElementById("benchmark-game").disabled = true;
+      showMessage("Generating a randomizer seed. Keep this tab open; the game pauses while generation runs.");
+    },
+    onRandomizerGenerationFinished: (success) => {
+      randomizerGenerating = false;
+      document.getElementById("seed-game-input").disabled = !started || stopped || busy;
+      document.getElementById("benchmark-game").disabled = !started || stopped;
+      frameTimes.length = 0; lastFrameReport = 0;
+      document.getElementById("fps").textContent = "Measuring FPS…";
+      showMessage(success ? "Seed generated. Choose a new randomizer file in file select." :
+        "Seed generation failed. Review your randomizer settings and try again.", !success);
+      persist();
+    },
     onFramePresented: (menuVisible = false, scene = null) => {
       if (gameMenuVisible !== menuVisible) {
         gameMenuVisible = menuVisible;
@@ -628,7 +646,7 @@
   for (const id of ["seed-input", "seed-game-input"]) {
     document.getElementById(id).addEventListener("change", async (event) => {
       const file = event.target.files[0]; event.target.value = "";
-      if (!file || !ready || stopped || busy) return;
+      if (!file || !ready || stopped || busy || randomizerGenerating) return;
       busy = true; setControlsEnabled(false);
       try {
         if (file.size > 16 * 1024 * 1024) throw new Error("seed exceeds 16 MB");
@@ -644,7 +662,7 @@
       } catch (e) { showMessage(`Could not import seed: ${e.message}`, true); }
       finally {
         busy = false; setControlsEnabled(!running && !stopped);
-        document.getElementById("seed-game-input").disabled = !started || stopped;
+        document.getElementById("seed-game-input").disabled = !started || stopped || randomizerGenerating;
         if (started && !stopped) Module.canvas.focus();
       }
     });

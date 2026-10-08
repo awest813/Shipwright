@@ -709,7 +709,11 @@ void SohMenu::AddMenuRandomizer() {
             GenerateRandomizer(CVarGetInteger(CVAR_RANDOMIZER_SETTING("ManualSeedEntry"), 0) ? seedString : "");
         })
         .PreFunc([](WidgetInfo& info) {
-            info.options->disabled = (gSaveContext.gameMode != GAMEMODE_FILE_SELECT) || GameInteractor::IsSaveLoaded();
+            info.options->disabled = IsRandoGenerating() || (gSaveContext.gameMode != GAMEMODE_FILE_SELECT) ||
+                                     GameInteractor::IsSaveLoaded();
+            info.options->disabledTooltip = IsRandoGenerating()
+                                                ? "A seed is already being generated."
+                                                : "Must be on File Select to generate a randomizer seed.";
         })
         .Options(ButtonOptions()
                      .Size(ImVec2(250.f, 0.f))

@@ -244,3 +244,20 @@ test('presentation report includes long stalls and marks interrupted runs incomp
   assert.equal(h.evaluate('benchmarkReport.sceneFrames.unknown'), 3);
   assert.match(h.elements.get('web-status').textContent, /incomplete/);
 });
+
+test('randomizer generation reports state, blocks seed import and restores controls on failure', async () => {
+  const h = harness(); h.evaluate('ready = true; started = true; running = true');
+  h.elements.get('benchmark-game').listeners.click();
+  h.evaluate('Module.onRandomizerGenerationStarted()');
+  assert.equal(h.evaluate('benchmarkReport.reason'), 'randomizer generation');
+  assert.equal(h.elements.get('seed-game-input').disabled, true);
+  assert.equal(h.elements.get('benchmark-game').disabled, true);
+  assert.match(h.elements.get('web-status').textContent, /Generating a randomizer seed/);
+  await h.elements.get('seed-game-input').listeners.change({ target: { files: [{ size: 35, text: async () => '{"version":"9.2.3","finalSeed":123}' }] } });
+  assert.equal(h.files.size, 0);
+  h.evaluate('Module.onRandomizerGenerationFinished(false)');
+  assert.equal(h.elements.get('seed-game-input').disabled, false);
+  assert.equal(h.elements.get('benchmark-game').disabled, false);
+  assert.match(h.elements.get('web-status').textContent, /generation failed/);
+  h.syncs.shift()(null);
+});

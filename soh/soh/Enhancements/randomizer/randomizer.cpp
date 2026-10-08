@@ -979,6 +979,14 @@ void GenerateRandomizerImgui(std::string seed = "") {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnGenerationCompletion>();
 
     randoGenerating = false;
+#ifdef __EMSCRIPTEN__
+    EM_ASM(
+        {
+            if (Module.onRandomizerGenerationFinished)
+                Module.onRandomizerGenerationFinished(!!$0);
+        },
+        ctx->IsSeedGenerated());
+#endif
 }
 
 bool IsRandoGenerating() {
@@ -1001,6 +1009,10 @@ bool GenerateRandomizer(std::string seed /*= ""*/) {
 #ifdef __EMSCRIPTEN__
     // No threads on the web build. Generate on the main thread a few game frames from now, so the
     // file select screen gets to show that generation started before the page blocks.
+    EM_ASM({
+        if (Module.onRandomizerGenerationStarted)
+            Module.onRandomizerGenerationStarted();
+    });
     emscripten_async_call(GenerateRandomizerDeferred, new std::string(seed), 150);
 #else
     randoThread = std::thread(&GenerateRandomizerImgui, seed);
