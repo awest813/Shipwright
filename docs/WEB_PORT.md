@@ -1,12 +1,12 @@
 # Web Port (Emscripten / WebAssembly): Audit & Plan
 
-Status: **Phases 0-2 implemented, gameplay not yet verified.** The web build compiles in CI
-(`soh-web` artifact), boots in Chromium, renders through WebGL2 and runs the SoH menus. The
-page converts the player's ROM into `oot.o2r` in the browser. Everything past the first scene
-load needs real game data and has not been play-tested yet. Build and usage instructions are
+Status: **Initial gameplay verified in Chromium; full fidelity/performance audit in progress.**
+The web build compiles in CI (`soh-web` artifact), converts a supported ROM, renders through
+WebGL2, runs the opening sequence and supports initial gameplay, saves and reload persistence.
+Wider scene, feature, browser and device coverage remains to be tested. Build and usage instructions are
 in [soh/platform/web/README.md](../soh/platform/web/README.md).
 
-### October 7, 2026 audit (in progress)
+### October 7–8, 2026 audit (in progress)
 
 The shipped CI baseline recognizes the supported USA Rev 2 ROM but fails extraction with
 `Torch produced no archive`. `Companion::Init` skips `Process` under Emscripten; the port now
@@ -32,8 +32,16 @@ asset bundles; run `node --test scripts/web-shell.test.cjs`.
 Observed presentation FPS in the title sequence and file select ranged from roughly 42 during
 startup to 58-60 after warmup, with pauses and dips during interaction. These are spot readings,
 not a sustained gameplay benchmark. A shell backup fixture also passed browser import/export
-round-trip verification. Newly added seed import and controller connection status still need
-testing with the matching rebuilt engine and physical hardware.
+round-trip verification. CI run 37722015279 passed all five jobs. Its web binary is now served
+with the latest shell: controller status is visible, the canvas fits at 4:3, and fullscreen
+entering/exiting keeps the browser tools available. Randomizer generation completed in the
+browser and produced a spoiler JSON (finalSeed 153512928). Exporting that JSON, importing it
+through the web toolbar, creating a new randomizer file and loading it into Link's house all
+succeeded. Generation blocked the main thread long enough to time out browser inspection;
+background generation and progress feedback remain polish work. Physical controller verification
+remains pending. Phone portrait (390×844) and landscape (844×390) viewport checks preserve the
+game's aspect ratio and keep the toolbar available. The native settings menu is cramped in
+portrait and needs a responsive layout; these checks do not establish mobile hardware support.
 
 The baseline is desktop Ship of Harkinian. The expanded acceptance scope includes Bluetooth/USB
 controllers, randomizer generation/import and saves, PC enhancements, and browser/device settings

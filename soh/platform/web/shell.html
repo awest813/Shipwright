@@ -23,7 +23,7 @@
   /* Visually hidden but focusable, so the labels work from the keyboard */
   input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
   #message { min-height: 1.5em; font-size: 13px; }
-  #message.error { color: var(--error); }
+  #message.error, #web-status.error { color: var(--error); }
   code { background: #0d1117; padding: 1px 4px; border-radius: 4px; }
   #web-tools { position: fixed; bottom: max(8px, env(safe-area-inset-bottom)); right: max(8px, env(safe-area-inset-right)); z-index: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; max-width: calc(100vw - 16px); }
   #web-tools[hidden] { display: none; }
@@ -89,6 +89,7 @@
   const frameTimes = [];
   let lastFrameReport = 0;
   let canvasAspect = 0;
+  let statusTimeout = 0;
 
   function updateControllers() {
     let text;
@@ -145,7 +146,16 @@
   function showMessage(text, isError) {
     message.textContent = text;
     message.className = isError ? "error" : "";
-    if (running) document.getElementById("web-status").textContent = text;
+    clearTimeout(statusTimeout);
+    if (running) {
+      const status = document.getElementById("web-status");
+      status.textContent = text;
+      status.className = isError ? "status error" : "status";
+      // Keep errors available to read, but let completed actions leave the play area.
+      if (text && !isError && started && !stopped) {
+        statusTimeout = setTimeout(() => { status.textContent = ""; }, 15000);
+      }
+    }
   }
 
   function setControlsEnabled(enabled) {
@@ -294,7 +304,7 @@
         const err = await new Promise(resolve => FS.syncfs(false, resolve));
         if (err) {
           console.error("Saving to browser storage failed", err);
-          if (storageWorks && !running) showMessage("Your browser didn't let this page store files, so they will be lost when the page closes.", true);
+          if (storageWorks) showMessage("Browser storage failed. Export your saves before closing this tab; recent changes may not survive a reload.", true);
           storageWorks = false;
           success = false;
         }
@@ -364,7 +374,10 @@
   };
 
   document.getElementById("backup").addEventListener("click", exportBackup);
-  document.getElementById("backup-game").addEventListener("click", exportBackup);
+  document.getElementById("backup-game").addEventListener("click", () => {
+    exportBackup();
+    Module.canvas.focus();
+  });
   document.getElementById("fullscreen").addEventListener("click", async () => {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
@@ -432,7 +445,7 @@
         if (!seed || typeof seed !== "object" || !("version" in seed) || !("finalSeed" in seed)) throw new Error("select a randomizer spoiler JSON containing version and finalSeed");
         FS.mkdirTree(`${DATA_DIR}/Randomizer`);
         FS.writeFile(`${DATA_DIR}/Randomizer/imported-seed.json`, new TextEncoder().encode(text));
-        await persist();
+        if (!await persist()) return;
         if (started) {
           if (typeof Module._WebLoadRandomizerSeed !== "function" || !Module._WebLoadRandomizerSeed()) throw new Error("the game could not accept this seed (wait for any current seed generation to finish)");
           showMessage("Seed imported. Return to file select and choose a new randomizer save.");
@@ -441,6 +454,7 @@
       finally {
         busy = false; setControlsEnabled(!running && !stopped);
         document.getElementById("seed-game-input").disabled = !started || stopped;
+        if (started && !stopped) Module.canvas.focus();
       }
     });
   }

@@ -148,4 +148,18 @@ test('seed imports persist the original JSON and notify the running engine', asy
   assert.equal(Buffer.from(h.files.get('/data/Randomizer/imported-seed.json')).toString(), text);
   assert.equal(h.evaluate('seedCalls'), 1);
   assert.match(h.elements.get('web-status').textContent, /new randomizer save/);
+  h.evaluate('clearTimeout(statusTimeout)');
+});
+
+test('a seed storage failure does not report successful engine import', async () => {
+  const h = harness(); h.evaluate('ready = true; started = true; running = true; let seedCalls = 0; Module._WebLoadRandomizerSeed = () => { seedCalls++; return 1; };');
+  const text = '{"version":"9.2.3","finalSeed":"12345"}';
+  const imported = h.elements.get('seed-game-input').listeners.change({ target: { files: [{ size: text.length, text: async () => text }] } });
+  await new Promise(resolve => setImmediate(resolve));
+  h.syncs.shift()(Error('storage full'));
+  await imported;
+  assert.equal(h.evaluate('seedCalls'), 0);
+  assert.doesNotMatch(h.elements.get('web-status').textContent || '', /Seed imported/);
+  assert.match(h.elements.get('web-status').textContent, /Browser storage failed/);
+  assert.equal(h.elements.get('seed-game-input').disabled, false);
 });
