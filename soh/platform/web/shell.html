@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ship of Harkinian</title>
 <style>
   :root { color-scheme: dark; --bg: #0b0f14; --panel: #151b23; --text: #e6edf3; --muted: #8b949e; --accent: #3fb950; --error: #f85149; }
@@ -27,6 +27,17 @@
   code { background: #0d1117; padding: 1px 4px; border-radius: 4px; }
   #web-tools { position: fixed; bottom: max(8px, env(safe-area-inset-bottom)); right: max(8px, env(safe-area-inset-right)); z-index: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; max-width: calc(100vw - 16px); }
   #web-tools[hidden] { display: none; }
+  #touch-controls { position: fixed; inset: 0; pointer-events: none; z-index: 3; user-select: none; -webkit-user-select: none; }
+  #touch-controls[hidden] { display: none; }
+  #touch-stick { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); width: 120px; height: 120px; border: 2px solid #ffffff60; border-radius: 50%; background: #1118; touch-action: none; pointer-events: auto; }
+  #touch-stick-knob { position: absolute; left: 38px; top: 38px; width: 44px; height: 44px; border-radius: 50%; background: #ffffff70; pointer-events: none; }
+  #touch-buttons { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(3, 44px); gap: 6px; pointer-events: auto; }
+  #touch-buttons button { padding: 0; height: 44px; background: #21262dcc; touch-action: none; }
+  #touch-buttons button.pressed { background: #1a7f37cc; }
+  #touch-buttons button:last-child { grid-column: span 3; }
+  body.touch-enabled #web-tools { bottom: auto; top: max(8px, env(safe-area-inset-top)); }
+  body.native-menu-open #web-tools { top: auto; bottom: max(8px, env(safe-area-inset-bottom)); }
+  body.native-menu-open #web-tools > :not(#settings-game) { display: none; }
   #extras { border-top: 1px solid #30363d; margin-top: 16px; padding-top: 12px; }
   #extras summary { cursor: pointer; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -34,7 +45,16 @@
 </head>
 <body>
 <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
-<div id="web-tools" hidden><span id="web-status" class="status" role="status"></span><span id="controller-game-status" class="status" role="status"></span><span id="fps" class="status" aria-live="off">Measuring FPS…</span><button id="fullscreen">Fullscreen</button><button id="backup-game">Export saves</button><label class="button">Import seed<input id="seed-game-input" type="file" accept=".json" disabled></label></div>
+<div id="web-tools" hidden><span id="web-status" class="status" role="status"></span><span id="controller-game-status" class="status" role="status"></span><span id="fps" class="status" aria-live="off">Measuring FPS…</span><button id="fullscreen">Fullscreen</button><button id="settings-game">Settings</button><button id="touch-toggle" aria-pressed="false">Touch controls</button><button id="backup-game">Export saves</button><label class="button">Import seed<input id="seed-game-input" type="file" accept=".json" disabled></label></div>
+<div id="touch-controls" hidden aria-label="Touch game controls">
+  <div id="touch-stick" role="group" aria-label="Movement joystick"><span id="touch-stick-knob"></span></div>
+  <div id="touch-buttons">
+    <button data-pad="32" aria-label="L shoulder">L</button><button data-pad="8192" aria-label="Z target">Z</button><button data-pad="16" aria-label="R shoulder">R</button>
+    <button data-pad="2" aria-label="C left">C←</button><button data-pad="8" aria-label="C up">C↑</button><button data-pad="1" aria-label="C right">C→</button>
+    <button data-pad="16384" aria-label="B button">B</button><button data-pad="4" aria-label="C down">C↓</button><button data-pad="32768" aria-label="A button">A</button>
+    <button data-pad="4096" aria-label="Start button">Start</button>
+  </div>
+</div>
 <div id="overlay">
   <div id="panel">
     <h1>Ship of Harkinian</h1>
@@ -90,6 +110,85 @@
   let lastFrameReport = 0;
   let canvasAspect = 0;
   let statusTimeout = 0;
+  let touchEnabled = false;
+  let gameMenuVisible = false;
+  let touchLatched = 0;
+  const touchPointers = new Map();
+  let stickPointer = null;
+  let stickX = 0, stickY = 0;
+
+  function resetTouchInput() {
+    touchPointers.clear(); touchLatched = 0;
+    stickPointer = null; stickX = 0; stickY = 0;
+    document.getElementById("touch-stick-knob").style.transform = "";
+    for (const button of document.querySelectorAll("[data-pad]")) button.classList.remove("pressed");
+  }
+
+  function consumeTouchInput(blocked) {
+    if (blocked || gameMenuVisible || !touchEnabled || !started || stopped) { resetTouchInput(); return 0; }
+    let buttons = touchLatched;
+    for (const mask of touchPointers.values()) buttons |= mask;
+    touchLatched = 0;
+    return (buttons | (stickPointer !== null ? 0x80 : 0) | ((stickX & 255) << 16) | ((stickY & 255) << 24)) | 0;
+  }
+
+  function setTouchEnabled(enabled) {
+    touchEnabled = enabled; resetTouchInput();
+    document.getElementById("touch-controls").hidden = !enabled || gameMenuVisible;
+    document.getElementById("touch-toggle").setAttribute("aria-pressed", String(enabled));
+    document.body.classList.toggle("touch-enabled", enabled);
+    Module.canvas.focus();
+  }
+
+  document.getElementById("touch-toggle").addEventListener("click", () => {
+    if (typeof Module._WebTouchInputSupported !== "function") {
+      showMessage("Touch input needs the latest web engine. Reload after updating the game files.", true);
+      return;
+    }
+    setTouchEnabled(!touchEnabled);
+  });
+  for (const button of document.querySelectorAll("[data-pad]")) {
+    const mask = Number(button.dataset.pad);
+    button.addEventListener("pointerdown", event => {
+      if (!touchEnabled || gameMenuVisible || !started || stopped) return;
+      event.preventDefault(); button.setPointerCapture(event.pointerId);
+      touchPointers.set(event.pointerId, mask); touchLatched |= mask;
+      button.classList.add("pressed");
+    });
+    for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) button.addEventListener(type, event => {
+      if (!touchPointers.has(event.pointerId)) return;
+      touchPointers.delete(event.pointerId);
+      if (![...touchPointers.values()].includes(mask)) {
+        button.classList.remove("pressed");
+        if (type !== "pointerup") touchLatched &= ~mask;
+      }
+    });
+  }
+  const touchStick = document.getElementById("touch-stick");
+  function moveTouchStick(event) {
+    const rect = touchStick.getBoundingClientRect();
+    let x = (event.clientX - rect.left - rect.width / 2) / (rect.width / 2);
+    let y = (rect.top + rect.height / 2 - event.clientY) / (rect.height / 2);
+    const length = Math.hypot(x, y);
+    if (length > 1) { x /= length; y /= length; }
+    // Small center movements stay neutral; rescale the remaining travel to full stick range.
+    const scale = length < 0.12 ? 0 : (Math.min(length, 1) - 0.12) / (0.88 * Math.min(length, 1));
+    stickX = Math.round(x * scale * 85); stickY = Math.round(y * scale * 85);
+    document.getElementById("touch-stick-knob").style.transform = `translate(${x * 36}px, ${-y * 36}px)`;
+  }
+  touchStick.addEventListener("pointerdown", event => {
+    if (!touchEnabled || gameMenuVisible || !started || stopped || stickPointer !== null) return;
+    event.preventDefault(); touchStick.setPointerCapture(event.pointerId);
+    stickPointer = event.pointerId; moveTouchStick(event);
+  });
+  touchStick.addEventListener("pointermove", event => { if (event.pointerId === stickPointer) moveTouchStick(event); });
+  for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) touchStick.addEventListener(type, event => {
+    if (event.pointerId !== stickPointer) return;
+    stickPointer = null; stickX = 0; stickY = 0;
+    document.getElementById("touch-stick-knob").style.transform = "";
+  });
+  window.addEventListener("blur", resetTouchInput);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) resetTouchInput(); });
 
   function updateControllers() {
     let text;
@@ -316,6 +415,7 @@
   }
 
   var Module = {
+    consumeWebInput: consumeTouchInput,
     canvas: document.getElementById("canvas"),
     noInitialRun: true,
     preRun: [() => {
@@ -348,7 +448,13 @@
         Module._WebLoadRandomizerSeed();
       }
     },
-    onFramePresented: () => {
+    onFramePresented: (menuVisible = false) => {
+      if (gameMenuVisible !== menuVisible) {
+        gameMenuVisible = menuVisible;
+        document.body.classList.toggle("native-menu-open", menuVisible);
+        resetTouchInput();
+        document.getElementById("touch-controls").hidden = !touchEnabled || menuVisible;
+      }
       const aspect = Module.canvas.width / Module.canvas.height;
       if (aspect > 0 && aspect !== canvasAspect) {
         Module.canvas.style.setProperty("--canvas-aspect", aspect);
@@ -374,6 +480,11 @@
   };
 
   document.getElementById("backup").addEventListener("click", exportBackup);
+  document.getElementById("settings-game").addEventListener("click", () => {
+    if (typeof Module._WebToggleMenu === "function") Module._WebToggleMenu();
+    else showMessage("Press Esc to open settings. Touch settings needs the latest web engine.", true);
+    Module.canvas.focus();
+  });
   document.getElementById("backup-game").addEventListener("click", () => {
     exportBackup();
     Module.canvas.focus();
@@ -542,6 +653,7 @@
       document.getElementById("web-tools").hidden = false;
       document.getElementById("web-status").textContent = "";
       document.getElementById("seed-game-input").disabled = false;
+      if (typeof Module._WebTouchInputSupported === "function" && window.matchMedia && window.matchMedia("(pointer: coarse)").matches) setTouchEnabled(true);
       Module.canvas.focus();
     }, 50));
   });

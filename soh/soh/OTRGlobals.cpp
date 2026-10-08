@@ -1854,14 +1854,24 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
 }
 
 #ifdef __EMSCRIPTEN__
+extern "C" EMSCRIPTEN_KEEPALIVE int WebTouchInputSupported(void) {
+    return 1;
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE void WebToggleMenu(void) {
+    OTRGlobals::Instance->context->GetWindow()->GetGui()->GetMenu()->ToggleVisibility();
+}
+
 // The display list and interpolation records remain alive until the next simulation tick.
 // Keeping just the current list avoids copying the game's large graphics pools.
 static Gfx* webCommands = nullptr;
 
 extern "C" void Graph_WebPresentFrame(float interpolation) {
-    if (webCommands == nullptr) return;
+    if (webCommands == nullptr)
+        return;
     auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(OTRGlobals::Instance->context->GetWindow());
-    if (wnd == nullptr) return;
+    if (wnd == nullptr)
+        return;
     wnd->HandleEvents();
     wnd->SetTargetFps(60);
     auto interpreter = wnd->GetInterpreterWeak().lock();
@@ -1879,7 +1889,8 @@ extern "C" void Graph_WebPresentFrame(float interpolation) {
     bool presented = wnd->DrawAndRunGraphicsCommands(webCommands, replacements);
     ImGui::PopStyleColor();
     if (presented) {
-        EM_ASM({ if (Module.onFramePresented) Module.onFramePresented(); });
+        const bool menuVisible = wnd->GetGui()->GetMenuOrMenubarVisible();
+        EM_ASM({ if (Module.onFramePresented) Module.onFramePresented(!!$0); }, menuVisible);
     }
 }
 #endif

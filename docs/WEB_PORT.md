@@ -54,6 +54,12 @@ The 94% fidelity and sustained 60 FPS targets have **not been measured or achiev
 Completion requires a playable scene, save/reload verification, rendering comparisons with the
 desktop build, frame-time measurements during gameplay, and checks of supported extras.
 
+New mobile changes awaiting rebuilt runtime verification: direct touch input into controller
+port 1, a multi-touch joystick and N64 buttons, a toolbar Settings button, and a compact native
+menu below 600 pixels. Input tests verify short-tap buffering, simultaneous buttons, cancellation,
+signed stick packing and release/disable resets. A libultraship patch supplies the web-only input
+bridge; no desktop bindings are changed. Physical phone and controller checks are still pending.
+
 This document began as an audit of the codebase (SoH `94f950f8`, libultraship `62e973a`,
 Torch `2ab12fe`). Sections 1 and 2 are that original audit and design, kept as a record; a few
 details differ from what was built. Section 3 tracks what has actually been done, and section 6
@@ -298,7 +304,7 @@ Both are submodules owned by other repos. Land those changes upstream
 - Sustained 60 FPS benchmarks and matched desktop rendering/gameplay comparisons.
 - Proper `GetPixelDepth` (depth-to-RGBA pass) and an MSAA path that WebGL2 can resolve.
 - Runtime coverage of mods and enhancement combinations; a Web Speech text-to-speech backend.
-- Mobile/touch controls.
+- Runtime and hardware validation of mobile/touch controls and the compact settings menu.
 - A pthreads variant (COOP/COEP) for audio/render overlap and WasmFS + OPFS.
 - WebSocket transport for Anchor; Crowd Control and Sail stay desktop-only.
 - Upstreaming the libultraship and Torch patches.

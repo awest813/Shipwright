@@ -64,9 +64,16 @@ configure bindings in Settings > Controls. Connection status reports browser det
 does not verify the engine's mappings or rumble. Defaults: Space = Start, X = A, C = B,
 WASD = movement, Z = target, arrow keys = C buttons, Esc = settings.
 
+**Touch controls** toggles an on-screen movement joystick and N64 buttons. They also appear
+automatically on browsers reporting a coarse pointer. Use **Settings** to open the in-game menu;
+touch controls hide while that menu is open. At narrow widths, category and section selectors
+leave the settings the full available width. These controls require matching updated shell and
+engine files; their device compatibility is still being tested.
+
 Import a compatible randomizer spoiler JSON before startup or through the runtime toolbar,
 then create a new randomizer save in file select. The original JSON is included in save backups.
-Native seed generation remains in the in-game randomizer menu and needs browser verification.
+Native seed generation remains in the in-game randomizer menu. It completed in Chromium testing,
+but currently blocks the main thread while generating; keep the tab open until it finishes.
 
 The page has to be served over HTTPS or from `localhost` for ROM conversion, which needs the
 browser's crypto API.

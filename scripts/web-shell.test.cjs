@@ -9,21 +9,26 @@ function harness() {
   const elements = new Map();
   function element(id) {
     if (!elements.has(id)) elements.set(id, {
-      style: {}, classList: { toggle() {} }, listeners: {}, disabled: false, dataset: {},
+      style: {}, classList: { toggle() {}, add() {}, remove() {} }, listeners: {}, disabled: false, dataset: {},
       addEventListener(name, fn) { this.listeners[name] = fn; }, focus() {}, click() {},
+      setAttribute(name, value) { this[name] = value; }, setPointerCapture() {},
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 120, height: 120 }),
     });
     return elements.get(id);
   }
   const files = new Map();
   const dirs = new Set(['/data', '/data/mods', '/app/assets']);
   const syncs = [];
+  const padButtons = [32, 8192, 16, 2, 8, 1, 16384, 4, 32768, 4096].map(mask => {
+    const button = element('pad-' + mask); button.dataset.pad = String(mask); return button;
+  });
   const context = vm.createContext({
     console, Uint8Array, DataView, TextDecoder, TextEncoder, Blob, Response, DecompressionStream,
     setTimeout, clearTimeout, setInterval, performance,
     btoa: text => Buffer.from(text, 'binary').toString('base64'),
     atob: text => { if (!/^[A-Za-z0-9+/]*={0,2}$/.test(text)) throw Error('Invalid base64'); return Buffer.from(text, 'base64').toString('binary'); },
     URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
-    document: { getElementById: element, querySelectorAll: () => [], createElement: () => element('download'), addEventListener() {} },
+    document: { body: element('body'), getElementById: element, querySelectorAll: selector => selector === '[data-pad]' ? padButtons : [], createElement: () => element('download'), addEventListener() {} },
     window: { addEventListener() {} }, navigator: {}, WebAssembly,
     FS: {
       analyzePath: path => ({ exists: files.has(path) || dirs.has(path) }),
@@ -162,4 +167,39 @@ test('a seed storage failure does not report successful engine import', async ()
   assert.doesNotMatch(h.elements.get('web-status').textContent || '', /Seed imported/);
   assert.match(h.elements.get('web-status').textContent, /Browser storage failed/);
   assert.equal(h.elements.get('seed-game-input').disabled, false);
+});
+
+test('touch taps survive one poll, simultaneous buttons hold and cancellation releases', () => {
+  const h = harness(); h.evaluate('started = true; setTouchEnabled(true)');
+  const event = pointerId => ({ pointerId, preventDefault() {} });
+  const a = h.elements.get('pad-32768'), b = h.elements.get('pad-16384');
+  a.listeners.pointerdown(event(1)); a.listeners.pointerup(event(1));
+  // lost capture after pointerup must not discard a quick tap waiting for a poll.
+  a.listeners.lostpointercapture(event(1));
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 32768);
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 0);
+  a.listeners.pointerdown(event(2)); b.listeners.pointerdown(event(3));
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 49152);
+  b.listeners.pointercancel(event(3));
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 32768);
+  assert.equal(h.evaluate('Module.consumeWebInput(true)'), 0);
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 0);
+});
+
+test('touch stick clamps diagonals, packs signed axes and resets on release or disable', () => {
+  const h = harness(); h.evaluate('started = true; setTouchEnabled(true)');
+  const stick = h.elements.get('touch-stick');
+  stick.listeners.pointerdown({ pointerId: 7, clientX: 180, clientY: -60, preventDefault() {} });
+  const value = h.evaluate('Module.consumeWebInput(false)');
+  assert.equal(value & 0x80, 0x80);
+  assert.equal((value >> 16) & 255, 60); assert.equal((value >>> 24) & 255, 60);
+  stick.listeners.pointermove({ pointerId: 7, clientX: 0, clientY: 120 });
+  const negative = h.evaluate('Module.consumeWebInput(false)');
+  assert.equal((negative << 8) >> 24, -60); assert.equal(negative >> 24, -60);
+  stick.listeners.pointerup({ pointerId: 7 });
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 0);
+  stick.listeners.pointerdown({ pointerId: 8, clientX: 60, clientY: 60, preventDefault() {} });
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 0x80);
+  h.evaluate('setTouchEnabled(false)');
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 0);
 });

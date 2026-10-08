@@ -323,7 +323,14 @@ void Menu::MenuDrawItem(WidgetInfo& widget, UIWidgets::Colors menuThemeIndex) {
     }
 
     if (widget.sameLine) {
+#ifdef __EMSCRIPTEN__
+        // A desktop row can exceed the entire portrait viewport.
+        if (ImGui::GetMainViewport()->WorkSize.x >= 600) {
+            ImGui::SameLine();
+        }
+#else
         ImGui::SameLine();
+#endif
     }
 
     try {
@@ -668,6 +675,90 @@ void Menu::DrawElement() {
     ImGuiStyle& style = ImGui::GetStyle();
     windowHeight = window->WorkRect.GetHeight();
     windowWidth = window->WorkRect.GetWidth();
+
+#ifdef __EMSCRIPTEN__
+    if (windowWidth < 600) {
+        // Portrait browsers need the width occupied by the desktop sidebar for the settings.
+        std::string headerIndex = CVarGetString(headerCvar, "Settings");
+        if (!menuEntries.contains(headerIndex)) {
+            headerIndex = menuOrder.front();
+        }
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::BeginCombo("##MenuCategory", headerIndex.c_str())) {
+            for (const auto& label : menuOrder) {
+                if (ImGui::Selectable(label.c_str(), headerIndex == label)) {
+                    headerIndex = label;
+                    menuSearch.Clear();
+                    CVarSetString(headerCvar, label.c_str());
+                    CVarSave();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        auto& mainEntry = menuEntries.at(headerIndex);
+        std::string sectionIndex = CVarGetString(mainEntry.sidebarCvar, "");
+        if (!mainEntry.sidebars.contains(sectionIndex)) {
+            sectionIndex = mainEntry.sidebarOrder.front();
+        }
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::BeginCombo("##MenuSection", sectionIndex.c_str())) {
+            for (const auto& label : mainEntry.sidebarOrder) {
+                if (ImGui::Selectable(label.c_str(), sectionIndex == label)) {
+                    sectionIndex = label;
+                    menuSearch.Clear();
+                    CVarSetString(mainEntry.sidebarCvar, label.c_str());
+                    CVarSave();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        menuSearch.Draw("Search##CompactMenu",
+                        ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Search").x - style.ItemInnerSpacing.x);
+        if (ImGui::Button("Close")) {
+            ToggleVisibility();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset")) {
+            std::reinterpret_pointer_cast<Ship::ConsoleWindow>(
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetGuiWindow("Console"))
+                ->Dispatch("reset");
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Quit")) {
+            SohGui::mModalWindow->RegisterPopup(
+                "Quit SoH", "Are you sure you want to quit SoH?", "Quit", "Cancel",
+                []() { Ship::Context::GetRawInstance()->GetWindow()->Close(); }, nullptr);
+        }
+        ImGui::Separator();
+        ImGui::BeginChild("CompactMenuSettings", { 0, 0 });
+        std::string query = menuSearch.InputBuf;
+        query.erase(std::remove(query.begin(), query.end(), ' '), query.end());
+        if (!query.empty()) {
+            if (DrawSearchResults(query) == 0) {
+                ImGui::TextUnformatted("No results found");
+            }
+        } else {
+            auto& updates = MenuInit::GetUpdateFuncs();
+            if (updates.contains(mainEntry.label) && updates.at(mainEntry.label).contains(sectionIndex)) {
+                for (auto& update : updates.at(mainEntry.label).at(sectionIndex)) {
+                    update();
+                }
+            }
+            for (auto& column : mainEntry.sidebars.at(sectionIndex).columnWidgets) {
+                for (auto& widget : column) {
+                    MenuDrawItem(widget, menuThemeIndex);
+                }
+            }
+        }
+        ImGui::EndChild();
+        if (!popout) {
+            ImGui::PopStyleVar();
+        }
+        freshOpen = false;
+        ImGui::End();
+        return;
+    }
+#endif
 
     ImGui::PushFont(OTRGlobals::Instance->fontStandardLargest);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 8.0f));
