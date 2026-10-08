@@ -60,6 +60,9 @@ simulates at the original game tick rate; 60 FPS uses matrix interpolation.
 
 Use **Measure FPS** during gameplay for a 30-second presentation sample, then **Export FPS
 report** to save the average FPS, frame-time percentiles, stalls and rendering dimensions.
+Reports distinguish draw-completion intervals from browser-frame timestamp intervals and include
+completion delay after the browser callback. This helps identify simulation work or callback
+jitter without treating it as proof of a missed displayed frame.
 Keep the tab visible and continue playing during the sample. Hidden-tab or cancelled reports
 are marked incomplete. These measurements describe successful presentation callbacks; they
 do not establish rendering accuracy or GPU execution time.

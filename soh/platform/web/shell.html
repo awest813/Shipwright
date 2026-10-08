@@ -118,6 +118,12 @@
   let stickX = 0, stickY = 0;
   let benchmark = null, benchmarkTimeout = 0;
   let benchmarkReport = null;
+  let lastRafTime = null;
+
+  function trackBrowserFrame(time) {
+    lastRafTime = time;
+    if (started && !stopped) requestAnimationFrame(trackBrowserFrame);
+  }
 
   function finishBenchmark(reason = "completed") {
     if (!benchmark) return;
@@ -125,12 +131,19 @@
     const now = performance.now(), durationMs = now - benchmark.startedAt;
     const sorted = benchmark.intervals.slice().sort((a, b) => a - b);
     const percentile = fraction => sorted.length ? sorted[Math.ceil(sorted.length * fraction) - 1] : null;
+    const summarize = samples => {
+      const values = samples.slice().sort((a, b) => a - b);
+      const p = fraction => values.length ? values[Math.ceil(values.length * fraction) - 1] : null;
+      return { samples: values.length, p50: p(0.5), p95: p(0.95), p99: p(0.99), max: values.at(-1) ?? null };
+    };
     benchmarkReport = {
       format: "shipwright-web-performance", version: 1, reason,
       startedAt: benchmark.startedDate, durationMs, targetFps: 60,
       presentedFrames: benchmark.frames, averageFps: durationMs > 0 ? benchmark.frames * 1000 / durationMs : 0,
       frameTimeMs: { p50: percentile(0.5), p95: percentile(0.95), p99: percentile(0.99), max: sorted.at(-1) ?? null },
       timeSinceLastPresentationMs: now - benchmark.lastFrame,
+      browserFrameTimeMs: summarize(benchmark.browserIntervals),
+      completionAfterBrowserFrameMs: summarize(benchmark.completionDelays),
       overBudgetFrames: sorted.filter(ms => ms > 1000 / 60 + 2).length,
       budgetWithJitterMs: 1000 / 60 + 2, menuFrames: benchmark.menuFrames,
       sceneFrames: benchmark.sceneFrames,
@@ -150,7 +163,8 @@
     if (!started || stopped || document.hidden || gameMenuVisible) return;
     const now = performance.now();
     benchmark = { startedAt: now, startedDate: new Date().toISOString(), lastFrame: now, frames: 0,
-      intervals: [], menuFrames: 0, sceneFrames: {} };
+      intervals: [], browserIntervals: [], completionDelays: [], lastBrowserFrame: lastRafTime,
+      menuFrames: 0, sceneFrames: {} };
     benchmarkReport = null;
     document.getElementById("benchmark-report").hidden = true;
     document.getElementById("benchmark-game").textContent = "Cancel FPS measurement";
@@ -495,6 +509,7 @@
       started = true;
       document.getElementById("settings-game").disabled = typeof Module._WebToggleMenu !== "function";
       document.getElementById("touch-toggle").disabled = typeof Module._WebTouchInputSupported !== "function";
+      requestAnimationFrame(trackBrowserFrame);
       if (hasFile(`${DATA_DIR}/Randomizer/imported-seed.json`) && typeof Module._WebLoadRandomizerSeed === "function") {
         Module._WebLoadRandomizerSeed();
       }
@@ -515,6 +530,13 @@
       if (benchmark) {
         benchmark.intervals.push(now - benchmark.lastFrame);
         benchmark.lastFrame = now; benchmark.frames++;
+        if (lastRafTime !== null) {
+          if (benchmark.lastBrowserFrame !== null && lastRafTime > benchmark.lastBrowserFrame) {
+            benchmark.browserIntervals.push(lastRafTime - benchmark.lastBrowserFrame);
+          }
+          benchmark.lastBrowserFrame = lastRafTime;
+          benchmark.completionDelays.push(now - lastRafTime);
+        }
         if (menuVisible) benchmark.menuFrames++;
         const sceneId = Number.isInteger(scene) ? String(scene) : "unknown";
         benchmark.sceneFrames[sceneId] = (benchmark.sceneFrames[sceneId] || 0) + 1;

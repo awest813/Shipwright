@@ -211,7 +211,7 @@ test('timed presentation report measures actual frame times and records scene sc
   h.elements.get('benchmark-game').listeners.click();
   for (let i = 1; i <= 1800; i++) {
     h.context.now = i * 1000 / 60;
-    h.evaluate('Module.onFramePresented(false, 52)');
+    h.evaluate('lastRafTime = performance.now() - 5; Module.onFramePresented(false, 52)');
   }
   h.evaluate('finishBenchmark()');
   assert.equal(h.evaluate('benchmarkReport.averageFps'), 60);
@@ -220,6 +220,8 @@ test('timed presentation report measures actual frame times and records scene sc
   assert.equal(h.evaluate('benchmarkReport.menuFrames'), 0);
   assert.equal(h.evaluate('benchmarkReport.overBudgetFrames'), 0);
   assert.ok(Math.abs(h.evaluate('benchmarkReport.frameTimeMs.p95') - 1000 / 60) < 1e-8);
+  assert.ok(Math.abs(h.evaluate('benchmarkReport.browserFrameTimeMs.p95') - 1000 / 60) < 1e-8);
+  assert.equal(h.evaluate('benchmarkReport.completionAfterBrowserFrameMs.p95'), 5);
   h.evaluate('clearTimeout(statusTimeout)');
 });
 

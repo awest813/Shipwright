@@ -64,6 +64,9 @@ scene IDs in the report, so scope was established by screenshots and visible gam
 are preserved locally in `build-tools/performance-link-house.json` and
 `build-tools/performance-kokiri-forest.json`. A new engine callback adds scene IDs for subsequent
 reports. Wider performance coverage and frame pacing remain to be investigated.
+The report now also records browser-frame timestamp intervals and completion delays; these
+additional fields await a runtime sample after the next reload. Neither callback timing measure
+proves GPU/compositor presentation deadlines on its own.
 Vanilla gameplay transitioned into Kokiri Forest, rendered Saria's greeting, descended the
 ladder and traversed the outdoor area. The pause menu confirmed "Game saved"; an exported save
 contains savedSceneNum 85 (Kokiri Forest). Reloading this later gameplay checkpoint remains to
