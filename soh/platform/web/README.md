@@ -1,4 +1,4 @@
-# Web build (experimental)
+# Ship of Harkinian — Web edition (experimental)
 
 Ship of Harkinian compiled to WebAssembly with Emscripten. `docs/WEB_PORT.md` in the repository has
 the audit, design, progress and roadmap.
@@ -7,15 +7,76 @@ Current state: single-threaded, WebGL2, browser-paced interpolation targeting 60
 the player's ROM into `oot.o2r` / `oot-mq.o2r` in the browser, or accepts archives made by desktop SoH
 of the same version.
 
-## Getting a build
+## Play a downloaded build
 
-CI builds the web version on every push (`build-web` in `.github/workflows/generate-builds.yml`)
-and uploads it as the `soh-web` artifact. Serve its contents over HTTP and open `index.html`.
+Download the **soh-web** artifact from a successful GitHub Actions **generate-builds** run and
+extract the ZIP into its own folder. No compiler or npm installation is needed to play it.
+Install Python 3.10+ if needed, open a terminal in the extracted folder, and run:
+
+```sh
+python serve.py serve
+```
+
+Open **http://127.0.0.1:8080/index.html**, choose **Load ROM**, then **Start**. On systems where
+Python is named `python3`, use that name instead. If port 8080 is occupied, add `--port 8081`.
+The helper checks that the download includes its matching engine and all ROM conversion bundles.
+Older artifacts without `serve.py` can be served with `python -m http.server 8080` instead.
+
+The launcher remembers the converted game in this browser. Subsequent visits say **Game ready**;
+press **Start** to play. Game archives and Master Quest have their own expandable section.
+Saves, mods and controls are in the second expandable section. During play, **Settings** opens
+the game menu and **Tools** contains save export, seed import, touch controls and diagnostics.
+**Tools > Return to launcher** waits for browser files to finish saving before reloading. Save
+normally in the game first; this does not create an in-game save or preserve session save states.
+
+## Host it
+
+Upload the **entire extracted folder** to a static HTTPS host. `index.html` can live at the domain
+root or in a subfolder such as `/play/`; engine and conversion bundle paths are relative.
+There is no backend, database, npm build command or server-side ROM upload. Do not upload your
+ROM, `oot.o2r`, saves or settings to the host.
+
+Serve `.wasm` as **application/wasm** and `.js` as **text/javascript**. Keep `assets/` intact,
+including every `.bundle.gz` file. The helper's `web-manifest.json` records revision, sizes and
+checksums; run `python serve.py check` to verify a copied package. Deploy the folder as one unit
+so an old entry page does not point at missing engine files. Avoid a single-page-app rewrite that
+returns HTML for missing `.wasm`, `.data` or bundle requests. Revalidate `index.html` on updates;
+the engine filenames already contain their revision and can be cached separately.
+
+HTTPS is required for ROM conversion away from localhost. Plain HTTP on a LAN IP may load the
+launcher but cannot use the browser's crypto API. Saves belong to the browser and site origin;
+changing host, port or browser creates a separate storage area. Export a backup before moving.
+Serving the files with `file://` does not work.
 
 ## Building
 
-Requires [emsdk](https://emscripten.org/docs/getting_started/downloads.html) 6.0.11 (activated in
-your shell; CI pins the same version), CMake 3.26+, Ninja and a native compiler for the asset tools.
+Requires Python 3.10+, [emsdk](https://emscripten.org/docs/getting_started/downloads.html) 6.0.11
+(activated in your shell; CI pins the same version), CMake 3.26+, Ninja and Git. Clone with
+submodules (`git clone --recurse-submodules ...`), or run `git submodule update --init --recursive`.
+
+The easiest build uses the **soh.o2r** artifact from the same revision's GitHub Actions run. It
+contains project assets, and is different from your ROM-derived `oot.o2r`. With the SDK activated:
+
+```sh
+python scripts/web.py build --prebuilt /path/to/soh.o2r
+python scripts/web.py serve --directory dist/web
+```
+
+This builds the Wasm engine and creates a checked, ready-to-host **dist/web** package. On Windows,
+quote paths containing spaces. The helper accepts `--jobs 2` for smaller machines and
+`--cmake-arg=-DSOH_WEB_SIMD=OFF` for a scalar build. Package outputs must be empty: use
+`--output dist/web-new` when preserving a previous build. It never overwrites an existing package
+or copies player files into a hosting package.
+
+To generate `soh.o2r` locally, omit `--prebuilt`. This additionally requires a native C/C++ compiler
+and the native asset-tool dependencies: Zlib, libzip, libpng and tinyxml2. On Ubuntu, install the
+repository's `linux-build-deps/apt.txt` packages. On Windows, use a Visual Studio developer shell
+and the repository's vcpkg toolchain; pass its path with
+`--native-cmake-arg=-DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake`.
+The web build uses Emscripten ports rather than native game libraries. Existing compiled output
+can be packaged with `python scripts/web.py package --source build-web/soh --output dist/web-new`.
+
+The equivalent individual build steps are:
 
 ```sh
 # 1. soh.o2r is generated by a native tool, so build it on the host first
@@ -64,11 +125,12 @@ compatible `.o2r` mods. Installed mods have an enable/disable selector on that s
 disabling keeps the archive, and changes apply at the next Start. Updating a disabled mod keeps
 it disabled. Backups exclude ROMs, game archives, and mods. Import replaces matching
 save/settings files, so export a backup first when keeping existing progress matters. During play,
-the web toolbar provides save export, fullscreen, and measured presentation FPS. The engine still
+the web toolbar provides Settings, fullscreen, and measured presentation FPS. **Tools** contains
+save export and secondary actions. The engine still
 simulates at the original game tick rate; 60 FPS uses matrix interpolation. Tab navigates the
 web controls, and Enter/Space activates their buttons without sending those presses to the game.
 
-Use **Measure FPS** during gameplay for a 30-second presentation sample, then **Export FPS
+Use **Tools > Performance & diagnostics > Measure FPS** during gameplay for a 30-second presentation sample, then **Export FPS
 report** to save the average FPS, frame-time percentiles, stalls and rendering dimensions.
 Reports distinguish draw-completion intervals from browser-frame timestamp intervals and include
 completion delay after the browser callback. This helps identify simulation work or callback

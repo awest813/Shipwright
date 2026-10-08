@@ -4,58 +4,98 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ship of Harkinian</title>
+<meta name="theme-color" content="#14201d">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314201d'/%3E%3Cpath d='M30 10v30H12zm5 4v26h17zM9 44h46l-9 12H20z' fill='%238ee4ab'/%3E%3C/svg%3E">
 <style>
-  :root { color-scheme: dark; --bg: #0b0f14; --panel: #151b23; --text: #e6edf3; --muted: #8b949e; --accent: #3fb950; --error: #f85149; }
+  :root { color-scheme: dark; --bg: #09120f; --panel: #14201d; --text: #edf5ef; --muted: #afc2b8; --accent: #8ee4ab; --error: #ff9d98; }
+  * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; overflow: hidden; }
   #canvas { position: fixed; inset: 0; margin: auto; width: min(100vw, calc(100vh * var(--canvas-aspect, 1.333333))); height: min(100vh, calc(100vw / var(--canvas-aspect, 1.333333))); display: block; background: #000; outline: none; }
-  #overlay { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); padding: 16px; box-sizing: border-box; overflow: auto; }
-  #panel { background: var(--panel); border-radius: 12px; padding: 24px; max-width: 520px; width: 100%; box-sizing: border-box; }
-  h1 { margin: 0 0 4px; font-size: 22px; }
+  #overlay { position: fixed; inset: 0; display: grid; place-items: safe center; background: radial-gradient(ellipse at top, #193a2b, var(--bg) 70%); padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); overflow: auto; z-index: 5; }
+  #panel { background: var(--panel); border: 1px solid #355044; border-radius: 20px; padding: 28px; max-width: 600px; width: 100%; box-shadow: 0 20px 80px #0005; }
+  .eyebrow { color: var(--accent); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; }
+  h1 { margin: 6px 0 4px; font-size: clamp(26px, 5vw, 34px); line-height: 1.2; }
+  h2 { font-size: 16px; margin: 18px 0 6px; }
   p { margin: 8px 0; color: var(--muted); }
-  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #222a33; }
-  .row:first-of-type { border-top: none; }
-  .status { font-size: 13px; color: var(--muted); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid #304439; }
+  .row > div { min-width: 0; }
+  .rom-row { margin-top: 20px; padding: 16px; border: 1px solid #436a52; border-radius: 12px; background: #1d3025; }
+  .status { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
   .status.ok { color: var(--accent); }
-  label.button, button { font: inherit; cursor: pointer; border: 1px solid #30363d; background: #21262d; color: var(--text); padding: 6px 12px; border-radius: 6px; white-space: nowrap; }
-  label.button:focus-within, button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }
-  button#start { width: 100%; margin-top: 16px; padding: 10px; background: #1a7f37; border-color: #2ea043; color: #fff; font-weight: 600; }
+  label.button, button, summary { font: inherit; cursor: pointer; }
+  label.button, button { border: 1px solid #486153; background: #23382c; color: var(--text); padding: 10px 14px; min-height: 44px; border-radius: 9px; white-space: nowrap; }
+  label.button:hover, button:hover { background: #304e3b; }
+  label.button:focus-within, button:focus-visible, summary:focus-visible, select:focus-visible { outline: 3px solid #f2ce77; outline-offset: 3px; }
+  button#start, button#reload-launcher { width: 100%; margin-top: 12px; min-height: 52px; background: #91e4ad; border-color: #91e4ad; color: #092116; font-weight: 750; font-size: 17px; }
+  button#start:hover, button#reload-launcher:hover { background: #b0f2c7; }
   button:disabled, label.button.disabled { opacity: .5; cursor: default; }
-  /* Visually hidden but focusable, so the labels work from the keyboard */
   input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
-  #message { min-height: 1.5em; font-size: 13px; }
+  #message { min-height: 1.5em; font-size: 13px; margin-top: 12px; overflow-wrap: anywhere; }
   #message.error, #web-status.error { color: var(--error); }
-  code { background: #0d1117; padding: 1px 4px; border-radius: 4px; }
-  #web-tools { position: fixed; bottom: max(8px, env(safe-area-inset-bottom)); right: max(8px, env(safe-area-inset-right)); z-index: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; max-width: calc(100vw - 16px); }
-  #web-tools[hidden] { display: none; }
+  code, kbd { background: #0c1810; padding: 1px 5px; border-radius: 4px; }
+  details { border-top: 1px solid #355044; margin-top: 16px; padding-top: 8px; }
+  summary { min-height: 44px; padding: 10px 0; color: var(--text); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  #mod-controls[hidden], #web-tools[hidden], #touch-controls[hidden], [hidden] { display: none !important; }
+  #mod-list { flex: 1; min-width: 0; max-width: 100%; min-height: 44px; padding: 8px; color: var(--text); background: var(--bg); border: 1px solid #486153; border-radius: 9px; }
+  #web-tools { position: fixed; bottom: max(8px, env(safe-area-inset-bottom)); right: max(8px, env(safe-area-inset-right)); z-index: 4; display: flex; justify-content: flex-end; align-items: center; gap: 6px; max-width: calc(100vw - 16px); }
+  #web-tools button, #web-tools summary { background: #14201ded; }
+  #fps { padding: 4px 8px; border-radius: 8px; background: #14201ded; font-variant-numeric: tabular-nums; }
+  #web-status { position: fixed; left: max(12px, env(safe-area-inset-left)); bottom: max(64px, env(safe-area-inset-bottom)); max-width: min(520px, calc(100vw - 24px)); padding: 8px 12px; border-radius: 10px; background: #14201df2; pointer-events: none; }
+  #web-status:empty { display: none; }
+  #game-tools { margin: 0; padding: 0; border: 0; }
+  #game-tools > summary { list-style: none; border: 1px solid #486153; border-radius: 9px; padding: 10px 14px; }
+  #game-tools > summary::-webkit-details-marker { display: none; }
+  #game-tools[open] > summary { border-color: var(--accent); }
+  #game-tools-panel { position: absolute; right: 0; bottom: 54px; width: min(360px, calc(100vw - 16px)); max-height: calc(100dvh - 90px); overflow: auto; padding: 18px; border: 1px solid #486153; border-radius: 14px; background: #14201df7; box-shadow: 0 8px 40px #0008; }
+  #game-tools-panel h2:first-child { margin-top: 0; }
   #touch-controls { position: fixed; inset: 0; pointer-events: none; z-index: 3; user-select: none; -webkit-user-select: none; }
-  #touch-controls[hidden] { display: none; }
-  #touch-stick { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); width: 120px; height: 120px; border: 2px solid #ffffff60; border-radius: 50%; background: #1118; touch-action: none; pointer-events: auto; }
+  #touch-stick { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); width: 124px; height: 124px; border: 2px solid #ffffff60; border-radius: 50%; background: #1118; touch-action: none; pointer-events: auto; }
   #touch-stick-knob { position: absolute; left: 38px; top: 38px; width: 44px; height: 44px; border-radius: 50%; background: #ffffff70; pointer-events: none; }
   #touch-buttons { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(3, 44px); gap: 6px; pointer-events: auto; }
-  #touch-buttons button { padding: 0; height: 44px; background: #21262dcc; touch-action: none; }
-  #touch-buttons button.pressed { background: #1a7f37cc; }
+  #touch-buttons button { padding: 0; height: 44px; background: #14201dbb; touch-action: none; }
+  #touch-buttons button.pressed { background: #3a9b63dd; }
   #touch-buttons button:last-child { grid-column: span 3; }
   body.touch-enabled #web-tools { bottom: auto; top: max(8px, env(safe-area-inset-top)); }
+  body.touch-enabled #game-tools-panel { bottom: auto; top: 54px; }
+  body.touch-enabled #web-status { bottom: auto; top: max(64px, env(safe-area-inset-top)); }
   body.native-menu-open #web-tools { top: auto; bottom: max(8px, env(safe-area-inset-bottom)); }
   body.native-menu-open #web-tools > :not(#settings-game):not(#web-status) { display: none; }
+  body.native-menu-open #web-status { top: auto; bottom: max(64px, env(safe-area-inset-bottom)); }
+  body.native-menu-open #canvas { inset: env(safe-area-inset-top) env(safe-area-inset-right) calc(64px + env(safe-area-inset-bottom)) env(safe-area-inset-left); width: calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right)); height: calc(100dvh - 64px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
   @media (max-width: 599px) {
-    body.native-menu-open #canvas {
-      inset: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-      width: calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right));
-      height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-      height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-    }
+    #panel { padding: 20px; border-radius: 16px; }
+    .rom-row { padding: 12px; }
+    .row { flex-wrap: wrap; }
+    .row > .button { margin-left: auto; }
+    #fullscreen { display: none; }
   }
-  #extras { border-top: 1px solid #30363d; margin-top: 16px; padding-top: 12px; }
-  #extras summary { cursor: pointer; }
-  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-  #mod-controls[hidden] { display: none; }
-  #mod-list { flex: 1; min-width: 0; max-width: 100%; padding: 8px; color: var(--text); background: var(--bg); border: 1px solid var(--muted); border-radius: 6px; }
+  @media (max-height: 450px) { #panel { padding: 18px; } #overlay { place-items: start center; } }
 </style>
 </head>
 <body>
 <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
-<div id="web-tools" hidden><span id="web-status" class="status" role="status"></span><span id="controller-game-status" class="status" role="status"></span><span id="fps" class="status" aria-live="off">Measuring FPS…</span><button id="fullscreen">Fullscreen</button><button id="settings-game">Settings</button><button id="touch-toggle" aria-pressed="false">Touch controls</button><button id="benchmark-game">Measure FPS</button><button id="benchmark-report" hidden>Export FPS report</button><button id="render-audit-export" hidden>Export render capture</button><button id="backup-game">Export saves</button><label class="button">Import seed<input id="seed-game-input" type="file" accept=".json" disabled></label></div>
+<nav id="web-tools" aria-label="Game controls" hidden>
+  <span id="web-status" class="status" role="status"></span>
+  <span id="fps" class="status" aria-live="off">Measuring FPS…</span>
+  <button id="fullscreen">Fullscreen</button><button id="settings-game">Settings</button>
+  <details id="game-tools"><summary>Tools</summary><div id="game-tools-panel">
+    <h2>Play your way</h2>
+    <button id="touch-toggle" aria-pressed="false">Touch controls</button>
+    <p id="controller-game-status" class="status" role="status"></p>
+    <p>Keyboard: <kbd>Space</kbd> Start · <kbd>X</kbd> A · <kbd>C</kbd> B · <kbd>WASD</kbd> move · <kbd>Z</kbd> target · arrows C buttons. <kbd>Esc</kbd> opens settings.</p>
+    <h2>Saves & randomizer</h2><div class="actions">
+      <button id="backup-game">Export saves</button>
+      <label class="button">Import seed<input id="seed-game-input" type="file" accept=".json" disabled></label>
+    </div>
+    <p class="status">Save in the game before leaving. F5/F7 save states last only for this session.</p>
+    <details><summary>Performance & diagnostics</summary><div class="actions">
+      <button id="benchmark-game">Measure FPS</button><button id="benchmark-report" hidden>Export FPS report</button><button id="render-audit-export" hidden>Export render capture</button>
+    </div><p class="status">Measures 30 seconds of gameplay and frame pacing.</p></details>
+    <h2>Launcher</h2><p class="status">To change mods or import a backup, save in the game, then return here. Session save states will end.</p>
+    <button id="return-launcher">Return to launcher</button>
+  </div></details>
+</nav>
 <div id="touch-controls" hidden aria-label="Touch game controls">
   <div id="touch-stick" role="group" aria-label="Movement joystick"><span id="touch-stick-knob"></span></div>
   <div id="touch-buttons">
@@ -67,27 +107,25 @@
 </div>
 <div id="overlay">
   <div id="panel">
+    <div class="eyebrow">Ocarina of Time · Web edition</div>
     <h1>Ship of Harkinian</h1>
-    <p>Web build (experimental). Load your own legally obtained Ocarina of Time ROM (<code>.z64</code>, <code>.n64</code> or <code>.v64</code>) and it is converted into the game archive right here, or load an <code>oot.o2r</code> / <code>oot-mq.o2r</code> made by this version of desktop SoH. Files stay in this browser; the ROM itself is not kept.</p>
-    <div class="row">
-      <div><div>ROM</div><div class="status" id="status-rom">Not needed if the archives below are loaded</div></div>
+    <p>Your adventure, in your browser.</p>
+    <div class="row rom-row">
+      <div><strong>Your game</strong><div class="status" id="status-rom">Choose an Ocarina of Time ROM to get started</div></div>
       <label class="button disabled">Load ROM<input type="file" accept=".z64,.n64,.v64" id="rom-input" disabled></label>
-    </div>
-    <div class="row">
-      <div><div>Ocarina of Time</div><div class="status" id="status-oot.o2r">Loading…</div></div>
-      <label class="button disabled">Load oot.o2r<input type="file" accept=".o2r" data-archive="oot.o2r" disabled></label>
-    </div>
-    <div class="row">
-      <div><div>Master Quest</div><div class="status" id="status-oot-mq.o2r">Loading…</div></div>
-      <label class="button disabled">Load oot-mq.o2r<input type="file" accept=".o2r" data-archive="oot-mq.o2r" disabled></label>
     </div>
     <div id="message" role="status" aria-live="polite">Loading the game files…</div>
     <button id="start" disabled>Start</button>
+    <button id="reload-launcher" hidden>Reload launcher</button>
+    <p class="status">Your files and saves stay in this browser. Use your own legally obtained ROM.</p>
+    <details id="archives"><summary>Game archives & Master Quest</summary>
+      <p class="status">Already have an archive from this version of desktop SoH? Load it here instead of a ROM. Supported ROM formats: .z64, .n64 and .v64.</p>
+      <div class="row"><div><div>Ocarina of Time</div><div class="status" id="status-oot.o2r">Loading…</div></div><label class="button disabled">Load oot.o2r<input type="file" accept=".o2r" data-archive="oot.o2r" disabled></label></div>
+      <div class="row"><div><div>Master Quest</div><div class="status" id="status-oot-mq.o2r">Loading…</div></div><label class="button disabled">Load oot-mq.o2r<input type="file" accept=".o2r" data-archive="oot-mq.o2r" disabled></label></div>
+    </details>
     <details id="extras">
       <summary>Saves, mods & controls</summary>
-      <p>Default keyboard: Space = Start, X = A, C = B, WASD = movement, Z = target, arrow keys = C buttons. Press Esc for settings and configurable keyboard/gamepad bindings. When save states are enabled, F5 saves, F6 changes slots, and F7 loads. Save states last for this game session; use normal saves and Export saves for persistence. Tab switches alternate assets.</p>
-      <p>Pair a Bluetooth controller in your device's Bluetooth settings, or connect it by USB. Press a controller button while this tab is focused, then configure it in the in-game controller menu.</p>
-      <p id="controller-status" class="status" role="status">Press a button on your paired controller to detect it.</p>
+      <p class="status">Back up your progress or bring it from another browser. Import replaces matching saves and settings.</p>
       <div class="actions">
         <button id="backup" disabled>Export saves & settings</button>
         <label class="button disabled">Import backup<input id="backup-input" type="file" accept=".json" disabled></label>
@@ -100,6 +138,12 @@
         <button id="mod-toggle" disabled>Disable mod</button>
       </div>
       <p>Import a randomizer spoiler JSON, then choose a new randomizer save in file select. Generate new seeds from the in-game randomizer menu.</p>
+      <details><summary>Keyboard & controllers</summary>
+        <p>Space = Start · X = A · C = B · WASD = movement · Z = target · arrows = C buttons. Esc opens settings and keyboard/gamepad bindings. Tab switches alternate assets.</p>
+        <p>Pair a Bluetooth controller in your device settings, or connect by USB. Press a controller button with this tab focused, then configure it in Settings > Controls.</p>
+        <p id="controller-status" class="status" role="status">Press a button on your paired controller to detect it.</p>
+        <p class="status">When enabled, F5 saves a state, F6 changes its slot and F7 loads it. These states last only for the current session. Normal saves and exported backups persist.</p>
+      </details>
     </details>
   </div>
 </div>
@@ -503,7 +547,9 @@
     overlay.style.display = "";
     setControlsEnabled(false);
     startButton.disabled = true;
-    showMessage(`${text} Reload the page to try again.`, true);
+    startButton.hidden = true;
+    document.getElementById("reload-launcher").hidden = false;
+    showMessage(`${text} Use Reload launcher to try again.`, true);
   }
 
   function hasFile(path) {
@@ -533,8 +579,14 @@
       el.className = present ? "status ok" : "status";
       any = any || present;
     }
+    if (!stagedRomPath && ready) {
+      const status = document.getElementById("status-rom");
+      status.textContent = any ? "Game ready — no need to load your ROM again" : "Choose an Ocarina of Time ROM to get started";
+      status.className = any ? "status ok" : "status";
+    }
     startButton.disabled = !ready || busy || running || stopped || (!any && !stagedRomPath);
-    document.getElementById("backup").disabled = !ready || busy || stopped;
+    // Reading an export remains possible after the Wasm engine stops or loses GL.
+    document.getElementById("backup").disabled = !ready || busy;
     if (ready) {
       FS.mkdirTree(`${DATA_DIR}/mods`);
       refreshMods();
@@ -775,10 +827,12 @@
       finishBenchmark("randomizer generation");
       document.getElementById("seed-game-input").disabled = true;
       document.getElementById("benchmark-game").disabled = true;
+      document.getElementById("return-launcher").disabled = true;
       showMessage("Generating a randomizer seed. Keep this tab open; the game pauses while generation runs.");
     },
     onRandomizerGenerationFinished: (success) => {
       randomizerGenerating = false;
+      document.getElementById("return-launcher").disabled = false;
       document.getElementById("seed-game-input").disabled = !started || stopped || busy;
       document.getElementById("benchmark-game").disabled = !started || stopped;
       frameTimes.length = 0; lastFrameReport = 0;
@@ -807,13 +861,15 @@
       if (gameMenuVisible !== menuVisible) {
         gameMenuVisible = menuVisible;
         document.body.classList.toggle("native-menu-open", menuVisible);
+        document.getElementById("settings-game").textContent = menuVisible ? "Back to game" : "Settings";
+        if (menuVisible) document.getElementById("game-tools").open = false;
         resetTouchInput();
         document.getElementById("touch-controls").hidden = !touchEnabled || menuVisible;
-        // Let SDL resize after closing the full-height phone menu before sampling
+        // Let SDL resize after closing the full-viewport menu before sampling
         // the game canvas again. Menu dimensions must not become the game aspect.
         if (!menuVisible) canvasAspectCooldown = 3;
         // SDL listens for window resize events, rather than CSS-only changes.
-        if (window.innerWidth < 600) requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+        requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
       }
       const aspect = Module.canvas.width / Module.canvas.height;
       if (!menuVisible && canvasAspectCooldown === 0 && aspect > 0 && aspect !== canvasAspect) {
@@ -870,6 +926,35 @@
     },
   };
 
+  async function returnToLauncher() {
+    if (!ready || busy || randomizerGenerating) return;
+    const button = document.getElementById("return-launcher");
+    busy = true; button.disabled = true;
+    stopAllControllerRumble(); resetTouchInput();
+    showMessage("Saving browser files before returning to the launcher…");
+    try {
+      if (!storageWorks || !await persist()) {
+        showMessage("Could not save to browser storage. Export your saves before leaving.", true);
+        return;
+      }
+      window.location.reload();
+    } catch (error) {
+      showMessage(`Could not return to the launcher: ${error.message}. Export your saves before leaving.`, true);
+    } finally { busy = false; button.disabled = false; }
+  }
+  document.getElementById("return-launcher").addEventListener("click", returnToLauncher);
+  document.getElementById("reload-launcher").addEventListener("click", () => {
+    if (!ready) window.location.reload();
+    else returnToLauncher();
+  });
+  window.addEventListener("error", event => {
+    if (!ready && event.target?.tagName === "SCRIPT") {
+      stop("The game engine could not be downloaded. Check your connection.");
+    }
+  }, true);
+  document.getElementById("game-tools").addEventListener("toggle", () => {
+    if (!document.getElementById("game-tools").open && started) Module.canvas.focus();
+  });
   document.getElementById("backup").addEventListener("click", exportBackup);
   document.getElementById("settings-game").addEventListener("click", () => {
     if (typeof Module._WebToggleMenu === "function") Module._WebToggleMenu();
@@ -1054,7 +1139,7 @@
       showMessage("");
     } catch (e) {
       clearStagedRom();
-      status.textContent = "Not needed if the archives below are loaded";
+      status.textContent = "Choose an Ocarina of Time ROM to get started";
       status.className = "status";
       refreshArchiveStatus();
       showMessage(`Could not use ${file.name}: ${e.message}`, true);

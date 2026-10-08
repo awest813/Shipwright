@@ -683,6 +683,9 @@ void Menu::DrawElement() {
 #ifdef __EMSCRIPTEN__
     if (windowWidth < 1000) {
         // Narrow browsers need the desktop sidebar's width for usable settings columns.
+        // Keep controls large enough to tap, including embedded settings widgets.
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 12.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(style.ItemSpacing.x, 8.0f));
         std::string headerIndex = CVarGetString(headerCvar, "Settings");
         if (!menuEntries.contains(headerIndex)) {
             headerIndex = menuOrder.front();
@@ -755,6 +758,7 @@ void Menu::DrawElement() {
             }
         }
         ImGui::EndChild();
+        ImGui::PopStyleVar(2);
         if (!popout) {
             ImGui::PopStyleVar();
         }

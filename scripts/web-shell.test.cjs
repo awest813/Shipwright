@@ -28,6 +28,7 @@ function harness() {
   const context = vm.createContext({
     console, Uint8Array, DataView, TextDecoder, TextEncoder, Blob, Response, DecompressionStream,
     setTimeout, clearTimeout, setInterval, clearInterval, performance,
+    requestAnimationFrame() {},
     btoa: text => Buffer.from(text, 'binary').toString('base64'),
     atob: text => { if (!/^[A-Za-z0-9+/]*={0,2}$/.test(text)) throw Error('Invalid base64'); return Buffer.from(text, 'base64').toString('binary'); },
     URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
@@ -116,6 +117,66 @@ test('blur clears keyboard routing before subsequent game input', () => {
   for (const listener of h.windowListeners.get('blur')) listener();
   assert.equal(h.dispatch('keydown', 'KeyX').stopped, false);
   assert.equal(h.pressed.has('KeyX'), true);
+});
+
+test('return to launcher waits for every storage flush and prevents duplicate reloads', async () => {
+  const h = harness(); let reloads = 0;
+  h.context.window.location = { reload: () => reloads++ };
+  h.evaluate('ready = true; started = true; running = true');
+  const first = h.evaluate('returnToLauncher()');
+  await h.evaluate('returnToLauncher()');
+  assert.equal(reloads, 0);
+  assert.equal(h.elements.get('return-launcher').disabled, true);
+  const pendingWrite = h.evaluate('persist()');
+  h.syncs.shift()(null); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reloads, 0);
+  h.syncs.shift()(null); await Promise.all([first, pendingWrite]);
+  assert.equal(reloads, 1);
+});
+
+test('return to launcher keeps the game and export available when storage fails', async () => {
+  const h = harness(); let reloads = 0;
+  h.context.window.location = { reload: () => reloads++ };
+  h.evaluate('ready = true; started = true; running = true');
+  const pending = h.evaluate('returnToLauncher()');
+  h.syncs.shift()(Error('storage full')); await pending;
+  assert.equal(reloads, 0);
+  assert.equal(h.elements.get('return-launcher').disabled, false);
+  assert.match(h.elements.get('web-status').textContent, /Export your saves/);
+  assert.equal(h.evaluate('stopped'), false);
+  await h.evaluate('returnToLauncher()');
+  assert.equal(reloads, 0);
+  assert.equal(h.syncs.length, 0);
+});
+
+test('native menu changes close the tools drawer and label the way back to gameplay', () => {
+  const h = harness(); h.elements.get('game-tools').open = true;
+  h.evaluate('Module.onFramePresented(true)');
+  assert.equal(h.elements.get('game-tools').open, false);
+  assert.equal(h.elements.get('settings-game').textContent, 'Back to game');
+  h.evaluate('Module.onFramePresented(false)');
+  assert.equal(h.elements.get('settings-game').textContent, 'Settings');
+});
+
+test('an engine failure keeps save export available while blocking imports and restart', () => {
+  const h = harness(); h.evaluate('ready = true; started = true; running = true; stop("Graphics context lost.")');
+  assert.equal(h.elements.get('backup').disabled, false);
+  assert.equal(h.elements.get('start').disabled, true);
+  assert.equal(h.elements.get('mod-toggle').disabled, true);
+  h.evaluate('FS.mkdirTree("/data/Save")');
+  h.files.set('/data/Save/file1.sav', new Uint8Array([1, 2, 3]));
+  h.evaluate('let exported = null; download = (name, bytes) => exported = JSON.parse(bytes); exportBackup()');
+  assert.equal(h.evaluate('exported.files[0].path'), 'Save/file1.sav');
+});
+
+test('failed engine download explains the failure and offers reload before runtime initialization', () => {
+  const h = harness(); let reloads = 0;
+  h.context.window.location = { reload: () => reloads++ };
+  for (const listener of h.windowListeners.get('error')) listener({target:{tagName:'SCRIPT'}});
+  assert.equal(h.elements.get('reload-launcher').hidden, false);
+  assert.match(h.elements.get('message').textContent, /could not be downloaded/);
+  h.elements.get('reload-launcher').listeners.click();
+  assert.equal(reloads, 1);
 });
 
 test('rumble targets sparse browser indexes, scales both motors and renews bounded effects', () => {

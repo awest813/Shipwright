@@ -97,6 +97,7 @@ jobs:
     - name: Check web shell behavior
       run: |
         node --test scripts/web-shell.test.cjs
+        python3 scripts/web.test.py
         python3 scripts/render-audit.test.py
     - name: Install dependencies
       run: |
@@ -132,20 +133,14 @@ jobs:
         node build-tools/web-controller-smoke.js
         em++ scripts/web-runtime-diagnostics.test.cpp -Isoh/platform/web -std=c++17 -O2 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=16MB -sMAXIMUM_MEMORY=128MB -sENVIRONMENT=node -sEXIT_RUNTIME=1 -o build-tools/web-runtime-diagnostics.test.js
         node build-tools/web-runtime-diagnostics.test.js
-        emcmake cmake --no-warn-unused-cli -H. -Bbuild-web -GNinja -DCMAKE_BUILD_TYPE:STRING=Release -DSOH_PREBUILT_O2R=$PWD/build-tools/soh.o2r -DSOH_WEB_ARCHIVE_MEMORY_TEST=ON
-        cmake --build build-web -j4
+        python3 scripts/web.py build --prebuilt build-tools/soh.o2r --cmake-arg=-DSOH_WEB_ARCHIVE_MEMORY_TEST=ON --output build-web-package
         node build-web/web-archive-memory-test.js
         python3 scripts/wasm-size-audit.py build-web/soh/soh-*.wasm --symbols build-web/soh/soh-*.html.symbols --max-body-bytes 1048576 --out build-tools/wasm-size-audit.json
         em++ scripts/web-depth.test.cpp -ICMake/web/include -std=c++17 -O2 -sUSE_WEBGL2=1 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=0 --shell-file scripts/web-depth.test.html -o build-web/depth-test.html
-        mkdir soh-web
-        cp build-web/soh/soh-*.html soh-web/index.html
-        cp build-web/soh/soh-*.js build-web/soh/soh-*.wasm build-web/soh/soh-*.data soh-web/
-        cp build-web/soh/soh-*.symbols soh-web/
-        cp build-tools/wasm-size-audit.json soh-web/
-        cp build-web/depth-test.html build-web/depth-test.js build-web/depth-test.wasm soh-web/
-        cp soh/platform/web/browser-timing.html soh-web/
-        cp -r build-web/soh/assets soh-web/
-        cp soh/platform/web/README.md soh-web/readme.md
+        cp build-tools/wasm-size-audit.json build-web/soh/
+        cp build-web/depth-test.html build-web/depth-test.js build-web/depth-test.wasm build-web/soh/
+        cp soh/platform/web/browser-timing.html build-web/soh/
+        python3 scripts/web.py package --source build-web/soh --output soh-web
     - name: Upload build
       uses: actions/upload-artifact@v7
       with:
