@@ -13,7 +13,7 @@ spec.loader.exec_module(audit)
 def capture():
     return {'format': 'shipwright-render-capture', 'version': 1, 'reason': 'captured', 'label': 'house',
             'pixelFormat': 'rgb555-top-down', 'width': 320, 'height': 240,
-            'pixels': [i % 32 for i in range(320 * 240)], 'buildVersion': 'test', 'gitCommit': 'testcommit', 'scene': 55,
+            'pixels': [i % 32 for i in range(320 * 240)], 'buildVersion': 'test', 'gitCommit': 'testcommit', 'scene': 52,
             'frame': 60, 'targetFrame': 60, 'seed': 12345, 'interpolation': 1, 'entrance': 187,
             'age': 1, 'dayTime': 32768, 'health': 48, 'room': 0,
             'player': {'position': [0, 0, 0], 'yaw': 0, 'animationFrame': 3},
@@ -69,7 +69,7 @@ class RenderAuditTests(unittest.TestCase):
     def test_fixture_writes_matching_config_and_web_backup_and_png_is_valid(self):
         with tempfile.TemporaryDirectory() as directory:
             out = Path(directory)
-            args = types.SimpleNamespace(label='house', entrance=187, scene=55, room=0, yaw=0,
+            args = types.SimpleNamespace(label='house', entrance=187, scene=52, room=0, yaw=0,
                                          x=0, y=0, z=0, age=1, frame=60, seed=12345, out=out)
             audit.fixture(args)
             import json

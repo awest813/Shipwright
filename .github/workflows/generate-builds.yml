@@ -132,8 +132,8 @@ jobs:
         cmake --build build-web -j4
         em++ scripts/web-depth.test.cpp -ICMake/web/include -std=c++17 -O2 -sUSE_WEBGL2=1 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=0 --shell-file scripts/web-depth.test.html -o build-web/depth-test.html
         mkdir soh-web
-        cp build-web/soh/soh.html soh-web/index.html
-        cp build-web/soh/soh.js build-web/soh/soh.wasm build-web/soh/soh.data soh-web/
+        cp build-web/soh/soh-*.html soh-web/index.html
+        cp build-web/soh/soh-*.js build-web/soh/soh-*.wasm build-web/soh/soh-*.data soh-web/
         cp build-web/depth-test.html build-web/depth-test.js build-web/depth-test.wasm soh-web/
         cp soh/platform/web/browser-timing.html soh-web/
         cp -r build-web/soh/assets soh-web/

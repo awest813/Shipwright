@@ -1,6 +1,7 @@
 #include "RenderAudit.h"
 
 #include "soh/cvar_prefixes.h"
+#include "soh/Enhancements/gameconsole.h"
 #include <fast/interpreter.h>
 #include <libultraship/bridge/consolevariablebridge.h>
 #include <ship/Context.h>

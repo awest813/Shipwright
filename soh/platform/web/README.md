@@ -34,9 +34,11 @@ cmake --build build-web
 Configuring for Emscripten applies the patches in `CMake/web/patches/` to the `libultraship` and
 `torch` submodules (they are meant to go upstream).
 
-The output is `build-web/soh/soh.{html,js,wasm,data}` plus `build-web/soh/assets/` (the extractor's
+The output is `build-web/soh/soh-<commit>.{html,js,wasm,data}` plus `build-web/soh/assets/` (the extractor's
 asset descriptions, one bundle per ROM version, fetched on demand). Serve that directory over
-HTTP, for example `python3 -m http.server -d build-web/soh`, and open `soh.html`. Opening the file directly from disk
+HTTP, for example `python3 -m http.server -d build-web/soh`, and open `soh-<commit>.html`. The CI
+artifact uses `index.html`. Commit-specific engine filenames keep browser updates from mixing
+cached JavaScript, Wasm and bundled data from different builds. Opening the file directly from disk
 does not work.
 
 ## Using it

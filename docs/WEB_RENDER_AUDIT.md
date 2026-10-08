@@ -9,11 +9,11 @@ normal progression, interpolation, frame pacing, enhancement, controller or devi
 Use desktop and web artifacts built from the same commit, ROM revision, archive and settings.
 `scripts/render-audit.py fixture` creates an isolated debug-warp configuration and an equivalent
 browser config backup. It requires explicit scene, entrance and position values. For example,
-the following uses Link's house (scene 55, entrance 0xBB) and the child-spawn coordinates
+the following uses Link's house (scene 52, entrance 0xBB) and the child-spawn coordinates
 decoded from the supplied USA Rev 2 scene. Verify the rendered pose before adopting it as a reference:
 
 ```sh
-python scripts/render-audit.py fixture --label links-house --entrance 0xbb --scene 55 \
+python scripts/render-audit.py fixture --label links-house --entrance 0xbb --scene 52 \
   --x 1 --y 0 --z 95 --yaw=-32768 --age 1 --out build-tools/audit-house-spawn-fixture
 ```
 

@@ -259,6 +259,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 elseif(EMSCRIPTEN)
     set_target_properties(${PROJECT_NAME} PROPERTIES
         SUFFIX ".html"
+        OUTPUT_NAME "soh-${CMAKE_PROJECT_GIT_COMMIT_HASH}"
     )
 endif()
 ################################################################################
