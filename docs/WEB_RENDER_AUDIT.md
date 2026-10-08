@@ -44,21 +44,28 @@ persistent and would keep booting to the warp point.
 
 The engine writes `RenderAudit/<label>.json` under its app directory. A capture records scene,
 simulation frame, fixed RNG seed, player pose/animation, camera, age, time, health and render
-settings. It requires an offscreen, single-sample 320×240 game framebuffer. Missed frames,
+settings. It requires an offscreen, single-sample game framebuffer at the requested resolution. Missed frames,
 wrong scenes or wrong rendering dimensions produce a failure report instead of passing pixels.
 By default the audit captures interpolation 1. Add `--interpolation-step 1` or
 `--interpolation-step 2` when creating a fixture to request one-third or two-thirds of the
 interpolated frame. These fixtures enable 60 FPS on desktop; use normal 20 Hz gameplay scenes
-that supply three presentations per simulation tick. Updated engines produce version 2 reports
+that supply three presentations per simulation tick. Updated engines produce version 3 reports
 with the requested and actual interpolation fractions. If desktop never presents that fraction,
 the audit reports a missed target frame instead of scoring a later frame.
 
 Pass the same `--interpolation-step` to `compare` to assert the requested fraction. Intermediate
-comparisons require version 2 captures, so an older engine's complete-frame capture cannot
+comparisons require version 2 or 3 captures, so an older engine's complete-frame capture cannot
 satisfy that request. Existing version 1 complete-frame reports remain supported. The web audit
 requests the fraction on the target simulation frame; this checks matrix/texture interpolation
-output at a known fraction, rather than browser timing. The fixture enables N64 resolution mode
-and disables MSAA/alternate assets.
+output at a known fraction, rather than browser timing. The default fixture enables N64 resolution mode and disables MSAA/alternate assets.
+Add `--width 640 --height 480` for an HD comparison. Non-default dimensions use the
+existing advanced fixed vertical resolution and aspect ratio settings; the native window
+is larger than the game image so capture uses the game FBO. The browser viewport must also
+differ from the requested framebuffer dimensions. A direct-to-window or MSAA run is rejected,
+rather than reading menus or assuming the wrong row orientation. Version 3 records requested
+and actual dimensions; the comparator rejects different resolutions before scoring and
+counts every pixel, including the final row. Version 1 and 2 captures retain their 320×240 limit.
+HD engine captures still need validation with matching desktop/web artifacts.
 Capture readback stalls are excluded from ordinary FPS samples: a running sample is marked
 incomplete when a capture occurs.
 

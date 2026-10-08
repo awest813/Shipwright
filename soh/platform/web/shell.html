@@ -790,7 +790,7 @@
       }
       try {
         const report = JSON.parse(new TextDecoder().decode(FS.readFile(path)));
-        if (report.format !== "shipwright-render-capture" || ![1, 2].includes(report.version)) throw Error("Invalid capture report");
+        if (report.format !== "shipwright-render-capture" || ![1, 2, 3].includes(report.version)) throw Error("Invalid capture report");
         finishBenchmark("render audit capture");
         renderAuditPath = path;
         document.getElementById("render-audit-export").hidden = false;

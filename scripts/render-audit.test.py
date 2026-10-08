@@ -4,6 +4,8 @@ from pathlib import Path
 import tempfile
 import types
 import unittest
+import struct
+import zlib
 
 spec = importlib.util.spec_from_file_location('render_audit', Path(__file__).with_name('render-audit.py'))
 audit = importlib.util.module_from_spec(spec)
@@ -22,6 +24,54 @@ def capture():
 
 
 class RenderAuditTests(unittest.TestCase):
+    def test_hd_threshold_includes_the_last_pixel_and_png_preserves_dimensions(self):
+        reference = capture()
+        reference.update(version=3, width=640, height=480, targetWidth=640, targetHeight=480,
+                         targetInterpolation=1, pixels=[i % 32 for i in range(640 * 480)])
+        candidate = copy.deepcopy(reference)
+        candidate['pixels'][:18432] = [32767] * 18432
+        result = audit.compare(reference, candidate)
+        self.assertEqual(result['pixels'], 307200)
+        self.assertEqual(result['fractionWithinOneLevel'], 0.94)
+        self.assertEqual(result['status'], 'pass')
+        candidate['pixels'][-1] = 32767
+        self.assertEqual(audit.compare(reference, candidate)['status'], 'fail')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'hd.png'
+            audit.write_png(path, candidate['pixels'], 640, 480)
+            data = path.read_bytes()
+            self.assertEqual(struct.unpack('!II', data[16:24]), (640, 480))
+            idat_length = struct.unpack('!I', data[33:37])[0]
+            rows = zlib.decompress(data[41:41 + idat_length])
+            self.assertEqual(len(rows), 480 * (1 + 640 * 3))
+            self.assertEqual(rows[-3:], bytes([255, 255, 255]))
+        result = audit.compare(reference, capture())
+        self.assertEqual(result['status'], 'unmatched')
+        self.assertIn('width', result['stateMismatches'])
+        self.assertIn('height', result['stateMismatches'])
+        self.assertIsNone(result['fractionWithinOneLevel'])
+        for mutation in ({'targetWidth': 320}, {'height': True}, {'pixels': reference['pixels'][:-1]}):
+            invalid = copy.deepcopy(reference)
+            invalid.update(mutation)
+            with self.assertRaises(ValueError):
+                audit.validate(invalid)
+
+    def test_hd_fixture_uses_fixed_resolution_independent_of_window_size(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = types.SimpleNamespace(label='house-hd', entrance=187, scene=52, room=0, yaw=0,
+                                         x=1, y=0, z=95, age=1, frame=60, seed=12345,
+                                         width=640, height=480, out=Path(directory))
+            audit.fixture(args)
+            import json
+            config = json.loads((args.out / 'shipofharkinian.json').read_text())
+            settings = config['CVars']['gSettings']
+            fixed = settings['AdvancedResolution']
+            self.assertEqual(settings['LowResMode'], 0)
+            self.assertEqual(settings['MSAAValue'], 1)
+            self.assertEqual((fixed['Enabled'], fixed['VerticalResolutionToggle']), (1, 1))
+            self.assertEqual(fixed['VerticalPixelCount'] * fixed['AspectRatioX'] / fixed['AspectRatioY'], 640)
+            self.assertNotEqual((config['Window']['Width'], config['Window']['Height']), (640, 480))
+
     def test_identical_full_capture_passes(self):
         result = audit.compare(capture(), capture())
         self.assertEqual(result['status'], 'pass')

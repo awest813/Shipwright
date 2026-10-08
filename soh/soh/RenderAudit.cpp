@@ -55,6 +55,8 @@ void RenderAuditCapture(const std::shared_ptr<Fast::Interpreter>& interpreter, f
         return;
     const uint32_t targetFrame = static_cast<uint32_t>(CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Frame"), 60));
     const float targetInterpolation = RenderAuditTargetInterpolation();
+    const int targetWidth = CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Width"), 320);
+    const int targetHeight = CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Height"), 240);
     if (gPlayState->gameplayFrames == targetFrame && std::abs(interpolation - targetInterpolation) > 0.000001f)
         return;
     captured = true;
@@ -67,7 +69,7 @@ void RenderAuditCapture(const std::shared_ptr<Fast::Interpreter>& interpreter, f
         return;
     }
     nlohmann::json result = { { "format", "shipwright-render-capture" },
-                              { "version", 2 },
+                              { "version", 3 },
                               { "label", label },
                               { "buildVersion", std::string(gBuildVersion) },
                               { "gitCommit", std::string(gGitCommitHash) },
@@ -77,6 +79,8 @@ void RenderAuditCapture(const std::shared_ptr<Fast::Interpreter>& interpreter, f
                               { "seed", CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Seed"), 12345) },
                               { "interpolation", interpolation },
                               { "targetInterpolation", targetInterpolation },
+                              { "targetWidth", targetWidth },
+                              { "targetHeight", targetHeight },
                               { "entrance", gSaveContext.entranceIndex },
                               { "age", gSaveContext.linkAge },
                               { "dayTime", gSaveContext.dayTime },
@@ -112,7 +116,9 @@ void RenderAuditCapture(const std::shared_ptr<Fast::Interpreter>& interpreter, f
                            { "alternateAssets", CVarGetInteger(CVAR_SETTING("AltAssets"), 1) } };
     std::string error;
     const int targetStep = CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.InterpolationStep"), 3);
-    if (targetStep < 1 || targetStep > 3)
+    if (targetWidth < 320 || targetWidth > 1920 || targetHeight < 240 || targetHeight > 1080)
+        error = "capture dimensions must be within 320 x 240 and 1920 x 1080";
+    else if (targetStep < 1 || targetStep > 3)
         error = "interpolation step must be 1, 2 or 3";
     else if (gPlayState->gameplayFrames != targetFrame)
         error = "missed target simulation frame";
@@ -120,17 +126,17 @@ void RenderAuditCapture(const std::shared_ptr<Fast::Interpreter>& interpreter, f
         error = "unexpected scene";
     else if (!interpreter->mRendersToFb || interpreter->mMsaaLevel > 1)
         error = "requires an offscreen, single-sample game framebuffer";
-    else if (interpreter->mCurDimensions.width != 320 || interpreter->mCurDimensions.height != 240)
-        error = "requires N64 resolution mode (320 x 240)";
+    else if (interpreter->mCurDimensions.width != targetWidth || interpreter->mCurDimensions.height != targetHeight)
+        error = "game framebuffer does not match the requested capture resolution";
     if (error.empty()) {
-        std::vector<uint16_t> pixels(320 * 240);
-        interpreter->mRapi->ReadFramebufferToCPU(interpreter->mGameFb, 320, 240, pixels.data());
+        std::vector<uint16_t> pixels(static_cast<size_t>(targetWidth) * targetHeight);
+        interpreter->mRapi->ReadFramebufferToCPU(interpreter->mGameFb, targetWidth, targetHeight, pixels.data());
         // This single-sample game FBO has opengl_invertY=true: GL's bottom row
         // contains the game's top row, matching DX11/Metal's top-down readback.
         auto image = nlohmann::json::array();
-        for (int y = 0; y < 240; y++) {
-            for (int x = 0; x < 320; x++)
-                image.push_back(pixels[y * 320 + x] >> 1);
+        for (int y = 0; y < targetHeight; y++) {
+            for (int x = 0; x < targetWidth; x++)
+                image.push_back(pixels[y * targetWidth + x] >> 1);
         }
         result["pixels"] = std::move(image);
         result["reason"] = "captured";
