@@ -286,6 +286,14 @@ and total CPU elapsed p95 13.7 ms. The unchanged context used a 512 MiB Wasm mem
 Allocator use increased 1,392 bytes. The exported report is
 `build-tools/performance-2ffb-main-cached-house-default-viewport.json`. This supports the
 average FPS target for this sample; occasional long frames and wider coverage remain.
+Normal main-preview play also crossed the house doorway and descended the ladder into
+Kokiri Forest (`build-tools/web-main-forest-normal-2ffb.png`). Its quiet 30-second sample
+presented 1,778 frames at 59.21 FPS / 59.34 callbacks per second, p95 presentation 23.9 ms,
+maximum 47.5 ms and total CPU elapsed p95 18.0 ms. Settings/dimensions stayed unchanged;
+all frames were scene 85 with no menu, 512 MiB Wasm and 39,408 bytes of allocator growth.
+See `build-tools/performance-2ffb-main-cached-forest-default-viewport.json`. This lower
+outdoor result remains below a strict 60 FPS average target and is retained alongside
+passing prior samples.
 
 The same-commit adult-forest rendering comparison passes at 98.49% within the documented
 tolerance, with remaining differences concentrated around Navi's glow; see
