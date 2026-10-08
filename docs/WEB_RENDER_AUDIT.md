@@ -351,3 +351,9 @@ channel level. The HD forest glow depth agrees exactly at 64108 and draws on bot
 Reports: `build-tools/comparison-2689a-house-hd-depth-mod-probe` and
 `build-tools/comparison-2689a-forest-hd-depth-mod-probe`. These are diagnostic probe results;
 the committed engine correction still requires its own mod-free build verification.
+
+The frame-240 two-thirds 640×480 Zora's Domain room-1 water fixture also matches desktop
+state and passes all 307,200 pixels within one RGB555 channel level with the temporary
+shader probe (`build-tools/comparison-2689a-zora-hd-depth-mod-probe`). Water, transparency
+and the HD outdoor/interior captures support the diagnosis; they remain scoped scene tests.
+The profiler's `37282cf` build passed all five CI jobs and is ready for normal gameplay timing.
