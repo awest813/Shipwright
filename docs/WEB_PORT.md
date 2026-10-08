@@ -306,6 +306,20 @@ and the browser pointer pipeline on desktop Chromium; physical touch/Safari beha
 unverified.
 
 
+A fresh import was then repeated on the user's exact `8080/polish.html` page with the
+supplied 32 MiB USA Rev 2 ROM. Start converted and automatically restarted into the game
+within roughly 18 seconds, without a second HTML Start. File 1 loaded and a 1.5-second D
+press moved Link. All ten exported files matched backup 22 exactly, including settings,
+all saves and spoilers (`build-tools/save-main-fresh-rom-restart-2ffb.json`). Gameplay proof:
+`build-tools/web-main-fresh-rom-gameplay-movement-2ffb.png`.
+The post-conversion quiet house sample presented 1,754 frames in 30.01 seconds at
+58.45 FPS / 58.52 callbacks per second. The context stayed unchanged (714 x 535, SIMD,
+MSAA 1, interpolation 60, no menus), with 512 MiB Wasm and 72,248 bytes allocator growth.
+Presentation p95 was 24.0 ms; maximum presentation and total CPU elapsed were 678.1 ms
+and 665.1 ms respectively, including a simulation CPU elapsed maximum of 660.8 ms.
+This startup-associated stall remains unresolved; it is not counted as a sustained
+60 FPS pass. Report: `build-tools/performance-2ffb-main-fresh-rom-restarted-house.json`.
+
 The same-commit adult-forest rendering comparison passes at 98.49% within the documented
 tolerance, with remaining differences concentrated around Navi's glow; see
 [WEB_RENDER_AUDIT.md](WEB_RENDER_AUDIT.md). All ten regular backup files restored exactly
