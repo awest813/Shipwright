@@ -299,3 +299,17 @@ forest state and all 76,800 native pixels exactly. This cross-commit native outp
 check is `build-tools/native-2689a-output-parity-noinput.json`; it is not a web fidelity score.
 The native glow check records buffer depth 64104 versus light depth 28908, with the preceding
 presentation at frame 599, interpolation 1. Matching web captures are still pending.
+
+All five `2689adb` CI build jobs passed. The same-commit zero-input forest web capture matches
+the desktop simulation state and scores 98.486979% (75,638/76,800 pixels). Both default stepped
+presentation and the continuous audit control read buffer depth 42168 versus desktop 64104,
+with the same projected light position/depth and preceding frame 599 at interpolation 1.
+Both web modes therefore retain `drawGlow: false` and the same pixel difference; changing
+presentation fractions did not resolve this discrepancy. Compare reports:
+`build-tools/comparison-2689a-forest-desktop-web` and
+`build-tools/comparison-2689a-forest-continuous-desktop-web`.
+
+The same-commit 640×480 house web capture matches desktop state and all 307,200 pixels exactly
+(`build-tools/comparison-2689a-house-hd-desktop-web`). This is HD interior rendering evidence,
+not a whole-game accuracy score or a frame-pacing pass. Normal saves and settings are restored
+after these temporary, input-isolated captures before continuing gameplay measurements.
