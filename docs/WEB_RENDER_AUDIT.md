@@ -252,3 +252,24 @@ CPU max was 49.5 ms; the maximum callback gap was 216.4 ms. SIMD, MSAA 1 and 714
 settings stayed unchanged, with 512 MiB Wasm memory. This sample does not meet sustained 60 FPS.
 Evidence: `build-tools/performance-c04bc-main-house-after-session-state.json` and
 `build-tools/web-main-session-state-restored-c04bc.png`.
+
+The user accepts 59 FPS when frame pacing is accurate. The continuing performance target
+therefore allows an approximately 59–60 FPS average, while still requiring consistent delivery
+and investigation of long stalls. An average alone does not establish accurate pacing.
+
+A quiet `c04bc56` sample with no local file work during the measurement completed at
+58.152315 presented FPS, p95 32.2 ms, p99 42.8 ms and max 156.9 ms. Browser callback p95
+was 16.8 ms, but p99 was 33.3 ms and the max gap 149.8 ms; CPU max was 154.6 ms. This also
+fails the updated pacing requirement. The completed report is
+`build-tools/performance-c04bc-main-house-quiet.json`; its host snapshot is
+`build-tools/host-before-c04bc-main-quiet-house.json`.
+
+The next web build rounds the wall-clock interpolation phase to the same evenly spaced
+presentation fractions used by desktop at 60 Hz, keeping geometry and animated texture
+segments aligned despite small timestamp jitter. The opt-in fixture argument
+`--continuous-presentation` retains the former web phase as an audit control; it has effect
+only when RenderAudit is enabled. Target-frame interpolation remains explicit in both modes.
+The capture records `presentationMode` and the preceding rendered phase so matching native,
+default-web and control-web captures can test the glow discrepancy. No additional frames are
+rendered and no simulation tick, glow decision or depth result is forced. Full-engine rendering
+and frame pacing remain pending verification.

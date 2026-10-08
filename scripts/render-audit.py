@@ -153,6 +153,8 @@ def fixture(args):
             'Enabled': 1, 'VerticalResolutionToggle': 1, 'VerticalPixelCount': height,
             'AspectRatioX': float(width), 'AspectRatioY': float(height),
         }
+    if getattr(args, 'continuous_presentation', False):
+        config['CVars']['gDeveloperTools']['RenderAudit']['ContinuousPresentation'] = 1
     args.out.mkdir(parents=True, exist_ok=True)
     config_bytes = json.dumps(config, indent=2).encode()
     (args.out / 'shipofharkinian.json').write_bytes(config_bytes)
@@ -175,6 +177,8 @@ def main():
     create.add_argument('--seed', type=int, default=12345)
     create.add_argument('--width', type=int, default=320, help='expected game framebuffer width')
     create.add_argument('--height', type=int, default=240, help='expected game framebuffer height')
+    create.add_argument('--continuous-presentation', action='store_true',
+                        help='audit control: retain the former web wall-clock interpolation before the target frame')
     create.add_argument('--interpolation-step', type=int, choices=(1, 2, 3), default=3,
                         help='one-third, two-thirds or the complete frame at 60 FPS (default: complete)')
     create.add_argument('--out', type=Path, required=True)

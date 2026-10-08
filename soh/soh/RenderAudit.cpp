@@ -147,6 +147,13 @@ void RenderAuditCapture(const std::shared_ptr<Fast::Interpreter>& interpreter, f
     result["glowLights"] = std::move(glowLights);
     result["glowDepthChecks"] = glowDepthChecks;
     result["glowDepthPresentation"] = glowDepthPresentation;
+#ifdef __EMSCRIPTEN__
+    result["presentationMode"] = CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.ContinuousPresentation"), 0)
+                                     ? "continuous-audit-control"
+                                     : "native-steps";
+#else
+    result["presentationMode"] = "native-steps";
+#endif
     result["room"] = gPlayState->roomCtx.curRoom.num;
     result["settings"] = { { "textureFilter", CVarGetInteger(CVAR_TEXTURE_FILTER, 0) },
                            { "alternateAssets", CVarGetInteger(CVAR_SETTING("AltAssets"), 1) } };

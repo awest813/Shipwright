@@ -1942,13 +1942,21 @@ extern "C" void Graph_WebPresentFrame(float interpolation, double simulationMs) 
     auto interpreter = wnd->GetInterpreterWeak().lock();
     if (!interpreter)
         return;
+    const int divisor = std::max<int>(R_UPDATE_RATE, 1);
+    // Match desktop's evenly spaced presentations and the animated texture segment.
+    // Wall-clock jitter should not change the pose within one presentation step.
+    const bool continuousAudit = CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Enabled"), 0) &&
+                                 CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.ContinuousPresentation"), 0);
+    if (!continuousAudit) {
+        const int presentationStep = std::clamp<int>(static_cast<int>(std::round(interpolation * divisor)), 1, divisor);
+        interpolation = static_cast<float>(presentationStep) / divisor;
+    }
     if (GfxDebuggerIsDebugging())
         interpolation = 1.0f;
     if (RenderAuditWantsFrame())
         interpolation = RenderAuditTargetInterpolation();
     // Animated texture segments are generated at GetInterpolationFPS(); select the matching
     // segment even when a browser refresh was dropped rather than counting callbacks.
-    const int divisor = std::max<int>(R_UPDATE_RATE, 1);
     interpreter->mInterpolationIndex = std::clamp<int>((int)std::round(interpolation * divisor) - 1, 0, divisor - 1);
     interpreter->mInterpolationT = interpolation;
     const double interpolationStart = emscripten_get_now();
