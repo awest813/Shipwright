@@ -61,6 +61,15 @@ randomizer save in File 2 and reached gameplay with working movement. Exported s
 the same finalSeed and all five hash indexes. Generation still pauses the single-threaded game;
 full seed completion/progression and broader settings coverage remain unverified.
 
+Further browser checks verified that an explicit pre-start import updates the selected path
+and survives a reload before Start. Restoring the generated-seed backup retained its selected
+spoiler and File 2, whose matching hash appeared in file select and loaded into gameplay again.
+A fresh 30.014-second seeded-house sample with brief movement measured 59.57 presented FPS
+and 59.67 browser callbacks/s. Presentation intervals had p95 23 ms and maximum 71 ms;
+total CPU work had p95 13 ms and maximum 59.3 ms. Browser callback p95 was 16.8 ms.
+`build-tools/performance-95-generated-seed-house.json` preserves the report. This is one scene
+on the in-app Chromium browser, with occasional stalls, rather than complete 60 FPS acceptance.
+
 Four matched frame-60 rendering fixtures passed the 94% diagnostic threshold against the
 same-commit Windows desktop build: child/adult Link's house, Kokiri Forest and the Deku Tree
 entrance. All pixels were within one RGB555 level per channel; both house captures were exact.
