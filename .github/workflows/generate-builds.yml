@@ -135,11 +135,13 @@ jobs:
         emcmake cmake --no-warn-unused-cli -H. -Bbuild-web -GNinja -DCMAKE_BUILD_TYPE:STRING=Release -DSOH_PREBUILT_O2R=$PWD/build-tools/soh.o2r -DSOH_WEB_ARCHIVE_MEMORY_TEST=ON
         cmake --build build-web -j4
         node build-web/web-archive-memory-test.js
+        python3 scripts/wasm-size-audit.py build-web/soh/soh-*.wasm --symbols build-web/soh/soh-*.html.symbols --max-body-bytes 1048576 --out build-tools/wasm-size-audit.json
         em++ scripts/web-depth.test.cpp -ICMake/web/include -std=c++17 -O2 -sUSE_WEBGL2=1 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=0 --shell-file scripts/web-depth.test.html -o build-web/depth-test.html
         mkdir soh-web
         cp build-web/soh/soh-*.html soh-web/index.html
         cp build-web/soh/soh-*.js build-web/soh/soh-*.wasm build-web/soh/soh-*.data soh-web/
         cp build-web/soh/soh-*.symbols soh-web/
+        cp build-tools/wasm-size-audit.json soh-web/
         cp build-web/depth-test.html build-web/depth-test.js build-web/depth-test.wasm soh-web/
         cp soh/platform/web/browser-timing.html soh-web/
         cp -r build-web/soh/assets soh-web/

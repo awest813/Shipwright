@@ -272,6 +272,14 @@ field was `git_commit`. All save files were unchanged. The comparison record is
 and exact settings snapshot saved separately for the boundary-build comparison.
 This also confirms in-browser generation completion; it does not resolve its main-thread
 blocking behavior. A UI observation timed out during generation and recovered afterward.
+The pending CI gate audits the actual linked game module and saves its hash, function
+sizes and names with the web artifact. The 1 MiB maximum-body budget rejects the current
+3.28 MiB initializer (exit 1) and accepts the real compiled depth fixture (largest body
+7,992 bytes). This is a compilation-size regression guard, not proof of frame pacing
+or browser memory usage. The full-engine boundary build must pass it as well as the
+runtime checks. Tool: `scripts/wasm-size-audit.py`; local evidence:
+`build-tools/wasm-size-gate-real-module-validation.json`.
+
 
 
 The main `8080/polish.html` and index previews now use the verified `5564e71` engine with
