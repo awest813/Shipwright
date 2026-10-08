@@ -1,0 +1,23 @@
+diff --git a/src/fast/backends/gfx_opengl.cpp b/src/fast/backends/gfx_opengl.cpp
+--- a/src/fast/backends/gfx_opengl.cpp
++++ b/src/fast/backends/gfx_opengl.cpp
+@@ -400,6 +400,19 @@ static std::string BuildVsShader(const CCFeatures& cc_features) {
+     processor.load(*shader);
+     processor.bind_include_loader(opengl_include_fs);
+     auto result = processor.process();
++#ifdef __EMSCRIPTEN__
++    // The shared prebuilt archive's GLES vertex template compresses clip depth.
++    // WebGL2 uses OpenGL's native depth interval; compression makes the game's
++    // CPU glow/sun depth comparisons disagree with the rendered geometry.
++    // Adjust only the default vertex template, preserving custom shaders and
++    // the GLES syntax/fragment options needed by the same bundled archive.
++    if (path == "shaders/opengl/default.shader.glsl") {
++        const std::string compressedDepth = "gl_Position.z *= 0.3f;";
++        const auto position = result.find(compressedDepth);
++        if (position != std::string::npos)
++            result.erase(position, compressedDepth.size());
++    }
++#endif
+     // SPDLOG_INFO("=========== VERTEX SHADER ============");
+     // SPDLOG_INFO(result);
+     // SPDLOG_INFO("========================================");

@@ -313,3 +313,22 @@ The same-commit 640×480 house web capture matches desktop state and all 307,200
 (`build-tools/comparison-2689a-house-hd-desktop-web`). This is HD interior rendering evidence,
 not a whole-game accuracy score or a frame-pacing pass. Normal saves and settings are restored
 after these temporary, input-isolated captures before continuing gameplay measurements.
+
+The shared default GLES vertex shader contains `gl_Position.z *= 0.3f`. Compressing the
+desktop sample's depth about the midpoint predicts 42168.8 from native 64104, matching the
+web sample's quantized 42168. A WebGL-only patch now removes that operation from the processed
+default vertex shader, while preserving ES syntax, GLES fragment options and custom shader
+paths. Processing the shared archive at runtime avoids requiring a different prebuilt asset
+archive. All seven web patches apply in order to an isolated source copy; evidence is
+`build-tools/web-native-depth-range-source-check.json`. Full-engine glow, HD and wider scene
+comparisons are still required before claiming the depth correction is verified.
+
+After the `2689adb` captures, all ten original backup files were restored byte for byte
+(`build-tools/save-restore-after-2689a-captures.json`). Regular File 1 loaded correctly.
+A quiet 30.0259-second house sample averaged 59.382067 presented FPS, with presentation
+p95 31.9 ms, p99 38 ms and max 66.3 ms; browser callbacks averaged 59.481981/s with a 50 ms
+maximum gap. Simulation CPU max was 49.2 ms and total CPU max 53.9 ms. Settings remained
+714×535, MSAA 1, interpolation 60, alternate assets enabled and 512 MiB Wasm memory.
+This falls within the accepted average range but retains uneven frame delivery. Evidence:
+`build-tools/performance-2689a-regular-house-quiet.json`. The finer phase fields correctly
+remain unknown for this older engine, pending the profiler build.
