@@ -174,3 +174,9 @@ paired images are in `build-tools/comparison-house-{third,two-thirds}-a7-desktop
 These four samples check intermediate rendering output, not browser pacing or every animation.
 The comparison suite passes nine tests. The shell suite passes 39 tests, including keyboard
 routing that preserves toolbar activation while releasing keys held in gameplay.
+
+The RAF flush candidate `b53ef2f` passed all five CI jobs in run 37812619890. Its matched
+desktop/web house capture at frame 600 and two-thirds interpolation is exact across all
+76,800 RGB555 pixels. The paired images show the expected single Link pose; this extends
+late animation/interpolation coverage without proving every later presentation is correct.
+Artifacts are in `build-tools/comparison-house-late-two-thirds-b53-desktop-web`.

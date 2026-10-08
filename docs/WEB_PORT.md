@@ -120,7 +120,31 @@ The next renderer candidate omits explicit `glFlush()` at RAF frame boundaries, 
 It checks the actual Emscripten loop timing mode and keeps the flush for timer-driven loops:
 the pinned SDL/EGL implementation switches to timers when VSync is disabled. Native rendering
 retains its flush. CI run 37812619890 passed all five jobs for `b53ef2f`, including the complete
-web engine. Matched rendering and performance validation of this change are pending.
+web engine. The supplied USA Rev 2 ROM converted again in the browser on this build, reached
+the title screen and loaded the preserved vanilla file into Link's house with working keyboard
+movement. After reloading, the newly extracted archive was ready without selecting the ROM.
+A same-commit desktop/web house capture at frame 600 and two-thirds interpolation is exact
+across all 76,800 RGB555 pixels (`build-tools/comparison-house-late-two-thirds-b53-desktop-web`).
+A quiet 30-second generated-File-2 house sample measured 58.57 FPS and 58.70 browser callbacks/s.
+Presentation interval p95 was 29.6 ms, maximum 119.6 ms; total CPU elapsed p95 was 20.6 ms,
+maximum 102.9 ms. Graphics submission p95 was 9.8 ms. The report recorded unchanged contexts:
+SIMD enabled, OpenGL, 60 FPS interpolation, alternate assets enabled, MSAA 1, texture filter 0,
+714×536 rendering and a 714×692 viewport with DPR 1.25. Earlier diagnostic samples used
+714×535 and DPR 1, so this is not a fully controlled speedup comparison. Only one game ran,
+with brief movement and no browser inspection or other commands during the remaining interval.
+The report is `build-tools/performance-b53-generated-seed-house-quiet.json`; steady 60 FPS
+remains unproven. The main preview keeps the verified `6990278` engine and now includes the
+keyboard-routing fix; `b53ef2f` remains on the isolated test origin.
+
+After this completed sample, viewport recovery timed out and the test tab reported a browser
+page crash. Attempts to inspect a newly opened, game-free browser timing page and the main
+preview also timed out. The browser-only sample could not be read/exported and supplies no
+baseline result. Windows reported 983,912 KiB free of 15,979,772 KiB physical memory at that
+point; this observation does not establish the crash's cause. The browser tool refused to close
+the crashed tab because its internal data-URL error page is outside the tool's URL policy.
+Regular saves/settings had already been restored, and the successful ROM/gameplay screenshot,
+render capture and completed FPS report were exported before the failure. Browser stability
+under resizing and memory pressure needs further investigation before promoting this candidate.
 
 The `a7ef6e7` intermediate audit build passed all five CI jobs. House frame 60 is exact against
 desktop at both one-third and two-thirds interpolation; the desktop images change at 640 pixels
