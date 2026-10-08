@@ -696,6 +696,25 @@ test('presentation phase timing excludes missing, negative and nonfinite samples
   h.evaluate('clearTimeout(statusTimeout)');
 });
 
+test('simulation phases reject stale interpolation-frame data and retain unknown older-engine samples', () => {
+  const h = harness(); h.evaluate('started = true; running = true');
+  h.elements.get('benchmark-game').listeners.click();
+  h.evaluate('Module.onFramePresented(false, 52, 2, 6, null, { state: 0.3, input: 0.2, update: 1.1, commandsAndAudio: 0.4, depthReadback: 0.8 })');
+  h.evaluate('Module.onFramePresented(false, 52, -1, 7, null, { state: 900, input: 900, update: 900, commandsAndAudio: 900, depthReadback: 900 })');
+  h.evaluate('Module.onFramePresented(false, 52, 12, 6, null, { state: -1, input: NaN, update: Infinity, commandsAndAudio: null, depthReadback: 2 })');
+  h.evaluate('Module.onFramePresented(false, 52, 2, 6)');
+  h.evaluate('finishBenchmark()');
+  assert.equal(h.evaluate('benchmarkReport.simulationCpuTimeMs.samples'), 3);
+  for (const [name, expected] of Object.entries({ state: 0.3, input: 0.2, update: 1.1, commandsAndAudio: 0.4 })) {
+    assert.equal(h.evaluate(`benchmarkReport.simulationPhaseCpuTimeMs.${name}.samples`), 1);
+    assert.equal(h.evaluate(`benchmarkReport.simulationPhaseCpuTimeMs.${name}.max`), expected);
+  }
+  assert.equal(h.evaluate('benchmarkReport.simulationPhaseCpuTimeMs.depthReadback.samples'), 2);
+  assert.equal(h.evaluate('benchmarkReport.simulationPhaseCpuTimeMs.depthReadback.max'), 2);
+  assert.equal(h.evaluate('benchmarkReport.presentedFrames'), 4);
+  h.evaluate('clearTimeout(statusTimeout)');
+});
+
 test('render capture export is limited to audit reports and interrupts FPS measurement', () => {
   const h = harness();
   h.evaluate('ready = true; started = true; running = true');

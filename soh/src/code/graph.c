@@ -437,11 +437,18 @@ uint64_t GetPerfCounter();
 extern AudioMgr gAudioMgr;
 
 extern void ProcessSaveStateRequests(void);
+#ifdef __EMSCRIPTEN__
+extern void Graph_WebBeginSimulationTimings(void);
+extern void Graph_WebSetSimulationTimings(double stateMs, double inputMs, double updateMs, double commandsAndAudioMs);
+#endif
 
 static void RunFrame() {
     u32 size;
     char faultMsg[0x50];
 #ifdef __EMSCRIPTEN__
+    const double phaseStart = emscripten_get_now();
+    double afterState, afterInput, afterUpdate, afterCommands;
+    Graph_WebBeginSimulationTimings();
     // Finish consuming the previous display list before a state load rewrites game memory.
     ProcessSaveStateRequests();
 #endif
@@ -482,10 +489,19 @@ static void RunFrame() {
             // ticksA = GetPerfCounter();
 
             Graph_StartFrame();
+#ifdef __EMSCRIPTEN__
+            afterState = emscripten_get_now();
+#endif
 
             PadMgr_ThreadEntry(&gPadMgr);
+#ifdef __EMSCRIPTEN__
+            afterInput = emscripten_get_now();
+#endif
 
             Graph_Update(&runFrameContext.gfxCtx, gGameState);
+#ifdef __EMSCRIPTEN__
+            afterUpdate = emscripten_get_now();
+#endif
             // ticksB = GetPerfCounter();
 
             if (GfxDebuggerIsDebuggingRequested()) {
@@ -493,6 +509,11 @@ static void RunFrame() {
             }
 
             Graph_ProcessGfxCommands(runFrameContext.gfxCtx.workBuffer);
+#ifdef __EMSCRIPTEN__
+            afterCommands = emscripten_get_now();
+            Graph_WebSetSimulationTimings(afterState - phaseStart, afterInput - afterState, afterUpdate - afterInput,
+                                         afterCommands - afterUpdate);
+#endif
 
             // uint64_t diff = (ticksB - ticksA) / (freq / 1000);
             // printf("Frame simulated in %ims\n", diff);

@@ -273,3 +273,18 @@ The capture records `presentationMode` and the preceding rendered phase so match
 default-web and control-web captures can test the glow discrepancy. No additional frames are
 rendered and no simulation tick, glow decision or depth result is forced. Full-engine rendering
 and frame pacing remain pending verification.
+
+The initializer-split `0fe44fc` build regenerated the reference seed with all 442 locations,
+settings, hints and playthrough unchanged (only commit provenance differs). Its subsequent
+30-second regular-house sample averaged 57.037578 FPS and contained a 909 ms presentation
+gap, with a 896 ms simulation CPU maximum. The smaller initializer therefore does not yet
+establish acceptable pacing. Evidence: `build-tools/randomizer-reference-seed-regenerated-0fe44.json`
+and `build-tools/performance-0fe44-candidate-house-after-seed.json`.
+
+The next profiler splits simulation wall-clock CPU time into state transitions/save-state
+requests, input polling, game update, and command preparation/audio. Existing depth queries
+are timed individually and accumulated within a simulation tick; this total is nested within
+the game-update span and must not be added to the four exclusive spans. These are wall-clock
+measurements, not GPU execution timers. No additional depth query is issued. Interpolation-only
+presentations discard stale simulation timing, and older engines report unknown phase samples.
+The shell regression checks this behavior; actual full-engine phase reports remain pending.

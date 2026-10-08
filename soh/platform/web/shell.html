@@ -232,6 +232,8 @@
       totalCpuTimeMs: summarize(benchmark.totalCpuTimes),
       presentationPhaseCpuTimeMs: Object.fromEntries(Object.entries(benchmark.phaseCpuTimes)
         .map(([name, samples]) => [name, summarize(samples)])),
+      simulationPhaseCpuTimeMs: Object.fromEntries(Object.entries(benchmark.simulationPhaseCpuTimes)
+        .map(([name, samples]) => [name, summarize(samples)])),
       contextAtStart: benchmark.contextAtStart, contextAtEnd,
       runtimeAtStart: benchmark.runtimeAtStart, runtimeAtEnd: captureRuntimeDiagnostics(),
       contextChanged: benchmark.contextAtStart && contextAtEnd ?
@@ -259,6 +261,7 @@
       browserCallbacks: 0, callbackIntervals: [],
       simulationCpuTimes: [], presentationCpuTimes: [], totalCpuTimes: [],
       phaseCpuTimes: { events: [], interpolation: [], graphics: [] },
+      simulationPhaseCpuTimes: { state: [], input: [], update: [], commandsAndAudio: [], depthReadback: [] },
       contextAtStart: capturePerformanceContext(),
       runtimeAtStart: captureRuntimeDiagnostics(),
       menuFrames: 0, sceneFrames: {} };
@@ -800,7 +803,7 @@
     },
     onWebPerformanceContext: context => { performanceContext = context; },
     onWebRuntimeDiagnostics: diagnostics => { runtimeDiagnostics = diagnostics; },
-    onFramePresented: (menuVisible = false, scene = null, simulationMs = -1, presentationCpuMs = null, phases = null) => {
+    onFramePresented: (menuVisible = false, scene = null, simulationMs = -1, presentationCpuMs = null, phases = null, simulationPhases = null) => {
       if (gameMenuVisible !== menuVisible) {
         gameMenuVisible = menuVisible;
         document.body.classList.toggle("native-menu-open", menuVisible);
@@ -830,6 +833,11 @@
         }
         for (const [name, samples] of Object.entries(benchmark.phaseCpuTimes)) {
           if (Number.isFinite(phases?.[name]) && phases[name] >= 0) samples.push(phases[name]);
+        }
+        if (hasSimulation) {
+          for (const [name, samples] of Object.entries(benchmark.simulationPhaseCpuTimes)) {
+            if (Number.isFinite(simulationPhases?.[name]) && simulationPhases[name] >= 0) samples.push(simulationPhases[name]);
+          }
         }
         if (lastRafTime !== null) {
           if (benchmark.lastBrowserFrame !== null && lastRafTime > benchmark.lastBrowserFrame) {

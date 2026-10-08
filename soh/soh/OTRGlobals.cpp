@@ -1869,6 +1869,21 @@ extern "C" EMSCRIPTEN_KEEPALIVE void WebToggleMenu(void) {
 // The display list and interpolation records remain alive until the next simulation tick.
 // Keeping just the current list avoids copying the game's large graphics pools.
 static Gfx* webCommands = nullptr;
+static double webSimulationPhaseMs[4] = { -1.0, -1.0, -1.0, -1.0 };
+static double webDepthReadbackMs = 0.0;
+
+extern "C" void Graph_WebBeginSimulationTimings(void) {
+    std::fill_n(webSimulationPhaseMs, 4, -1.0);
+    webDepthReadbackMs = 0.0;
+}
+
+extern "C" void Graph_WebSetSimulationTimings(double stateMs, double inputMs, double updateMs,
+                                              double commandsAndAudioMs) {
+    webSimulationPhaseMs[0] = stateMs;
+    webSimulationPhaseMs[1] = inputMs;
+    webSimulationPhaseMs[2] = updateMs;
+    webSimulationPhaseMs[3] = commandsAndAudioMs;
+}
 
 extern "C" EMSCRIPTEN_KEEPALIVE int WebReportRuntimeDiagnostics(void) {
     const auto diagnostics = Web::CaptureRuntimeDiagnostics();
@@ -1980,9 +1995,14 @@ extern "C" void Graph_WebPresentFrame(float interpolation, double simulationMs) 
         EM_ASM(
             {
                 if (Module.onFramePresented)
-                    Module.onFramePresented(!!$0, $1, $2, $3, { events : $4, interpolation : $5, graphics : $6 });
+                    Module.onFramePresented(
+                        !!$0, $1, $2, $3, { events : $4, interpolation : $5, graphics : $6 },
+                        $2 >= 0 ? { state : $7, input : $8, update : $9, commandsAndAudio : $10, depthReadback : $11 }
+                                : null);
             },
-            menuVisible, scene, simulationMs, presentationCpuMs, eventsMs, interpolationMs, graphicsMs);
+            menuVisible, scene, simulationMs, presentationCpuMs, eventsMs, interpolationMs, graphicsMs,
+            webSimulationPhaseMs[0], webSimulationPhaseMs[1], webSimulationPhaseMs[2], webSimulationPhaseMs[3],
+            webDepthReadbackMs);
     }
 }
 #endif
@@ -2081,7 +2101,14 @@ extern "C" uint16_t OTRGetPixelDepth(float x, float y) {
         return 0;
     }
 
+#ifdef __EMSCRIPTEN__
+    const double start = emscripten_get_now();
+    const uint16_t depth = wnd->GetPixelDepth(x, y);
+    webDepthReadbackMs += emscripten_get_now() - start;
+    return depth;
+#else
     return wnd->GetPixelDepth(x, y);
+#endif
 }
 
 extern "C" Sprite* GetSeedTexture(uint8_t index) {
