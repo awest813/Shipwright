@@ -10,13 +10,30 @@ in [soh/platform/web/README.md](../soh/platform/web/README.md).
 
 The shipped CI baseline recognizes the supported USA Rev 2 ROM but fails extraction with
 `Torch produced no archive`. `Companion::Init` skips `Process` under Emscripten; the port now
-calls it explicitly. This fix still needs verification in a rebuilt browser binary.
+calls it explicitly. CI run 37717835561 passed on all five jobs. Its web artifact successfully
+converted that ROM in Chromium, rendered the animated title sequence, opened the settings and
+controller menus, and created a vanilla save through keyboard input. The original localhost
+preview has been replaced with that rebuilt engine. The opening Navi/Deku Tree scene renders
+and advances on input. The generated save was exported successfully with global save data and
+settings. Controllable gameplay, archive persistence after reload, and wider scene coverage
+remain to be verified.
 
-Changes awaiting runtime verification: browser-paced 60 Hz matrix interpolation with original
+Changes under runtime verification: browser-paced 60 Hz matrix interpolation with original
 simulation timing, high precision GLES shaders, save/settings backup transfer, `.o2r` mod upload,
 fullscreen controls, and an FPS counter based on successful draw calls. Shell tests cover byte-order
 normalization, backup path validation, export filtering, concurrent persistence, and malformed
 asset bundles; run `node --test scripts/web-shell.test.cjs`.
+
+Observed presentation FPS in the title sequence and file select ranged from roughly 42 during
+startup to 58-60 after warmup, with pauses and dips during interaction. These are spot readings,
+not a sustained gameplay benchmark. A shell backup fixture also passed browser import/export
+round-trip verification. Newly added seed import and controller connection status still need
+testing with the matching rebuilt engine and physical hardware.
+
+The baseline is desktop Ship of Harkinian. The expanded acceptance scope includes Bluetooth/USB
+controllers, randomizer generation/import and saves, PC enhancements, and browser/device settings
+on Chromebook, laptop, desktop, Android/mobile and iPhone. Browser viewport emulation alone is
+not evidence of physical-device compatibility; record actual device/browser tests separately.
 
 The 94% fidelity and sustained 60 FPS targets have **not been measured or achieved yet**.
 Completion requires a playable scene, save/reload verification, rendering comparisons with the

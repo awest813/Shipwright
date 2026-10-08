@@ -58,6 +58,16 @@ save/settings files, so export a backup first when keeping existing progress mat
 the web toolbar provides save export, fullscreen, and measured presentation FPS. The engine still
 simulates at the original game tick rate; 60 FPS uses matrix interpolation.
 
+Pair Bluetooth controllers in the operating system, or connect a controller by USB. Press a
+button while the game tab is focused so the browser exposes it through the Gamepad API, then
+configure bindings in Settings > Controls. Connection status reports browser detection; it
+does not verify the engine's mappings or rumble. Defaults: Space = Start, X = A, C = B,
+WASD = movement, Z = target, arrow keys = C buttons, Esc = settings.
+
+Import a compatible randomizer spoiler JSON before startup or through the runtime toolbar,
+then create a new randomizer save in file select. The original JSON is included in save backups.
+Native seed generation remains in the in-game randomizer menu and needs browser verification.
+
 The page has to be served over HTTPS or from `localhost` for ROM conversion, which needs the
 browser's crypto API.
 

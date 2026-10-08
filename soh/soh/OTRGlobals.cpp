@@ -435,8 +435,10 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
         std::filesystem::remove(kWebRomPath, ec);
         if (!extracted) {
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Ship of Harkinian",
-                                     "This ROM could not be turned into a game archive.\n"
-                                     "Check that it is a supported, unmodified dump.",
+                                     "ROM asset extraction failed.\n"
+                                     "Reload to retry, or load an oot.o2r archive generated\n"
+                                     "by this version of desktop SoH.\n"
+                                     "The browser console contains the extraction details.",
                                      nullptr);
             exit(1);
         }

@@ -7,7 +7,7 @@
 <style>
   :root { color-scheme: dark; --bg: #0b0f14; --panel: #151b23; --text: #e6edf3; --muted: #8b949e; --accent: #3fb950; --error: #f85149; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; overflow: hidden; }
-  #canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; background: #000; outline: none; }
+  #canvas { position: fixed; inset: 0; margin: auto; width: min(100vw, calc(100vh * var(--canvas-aspect, 1.333333))); height: min(100vh, calc(100vw / var(--canvas-aspect, 1.333333))); display: block; background: #000; outline: none; }
   #overlay { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); padding: 16px; box-sizing: border-box; overflow: auto; }
   #panel { background: var(--panel); border-radius: 12px; padding: 24px; max-width: 520px; width: 100%; box-sizing: border-box; }
   h1 { margin: 0 0 4px; font-size: 22px; }
@@ -25,7 +25,7 @@
   #message { min-height: 1.5em; font-size: 13px; }
   #message.error { color: var(--error); }
   code { background: #0d1117; padding: 1px 4px; border-radius: 4px; }
-  #web-tools { position: fixed; top: 8px; right: 8px; z-index: 2; display: flex; gap: 6px; }
+  #web-tools { position: fixed; bottom: max(8px, env(safe-area-inset-bottom)); right: max(8px, env(safe-area-inset-right)); z-index: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; max-width: calc(100vw - 16px); }
   #web-tools[hidden] { display: none; }
   #extras { border-top: 1px solid #30363d; margin-top: 16px; padding-top: 12px; }
   #extras summary { cursor: pointer; }
@@ -34,7 +34,7 @@
 </head>
 <body>
 <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
-<div id="web-tools" hidden><span id="fps" class="status" aria-live="off">Measuring FPS…</span><button id="fullscreen">Fullscreen</button><button id="backup-game">Export saves</button></div>
+<div id="web-tools" hidden><span id="web-status" class="status" role="status"></span><span id="controller-game-status" class="status" role="status"></span><span id="fps" class="status" aria-live="off">Measuring FPS…</span><button id="fullscreen">Fullscreen</button><button id="backup-game">Export saves</button><label class="button">Import seed<input id="seed-game-input" type="file" accept=".json" disabled></label></div>
 <div id="overlay">
   <div id="panel">
     <h1>Ship of Harkinian</h1>
@@ -55,13 +55,17 @@
     <button id="start" disabled>Start</button>
     <details id="extras">
       <summary>Saves, mods & controls</summary>
-      <p>Keyboard and gamepad bindings are configurable in the game menu (Esc). F5/F6 manage save states when enabled; Tab switches alternate assets.</p>
+      <p>Default keyboard: Space = Start, X = A, C = B, WASD = movement, Z = target, arrow keys = C buttons. Press Esc for settings and configurable keyboard/gamepad bindings. F5/F6 manage save states when enabled; Tab switches alternate assets.</p>
+      <p>Pair a Bluetooth controller in your device's Bluetooth settings, or connect it by USB. Press a controller button while this tab is focused, then configure it in the in-game controller menu.</p>
+      <p id="controller-status" class="status" role="status">Press a button on your paired controller to detect it.</p>
       <div class="actions">
         <button id="backup" disabled>Export saves & settings</button>
         <label class="button disabled">Import backup<input id="backup-input" type="file" accept=".json" disabled></label>
         <label class="button disabled">Add mods<input id="mods-input" type="file" accept=".o2r" multiple disabled></label>
+        <label class="button disabled">Import seed<input id="seed-input" type="file" accept=".json" disabled></label>
       </div>
       <p id="mods-status" class="status">Mods load at startup. Use .o2r mods compatible with this version.</p>
+      <p>Import a randomizer spoiler JSON, then choose a new randomizer save in file select. Generate new seeds from the in-game randomizer menu.</p>
     </details>
   </div>
 </div>
@@ -84,6 +88,25 @@
   let busy = false;
   const frameTimes = [];
   let lastFrameReport = 0;
+  let canvasAspect = 0;
+
+  function updateControllers() {
+    let text;
+    try {
+      if (typeof navigator.getGamepads !== "function") text = "Gamepad access is unavailable in this browser.";
+      else {
+        const pads = Array.from(navigator.getGamepads()).filter(pad => pad && pad.connected);
+        text = pads.length ? `${pads.length} controller(s) connected: ${pads.map(pad => pad.id).join(", ")}` :
+          "Press a button on your paired controller to detect it.";
+      }
+    } catch (e) { text = "Gamepad access is blocked in this browser. Check its permissions."; }
+    for (const id of ["controller-status", "controller-game-status"]) {
+      const element = document.getElementById(id);
+      if (element.textContent !== text) element.textContent = text;
+    }
+  }
+  window.addEventListener("gamepadconnected", updateControllers);
+  window.addEventListener("gamepaddisconnected", updateControllers);
 
   function backupPath(path) {
     return /^(Save|Randomizer|presets)\/[A-Za-z0-9_. /-]+$/.test(path) &&
@@ -122,6 +145,7 @@
   function showMessage(text, isError) {
     message.textContent = text;
     message.className = isError ? "error" : "";
+    if (running) document.getElementById("web-status").textContent = text;
   }
 
   function setControlsEnabled(enabled) {
@@ -144,6 +168,20 @@
 
   function hasFile(path) {
     try { return FS.analyzePath(path).exists; } catch (e) { return false; }
+  }
+
+  function isZipArchive(bytes) {
+    if (bytes.length < 22 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) return false;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    // Check the end-of-central-directory record, including the optional ZIP comment.
+    for (let pos = bytes.length - 22; pos >= Math.max(0, bytes.length - 65557); pos--) {
+      if (view.getUint32(pos, true) !== 0x06054b50) continue;
+      if (pos + 22 + view.getUint16(pos + 20, true) !== bytes.length) continue;
+      return view.getUint16(pos + 4, true) === 0 && view.getUint16(pos + 6, true) === 0 &&
+        view.getUint16(pos + 10, true) > 0 &&
+        view.getUint32(pos + 12, true) + view.getUint32(pos + 16, true) <= pos;
+    }
+    return false;
   }
 
   function refreshArchiveStatus() {
@@ -286,14 +324,26 @@
     onRuntimeInitialized: () => {
       ready = true;
       setControlsEnabled(true);
+      updateControllers();
+      setInterval(updateControllers, 1000);
       showMessage(storageWorks ? "" : "Your browser didn't let this page use storage (private window?), so nothing will be kept after it closes.", !storageWorks);
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
     },
     print: (text) => console.log(text),
     printErr: (text) => console.warn(text),
     onAbort: (what) => stop(`The game stopped: ${what}.`),
-    onGameStarted: () => { started = true; },
+    onGameStarted: () => {
+      started = true;
+      if (hasFile(`${DATA_DIR}/Randomizer/imported-seed.json`) && typeof Module._WebLoadRandomizerSeed === "function") {
+        Module._WebLoadRandomizerSeed();
+      }
+    },
     onFramePresented: () => {
+      const aspect = Module.canvas.width / Module.canvas.height;
+      if (aspect > 0 && aspect !== canvasAspect) {
+        Module.canvas.style.setProperty("--canvas-aspect", aspect);
+        canvasAspect = aspect;
+      }
       const now = performance.now();
       frameTimes.push(now);
       while (frameTimes.length > 1 && frameTimes[0] < now - 2000) frameTimes.shift();
@@ -358,7 +408,7 @@
       for (const file of files) {
         if (!/^[A-Za-z0-9_. -]+\.o2r$/i.test(file.name)) throw new Error("mod names must end in .o2r and contain only letters, numbers, spaces, dots, dashes or underscores");
         const bytes = new Uint8Array(await file.arrayBuffer());
-        if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error(`${file.name} is not an .o2r archive`);
+        if (!isZipArchive(bytes)) throw new Error(`${file.name} is not a complete .o2r ZIP archive`);
         mods.push({ name: file.name, bytes });
       }
       FS.mkdirTree(`${DATA_DIR}/mods`);
@@ -367,6 +417,30 @@
     } catch (e) { showMessage(`Could not install mods: ${e.message}`, true); }
     finally { busy = false; setControlsEnabled(!running && !stopped); }
   });
+
+  for (const id of ["seed-input", "seed-game-input"]) {
+    document.getElementById(id).addEventListener("change", async (event) => {
+      const file = event.target.files[0]; event.target.value = "";
+      if (!file || !ready || stopped || busy) return;
+      busy = true; setControlsEnabled(false);
+      try {
+        if (file.size > 16 * 1024 * 1024) throw new Error("seed exceeds 16 MB");
+        const text = await file.text(), seed = JSON.parse(text);
+        if (!seed || typeof seed !== "object" || !("version" in seed) || !("finalSeed" in seed)) throw new Error("select a randomizer spoiler JSON containing version and finalSeed");
+        FS.mkdirTree(`${DATA_DIR}/Randomizer`);
+        FS.writeFile(`${DATA_DIR}/Randomizer/imported-seed.json`, new TextEncoder().encode(text));
+        await persist();
+        if (started) {
+          if (typeof Module._WebLoadRandomizerSeed !== "function" || !Module._WebLoadRandomizerSeed()) throw new Error("the game could not accept this seed (wait for any current seed generation to finish)");
+          showMessage("Seed imported. Return to file select and choose a new randomizer save.");
+        } else showMessage("Seed stored. Start the game and choose a new randomizer save.");
+      } catch (e) { showMessage(`Could not import seed: ${e.message}`, true); }
+      finally {
+        busy = false; setControlsEnabled(!running && !stopped);
+        document.getElementById("seed-game-input").disabled = !started || stopped;
+      }
+    });
+  }
 
   // Crashes inside the game (wasm traps, uncaught C++ exceptions) surface here rather than through onAbort.
   window.addEventListener("error", (e) => {
@@ -386,7 +460,7 @@
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
         // A .o2r is a zip archive
-        if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error("this is not an .o2r archive");
+        if (!isZipArchive(bytes)) throw new Error("this is not a complete .o2r ZIP archive");
         FS.writeFile(`${DATA_DIR}/${name}`, bytes);
         refreshArchiveStatus();
         if (await persist()) showMessage(`${name} stored in this browser.`);
@@ -449,6 +523,8 @@
       if (stopped) return;
       overlay.style.display = "none";
       document.getElementById("web-tools").hidden = false;
+      document.getElementById("web-status").textContent = "";
+      document.getElementById("seed-game-input").disabled = false;
       Module.canvas.focus();
     }, 50));
   });

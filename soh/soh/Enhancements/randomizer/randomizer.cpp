@@ -77,6 +77,14 @@ bool Rando_HandleSpoilerDrop(char* filePath) {
     return false;
 }
 
+#ifdef __EMSCRIPTEN__
+extern "C" EMSCRIPTEN_KEEPALIVE int WebLoadRandomizerSeed(void) {
+    if (randoGenerating.load()) return 0;
+    char path[] = "/data/Randomizer/imported-seed.json";
+    return Rando_HandleSpoilerDrop(path) ? 1 : 0;
+}
+#endif
+
 Randomizer::Randomizer() {
     Rando::StaticData::InitItemTable();
     Rando::StaticData::InitLocationTable();

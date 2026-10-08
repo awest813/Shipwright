@@ -18,7 +18,7 @@ function harness() {
   const dirs = new Set(['/data', '/data/mods', '/app/assets']);
   const syncs = [];
   const context = vm.createContext({
-    console, Uint8Array, DataView, TextDecoder, Blob, Response, DecompressionStream,
+    console, Uint8Array, DataView, TextDecoder, TextEncoder, Blob, Response, DecompressionStream,
     setTimeout, clearTimeout, setInterval, performance,
     btoa: text => Buffer.from(text, 'binary').toString('base64'),
     atob: text => { if (!/^[A-Za-z0-9+/]*={0,2}$/.test(text)) throw Error('Invalid base64'); return Buffer.from(text, 'base64').toString('binary'); },
@@ -47,6 +47,20 @@ test('ROM normalization preserves all supported byte orders', () => {
     assert.deepEqual(Array.from(h.evaluate('toBigEndian(bytes).slice(0, 4)')), expected);
   }
   assert.throws(() => h.evaluate('toBigEndian(new Uint8Array(4096))'), /N64 ROM/);
+});
+
+test('controller status handles sparse devices, disconnects and blocked access', () => {
+  const h = harness();
+  h.context.navigator.getGamepads = () => [null, { connected: true, id: 'Test Controller' }, { connected: false, id: 'Disconnected' }];
+  h.evaluate('updateControllers()');
+  assert.equal(h.elements.get('controller-status').textContent, '1 controller(s) connected: Test Controller');
+  assert.equal(h.elements.get('controller-game-status').textContent, h.elements.get('controller-status').textContent);
+  h.context.navigator.getGamepads = () => [];
+  h.evaluate('updateControllers()');
+  assert.match(h.elements.get('controller-status').textContent, /Press a button/);
+  h.context.navigator.getGamepads = () => { throw Error('blocked'); };
+  h.evaluate('updateControllers()');
+  assert.match(h.elements.get('controller-status').textContent, /blocked/);
 });
 
 test('backup path validation excludes archives and traversal', () => {
@@ -100,4 +114,38 @@ test('supported ROM asset versions may contain hyphens; malformed bundles do not
   await assert.rejects(h.evaluate("installAssetBundle('ntsc_1-2')"), /asset bundle path/);
   assert.equal(h.files.size, 0);
   await assert.rejects(h.evaluate("installAssetBundle('../escape')"), /asset version/);
+});
+
+test('archive imports reject incomplete ZIP files and invalid central directory offsets', () => {
+  const h = harness();
+  h.context.bytes = new Uint8Array([80, 75]);
+  assert.equal(h.evaluate('isZipArchive(bytes)'), false);
+  // A real, nonempty ZIP containing a version file (keeps the test independent of build output).
+  h.context.bytes = new Uint8Array(Buffer.from('UEsDBBQAAAAAAAG0R10jrMa5BQAAAAUAAAAHAAAAdmVyc2lvbjkuMi4zUEsBAhQAFAAAAAAAAbRHXSOsxrkFAAAABQAAAAcAAAAAAAAAAAAAAIABAAAAAHZlcnNpb25QSwUGAAAAAAEAAQA1AAAAKgAAAAAA', 'base64'));
+  assert.equal(h.evaluate('isZipArchive(bytes)'), true);
+  const valid = h.context.bytes.slice();
+  new DataView(h.context.bytes.buffer).setUint32(h.context.bytes.length - 6, 0xffffffff, true);
+  assert.equal(h.evaluate('isZipArchive(bytes)'), false);
+  h.context.bytes = valid;
+  h.context.bytes = h.context.bytes.slice(0, -10);
+  assert.equal(h.evaluate('isZipArchive(bytes)'), false);
+});
+
+test('seed imports reject unrelated JSON before storing it', async () => {
+  const h = harness(); h.evaluate('ready = true');
+  await h.elements.get('seed-input').listeners.change({ target: { files: [{ size: 2, text: async () => '{}' }] } });
+  assert.equal(h.files.size, 0);
+  assert.match(h.elements.get('message').textContent, /randomizer spoiler JSON/);
+});
+
+test('seed imports persist the original JSON and notify the running engine', async () => {
+  const h = harness(); h.evaluate('ready = true; started = true; running = true; let seedCalls = 0; Module._WebLoadRandomizerSeed = () => { seedCalls++; return 1; };');
+  const text = '{"version":"9.2.3","finalSeed":"12345"}';
+  const imported = h.elements.get('seed-game-input').listeners.change({ target: { files: [{ size: text.length, text: async () => text }] } });
+  await new Promise(resolve => setImmediate(resolve));
+  h.syncs.shift()(null);
+  await imported;
+  assert.equal(Buffer.from(h.files.get('/data/Randomizer/imported-seed.json')).toString(), text);
+  assert.equal(h.evaluate('seedCalls'), 1);
+  assert.match(h.elements.get('web-status').textContent, /new randomizer save/);
 });
