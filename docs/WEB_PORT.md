@@ -39,7 +39,9 @@ browser and produced a spoiler JSON (finalSeed 153512928). Exporting that JSON, 
 through the web toolbar, creating a new randomizer file and loading it into Link's house all
 succeeded. Generation blocked the main thread long enough to time out browser inspection;
 background generation and progress feedback remain polish work. Physical controller verification
-remains pending. Phone portrait (390×844) and landscape (844×390) viewport checks preserve the
+remains pending. The randomizer file also survived reload and loaded into gameplay again;
+keyboard movement, collision, animation and contextual prompts responded in Link's house.
+Phone portrait (390×844) and landscape (844×390) viewport checks preserve the
 game's aspect ratio and keep the toolbar available. The native settings menu is cramped in
 portrait and needs a responsive layout; these checks do not establish mobile hardware support.
 
@@ -275,7 +277,8 @@ Both are submodules owned by other repos. Land those changes upstream
   threads. Randomizer seeds generate on the main thread after a short delay. Networked features
   refuse cleanly.
 - **Rendering and input:** WebGL2 context, the GL fixes from section 1.2, wasm32 pointer checks,
-  no ImGui viewports, canvas at CSS-pixel resolution, browser keys kept away from the game.
+  no ImGui viewports, canvas at CSS-pixel resolution with preserved aspect ratio, browser keys
+  kept away from the game, and browser-paced matrix interpolation targeting 60 Hz presentation.
 - **Storage:** IDBFS at `/data` (`GetAppDirectoryPath`), bundled files preloaded at `/app`
   (`GetAppBundlePath`). Writes through `WriteFileSafely` and save deletes/copies are flushed to
   IndexedDB within 250 ms; everything else every 10 s and when the tab is hidden.
@@ -284,16 +287,17 @@ Both are submodules owned by other repos. Land those changes upstream
   `rom-versions.json` (generated from `soh/assets/yml/config.yml`), fetches that version's ~450 KB
   bundle (`pack_assets.py`), and the game's web startup path runs the Torch extraction.
 - **Page:** start screen with ROM / archive upload, clear errors for unsupported ROMs, missing
-  browser features, storage failures, startup failures and crashes.
+  browser features, storage failures, startup failures and crashes. Save/settings backup transfer,
+  `.o2r` mod upload, randomizer spoiler import, controller status and fullscreen tools are available.
 - **CI:** `build-web` job uploading the `soh-web` artifact.
 - **wasm-only bugs fixed:** see section 6.
 
 ### Not done yet
-- Play-testing with real game data (the exit criterion: Kokiri Forest through the Deku Tree,
-  save, reload, continue).
-- Frame interpolation above 20 FPS: queue interpolated frames and present one per browser frame.
+- Wider play-testing with real game data (the exit criterion: Kokiri Forest through the Deku Tree,
+  save, reload, continue); initial vanilla and randomizer gameplay is verified.
+- Sustained 60 FPS benchmarks and matched desktop rendering/gameplay comparisons.
 - Proper `GetPixelDepth` (depth-to-RGBA pass) and an MSAA path that WebGL2 can resolve.
-- Mods upload, save export/import, a Web Speech text-to-speech backend.
+- Runtime coverage of mods and enhancement combinations; a Web Speech text-to-speech backend.
 - Mobile/touch controls.
 - A pthreads variant (COOP/COEP) for audio/render overlap and WasmFS + OPFS.
 - WebSocket transport for Anchor; Crowd Control and Sail stay desktop-only.
