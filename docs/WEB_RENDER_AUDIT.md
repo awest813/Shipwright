@@ -332,3 +332,15 @@ maximum gap. Simulation CPU max was 49.2 ms and total CPU max 53.9 ms. Settings 
 This falls within the accepted average range but retains uneven frame delivery. Evidence:
 `build-tools/performance-2689a-regular-house-quiet.json`. The finer phase fields correctly
 remain unknown for this older engine, pending the profiler build.
+
+The shader diagnosis was exercised through the actual mod upload path on `2689adb`. A temporary
+one-resource archive removes only the GLES depth-compression statement from the shared default
+shader. With that mod enabled, the matched forest capture reads native depth 64104, draws the
+glow and passes all 76,800 pixels within one RGB555 channel level. 76,702 pixels are exactly
+identical; the remaining 98 differ within tolerance. Evidence:
+`build-tools/comparison-2689a-forest-depth-mod-probe` and
+`build-tools/web-native-depth-mod-diagnostic.json`. This confirms the shader compression
+diagnosis, but does not replace validation of the final compiled patch without a mod.
+The probe was disabled using the UI (zero enabled mods), and all ten original save/settings
+files were restored byte for byte (`build-tools/save-restore-after-native-depth-mod-probe.json`).
+The disabled diagnostic archive remains only on the isolated candidate origin.
