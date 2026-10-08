@@ -305,6 +305,69 @@
   window.addEventListener("gamepadconnected", updateControllers);
   window.addEventListener("gamepaddisconnected", updateControllers);
 
+  const controllerRumbles = new Map();
+  function controllerRumbleActuator(index) {
+    try {
+      const pad = navigator.getGamepads?.()[index];
+      const actuator = pad?.connected && pad.vibrationActuator;
+      return actuator && typeof actuator.playEffect === "function" &&
+        (actuator.effects?.includes("dual-rumble") || actuator.type === "dual-rumble") ? actuator : null;
+    } catch (error) { return null; }
+  }
+  function stopControllerRumble(index) {
+    const state = controllerRumbles.get(index);
+    if (!state) return;
+    controllerRumbles.delete(index);
+    clearInterval(state.timer);
+    try {
+      if (typeof Module._Shipwright_WebStopControllerRumble === "function") Module._Shipwright_WebStopControllerRumble(index);
+    } catch (error) {} // A stopped/trapped Wasm engine must not prevent browser cleanup.
+    try {
+      const result = typeof state.actuator.reset === "function" ? state.actuator.reset() :
+        state.actuator.playEffect("dual-rumble", { duration: 0, strongMagnitude: 0, weakMagnitude: 0 });
+      Promise.resolve(result).catch(() => {});
+    } catch (error) {}
+  }
+  function stopAllControllerRumble() {
+    for (const index of controllerRumbles.keys()) stopControllerRumble(index);
+  }
+  function webControllerRumble(index, low, high) {
+    if (!Number.isInteger(index) || index < 0 || ![low, high].every(value => Number.isInteger(value) && value >= 0 && value <= 65535)) return 0;
+    if (!low && !high) { stopControllerRumble(index); return 1; }
+    if (!started || stopped || document.hidden) return 0;
+    const actuator = controllerRumbleActuator(index);
+    if (!actuator) return 0;
+    const previous = controllerRumbles.get(index);
+    if (previous?.actuator === actuator && previous.low === low && previous.high === high) return 1;
+    stopControllerRumble(index);
+    const state = { actuator, low, high, timer: null };
+    controllerRumbles.set(index, state);
+    const pulse = () => {
+      if (controllerRumbles.get(index) !== state) return;
+      if (document.hidden || stopped || controllerRumbleActuator(index) !== actuator) {
+        stopControllerRumble(index); return;
+      }
+      try {
+        // SDL's zero-duration start stays active until StopRumble. Renew bounded browser
+        // effects while active; a lost/closed page cannot leave indefinite vibration.
+        Promise.resolve(actuator.playEffect("dual-rumble", {
+          startDelay: 0, duration: 500, strongMagnitude: low / 65535, weakMagnitude: high / 65535,
+        })).catch(error => {
+          if (controllerRumbles.get(index) !== state) return;
+          stopControllerRumble(index);
+          console.warn("Controller vibration failed", error);
+        });
+      } catch (error) { stopControllerRumble(index); }
+    };
+    state.timer = setInterval(pulse, 250);
+    pulse();
+    return controllerRumbles.get(index) === state ? 1 : 0;
+  }
+  window.addEventListener("gamepaddisconnected", event => stopControllerRumble(event.gamepad.index));
+  window.addEventListener("blur", stopAllControllerRumble);
+  window.addEventListener("pagehide", stopAllControllerRumble);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) stopAllControllerRumble(); });
+
   function backupPath(path) {
     return /^(Save|Randomizer|presets)\/[A-Za-z0-9_. /-]+$/.test(path) &&
       !path.split("/").some(part => part === ".." || part === "." || !part) ||
@@ -366,6 +429,7 @@
   function stop(text) {
     if (stopped) return;
     stopped = true;
+    stopAllControllerRumble();
     finishBenchmark("game stopped");
     overlay.style.display = "";
     setControlsEnabled(false);
@@ -560,6 +624,8 @@
 
   var Module = {
     consumeWebInput: consumeTouchInput,
+    webControllerRumble,
+    webControllerSupportsRumble: index => !!controllerRumbleActuator(index),
     canvas: document.getElementById("canvas"),
     noInitialRun: true,
     preRun: [() => {

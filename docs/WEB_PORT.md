@@ -50,6 +50,24 @@ controllers, randomizer generation/import and saves, PC enhancements, and browse
 on Chromebook, laptop, desktop, Android/mobile and iPhone. Browser viewport emulation alone is
 not evidence of physical-device compatibility; record actual device/browser tests separately.
 
+Browser controller rumble is being integrated through an isolated SDL2 joystick-backend port.
+The SDK's stock SDL2 backend returns unsupported for rumble; the project adapter forwards
+SDL's stored browser index, rather than treating an SDL instance ID as a browser index. This
+preserves the engine's port/device selection after hotplug and with duplicate device names.
+The adapter uses the reviewed Emscripten 6.0.11 / SDL2 2.32.10 pair and a content-addressed
+archive; it does not edit the SDK's stock source or archive. The shell scales both motor strengths
+and renews bounded `dual-rumble` effects until stopped. Blur, hidden tabs, disconnect and game
+failure cancel active effects and clear SDL's cached strength so the same intensity can restart.
+Controller-menu rumble testing remains allowed. Unsupported actuators and denied calls fail
+without leaving a renewal timer active.
+
+The real compiled SDL/Wasm headless test passed sparse indexes 2/5, duplicate names, stop,
+same-strength restart and replacement at index 0 while retaining index 5. All 32 shell tests
+passed, including six rumble cases. The compiled test also verified independent mapped A-button
+input and release when a held controller disconnects. CI runs it before the complete web build.
+These are synthetic platform tests: actual Bluetooth/USB vibration, controller bindings and
+browser/OS support still require physical-device evidence.
+
 The `95cdb36` engine generated a complete seed in the browser (finalSeed 1197554378,
 442 locations, hash 15-35-34-88-80) and stored its spoiler at an absolute `/data/Randomizer/`
 path. Reload testing exposed a second issue: the shell always reselected an older imported

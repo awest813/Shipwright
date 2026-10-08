@@ -20,17 +20,19 @@ function harness() {
   const files = new Map();
   const dirs = new Set(['/data', '/data/mods', '/app/assets']);
   const syncs = [];
+  const windowListeners = new Map(), documentListeners = new Map();
+  const listen = (listeners, name, fn) => { if (!listeners.has(name)) listeners.set(name, []); listeners.get(name).push(fn); };
   const padButtons = [32, 8192, 16, 2, 8, 1, 16384, 4, 32768, 4096].map(mask => {
     const button = element('pad-' + mask); button.dataset.pad = String(mask); return button;
   });
   const context = vm.createContext({
     console, Uint8Array, DataView, TextDecoder, TextEncoder, Blob, Response, DecompressionStream,
-    setTimeout, clearTimeout, setInterval, performance,
+    setTimeout, clearTimeout, setInterval, clearInterval, performance,
     btoa: text => Buffer.from(text, 'binary').toString('base64'),
     atob: text => { if (!/^[A-Za-z0-9+/]*={0,2}$/.test(text)) throw Error('Invalid base64'); return Buffer.from(text, 'base64').toString('binary'); },
     URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
-    document: { body: element('body'), getElementById: element, querySelectorAll: selector => selector === '[data-pad]' ? padButtons : [], createElement: tag => tag === 'option' ? { value: '', textContent: '' } : element('download'), addEventListener() {} },
-    window: { addEventListener() {} }, navigator: {}, WebAssembly,
+    document: { body: element('body'), getElementById: element, querySelectorAll: selector => selector === '[data-pad]' ? padButtons : [], createElement: tag => tag === 'option' ? { value: '', textContent: '' } : element('download'), addEventListener(name, fn) { listen(documentListeners, name, fn); } },
+    window: { addEventListener(name, fn) { listen(windowListeners, name, fn); } }, navigator: {}, WebAssembly,
     FS: {
       analyzePath: path => ({ exists: files.has(path) || dirs.has(path) }),
       mkdirTree(path) { const parts = path.split('/'); for (let i = 2; i <= parts.length; i++) dirs.add(parts.slice(0, i).join('/')); },
@@ -43,8 +45,85 @@ function harness() {
     },
   });
   vm.runInContext(shell, context);
-  return { context, elements, files, syncs, evaluate: code => vm.runInContext(code, context) };
+  return { context, elements, files, syncs, windowListeners, documentListeners, evaluate: code => vm.runInContext(code, context) };
 }
+
+function rumbleHarness() {
+  const h = harness(), timers = new Map(); let nextTimer = 0;
+  h.context.setInterval = callback => { timers.set(++nextTimer, callback); return nextTimer; };
+  h.context.clearInterval = id => timers.delete(id);
+  h.evaluate('started = true');
+  const pads = [];
+  h.context.navigator.getGamepads = () => pads;
+  const effects = [], resets = [];
+  function pad(index) {
+    const actuator = { type: 'dual-rumble', playEffect(type, parameters) { effects.push({ index, type, ...parameters }); return Promise.resolve('complete'); }, reset() { resets.push(index); return Promise.resolve('complete'); } };
+    pads[index] = { index, connected: true, id: 'Duplicate controller', vibrationActuator: actuator };
+    return actuator;
+  }
+  return { ...h, timers, pads, effects, resets, pad };
+}
+
+test('rumble targets sparse browser indexes, scales both motors and renews bounded effects', () => {
+  const h = rumbleHarness(); h.pad(2); h.pad(5);
+  assert.equal(h.evaluate('Module.webControllerRumble(5, 65535, 32768)'), 1);
+  assert.equal(h.effects.length, 1);
+  assert.deepEqual(h.effects[0], { index: 5, type: 'dual-rumble', startDelay: 0, duration: 500, strongMagnitude: 1, weakMagnitude: 32768 / 65535 });
+  h.evaluate('Module.webControllerRumble(5, 65535, 32768)');
+  assert.equal(h.timers.size, 1); assert.equal(h.effects.length, 1);
+  h.timers.values().next().value(); assert.equal(h.effects.length, 2);
+  h.evaluate('Module.webControllerRumble(5, 0, 0)');
+  assert.equal(h.timers.size, 0); assert.deepEqual(h.resets, [5]);
+});
+
+test('browser cleanup clears SDL cached strength without recursive cleanup', () => {
+  const h = rumbleHarness(); h.pad(2);
+  h.evaluate('let sdkStops = []; Module._Shipwright_WebStopControllerRumble = index => { sdkStops.push(index); Module.webControllerRumble(index, 0, 0); }; Module.webControllerRumble(2, 100, 200); stopAllControllerRumble()');
+  assert.deepEqual(Array.from(h.evaluate('sdkStops')), [2]);
+  assert.equal(h.timers.size, 0); assert.deepEqual(h.resets, [2]);
+});
+
+test('disconnect or replacement stops the old actuator without vibrating a new device', () => {
+  const h = rumbleHarness(); h.pad(2); h.evaluate('Module.webControllerRumble(2, 100, 200)');
+  h.pad(2); h.timers.values().next().value();
+  assert.equal(h.effects.length, 1); assert.equal(h.timers.size, 0);
+  h.evaluate('Module.webControllerRumble(2, 100, 200)');
+  for (const fn of h.windowListeners.get('gamepaddisconnected')) fn({ gamepad: { index: 2 } });
+  assert.equal(h.timers.size, 0); assert.deepEqual(h.resets, [2, 2]);
+});
+
+test('rumble stops on blur, hidden tabs and game failure while allowing the controller-menu test', () => {
+  const h = rumbleHarness(); h.pad(0);
+  const start = () => assert.equal(h.evaluate('Module.webControllerRumble(0, 1, 1)'), 1);
+  start(); for (const fn of h.windowListeners.get('blur')) fn(); assert.equal(h.timers.size, 0);
+  start(); h.context.document.hidden = true;
+  for (const fn of h.documentListeners.get('visibilitychange')) fn(); assert.equal(h.timers.size, 0);
+  h.context.document.hidden = false; h.evaluate('Module.onFramePresented(true)'); start(); assert.equal(h.timers.size, 1);
+  h.evaluate('Module._Shipwright_WebStopControllerRumble = () => { throw Error("Wasm stopped"); }; stop("test failure")'); assert.equal(h.timers.size, 0);
+  assert.match(h.elements.get('message').textContent, /test failure/);
+  assert.equal(h.evaluate('Module.webControllerRumble(0, 1, 1)'), 0);
+});
+
+test('unsupported rumble and denied browser access fail without timers', () => {
+  const h = rumbleHarness(); h.pads[0] = { connected: true };
+  assert.equal(h.evaluate('Module.webControllerSupportsRumble(0)'), false);
+  assert.equal(h.evaluate('Module.webControllerRumble(0, 10, 10)'), 0);
+  h.pad(0); h.context.navigator.getGamepads = () => { throw Error('denied'); };
+  assert.equal(h.evaluate('Module.webControllerRumble(0, 10, 10)'), 0);
+  assert.equal(h.evaluate('Module.webControllerRumble(0, -1, 10)'), 0);
+  assert.equal(h.timers.size, 0);
+});
+
+test('an old rejected effect does not cancel a newer rumble state', async () => {
+  const h = rumbleHarness(), actuator = h.pad(0); let rejectOld;
+  actuator.playEffect = () => new Promise((resolve, reject) => { rejectOld = reject; });
+  h.evaluate('Module.webControllerRumble(0, 100, 200)');
+  actuator.playEffect = () => Promise.resolve('complete');
+  h.evaluate('Module.webControllerRumble(0, 300, 400)');
+  rejectOld(Error('preempted rejection')); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.timers.size, 1); assert.deepEqual(h.resets, [0]);
+  h.evaluate('stopAllControllerRumble()');
+});
 
 test('ROM normalization preserves all supported byte orders', () => {
   const h = harness();

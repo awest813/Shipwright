@@ -128,6 +128,8 @@ jobs:
         CCACHE_BASEDIR: ${{ github.workspace }}
       run: |
         embuilder build sdl2 sdl2_net zlib bzip2 ogg vorbis
+        emcc scripts/tests/web-controller-smoke.c -O1 -sUSE_SDL=2 --use-port=./CMake/web/ports/shipwright_sdl_rumble.py -sENVIRONMENT=node --pre-js scripts/tests/web-controller-smoke.pre.js -o build-tools/web-controller-smoke.js
+        node build-tools/web-controller-smoke.js
         emcmake cmake --no-warn-unused-cli -H. -Bbuild-web -GNinja -DCMAKE_BUILD_TYPE:STRING=Release -DSOH_PREBUILT_O2R=$PWD/build-tools/soh.o2r
         cmake --build build-web -j4
         em++ scripts/web-depth.test.cpp -ICMake/web/include -std=c++17 -O2 -sUSE_WEBGL2=1 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=0 --shell-file scripts/web-depth.test.html -o build-web/depth-test.html

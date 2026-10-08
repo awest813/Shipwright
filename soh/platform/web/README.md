@@ -84,6 +84,13 @@ configure bindings in Settings > Controls. Connection status reports browser det
 does not verify the engine's mappings or rumble. Defaults: Space = Start, X = A, C = B,
 WASD = movement, Z = target, arrow keys = C buttons, Esc = settings.
 
+Updated builds forward the game's rumble mappings and strength settings to the optional
+[Gamepad vibration actuator](https://www.w3.org/TR/gamepad/#gamepadhapticactuator-interface)
+when the browser/controller supports `dual-rumble`. Vibration stops on disconnect, loss of
+focus, hiding the tab or a game failure. The controller menu's rumble test uses the same path.
+Bluetooth/USB input and vibration still need checks on actual devices; browser detection alone
+does not prove those functions.
+
 **Touch controls** toggles an on-screen movement joystick and N64 buttons. They also appear
 automatically on browsers reporting a coarse pointer. Use **Settings** to open the in-game menu;
 touch controls hide while that menu is open. At narrow widths, category and section selectors

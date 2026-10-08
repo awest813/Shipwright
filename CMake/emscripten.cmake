@@ -17,6 +17,7 @@ add_link_options(-fwasm-exceptions)
 # Several targets (ImGui among them) include SDL headers without linking an SDL target, and
 # emscripten's placeholder SDL headers error out unless the port flag is present.
 add_compile_options(-sUSE_SDL=2)
+add_link_options("--use-port=${CMAKE_CURRENT_LIST_DIR}/web/ports/shipwright_sdl_rumble.py")
 
 # libultraship: WebGL2 is GLES 3.0, so use the GLES renderer path and ImGui's ES3 backend.
 set(USE_OPENGLES ON CACHE BOOL "" FORCE)
