@@ -14,6 +14,14 @@ list(PREPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/web/modules)
 add_compile_options(-fwasm-exceptions)
 add_link_options(-fwasm-exceptions)
 
+# Standard SIMD enables LLVM's vectorizer without relaxing the root project's
+# floating-point rules. Keep a scalar build available for fidelity/performance comparisons.
+option(SOH_WEB_SIMD "Enable standard WebAssembly SIMD instructions" ON)
+if(SOH_WEB_SIMD)
+    add_compile_options(-msimd128)
+    add_link_options(-msimd128)
+endif()
+
 # Several targets (ImGui among them) include SDL headers without linking an SDL target, and
 # emscripten's placeholder SDL headers error out unless the port flag is present.
 add_compile_options(-sUSE_SDL=2)

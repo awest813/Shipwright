@@ -50,7 +50,7 @@ controllers, randomizer generation/import and saves, PC enhancements, and browse
 on Chromebook, laptop, desktop, Android/mobile and iPhone. Browser viewport emulation alone is
 not evidence of physical-device compatibility; record actual device/browser tests separately.
 
-Browser controller rumble is being integrated through an isolated SDL2 joystick-backend port.
+Browser controller rumble is integrated through an isolated SDL2 joystick-backend port.
 The SDK's stock SDL2 backend returns unsupported for rumble; the project adapter forwards
 SDL's stored browser index, rather than treating an SDL instance ID as a browser index. This
 preserves the engine's port/device selection after hotplug and with duplicate device names.
@@ -67,6 +67,26 @@ passed, including six rumble cases. The compiled test also verified independent 
 input and release when a held controller disconnects. CI runs it before the complete web build.
 These are synthetic platform tests: actual Bluetooth/USB vibration, controller bindings and
 browser/OS support still require physical-device evidence.
+
+CI run 37789149653 passed all five jobs after retrying a macOS disk-image packaging error.
+Its `6990278` engine and matching shell are staged in the localhost previews. The full web
+engine started, produced an exact same-commit desktop/web house capture, retained the generated
+File 2 seed hash and loaded it into gameplay with working movement. No physical controller was
+connected during that runtime check.
+
+Two new 30-second seeded-house samples on that scalar build measured 59.08 and 57.00 FPS.
+The first included a browser screenshot during measurement. The second had no screenshots or
+other browser inspection during the timed interval after brief movement; it still had stalls:
+frame interval p95 28.8 ms, maximum 169.3 ms, browser callbacks 57.46/s, and total CPU work
+p95 16.2 ms, maximum 162.8 ms. Both samples stayed in scene 52 with no menu frames. Reports are
+`build-tools/performance-699-generated-seed-house{,-quiet}.json`. Screenshot overhead alone
+does not explain the performance shortfall. Startup and file-selection transitions also had
+long pauses during integration testing; their cause remains unproven.
+
+The next build enables standard WebAssembly SIMD via `SOH_WEB_SIMD`, preserving the existing
+strict floating-point flags and avoiding relaxed SIMD. `-DSOH_WEB_SIMD=OFF` retains the scalar
+configuration for comparisons. Full-game fidelity, performance improvement and device/browser
+coverage of this optimization remain to be measured before replacing the verified preview.
 
 The `95cdb36` engine generated a complete seed in the browser (finalSeed 1197554378,
 442 locations, hash 15-35-34-88-80) and stored its spoiler at an absolute `/data/Randomizer/`

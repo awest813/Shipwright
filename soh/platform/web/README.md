@@ -31,6 +31,11 @@ emcmake cmake -S . -B build-web -GNinja -DCMAKE_BUILD_TYPE=Release \
 cmake --build build-web
 ```
 
+Standard WebAssembly SIMD is enabled by default, with the project's strict floating-point
+settings preserved. Add `-DSOH_WEB_SIMD=OFF` to configure a scalar comparison build. SIMD requires
+a browser that supports it; see [Emscripten's compatibility list](https://emscripten.org/docs/porting/simd.html).
+Its full-game fidelity and performance benefit are still under audit.
+
 Configuring for Emscripten applies the patches in `CMake/web/patches/` to the `libultraship` and
 `torch` submodules (they are meant to go upstream).
 

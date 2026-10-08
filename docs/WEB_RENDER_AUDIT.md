@@ -21,6 +21,9 @@ Use a new directory for every fixture; the script refuses to replace an existing
 These are temporary debug saves, not ordinary progression evidence. Zero is adult age; one is
 child age. Boot-to-warp initializes a debug inventory and midday. Audit mode fixes the scene RNG
 seed and captures the requested complete simulation frame (default 60), without input.
+Use the room associated with the spawn in the ROM's scene entrance list, not just the scene's
+default room. Review the rendered view: matched metadata and a passing pixel score can still
+come from an unsuitable fixture. Zora's Domain's entrance spawn, for example, is in room 1.
 
 For Windows desktop testing, run the matching desktop binary from an isolated folder outside
 Windows's Temp folder and OneDrive, containing the generated `shipofharkinian.json` and the
@@ -117,3 +120,24 @@ The subsequent `95cdb36` web and Windows artifacts also produced exact matched c
 captures (`build-tools/comparison-house-95-desktop-web`). That run passed all five CI jobs.
 Both localhost preview pages now use its commit-specific engine filename. The regular test
 origin backup was restored after capture verification.
+
+Three additional `95cdb36` desktop/web samples at frame 240 passed: Zora's Domain's entrance
+in room 1, Zora's River's west entrance and Lake Hylia's north entrance. Spawn positions and
+room assignments were decoded from the same USA Rev 2 ROM. The Domain view includes the
+waterfall and animated water surface; the two exterior entrance views primarily extend
+terrain, sky and lighting coverage. Domain had 76,799 of 76,800 pixels within tolerance
+(99.9987%), with a maximum difference of two RGB555 levels at one pixel. River and Lake had
+all pixels within tolerance. Their mean absolute eight-bit channel errors were approximately
+0.001321, 0.003606 and 0.030026, respectively. Reports and paired images are in
+`build-tools/comparison-{zoras-domain-water,zoras-river,lake-hylia}-95-frame240`.
+
+An initial Domain fixture mistakenly used room 0 and hid most of the scene. Its score is
+excluded from coverage; visual review exposed the mistake and the room-1 fixture replaced it.
+These samples do not establish underwater distortion, every water/framebuffer effect,
+normal progression or sustained 60 FPS.
+
+The controller-enabled `6990278` web and Windows artifacts produced an exact child-house
+frame-60 match (`build-tools/comparison-house-699-desktop-web`). CI run 37789149653 passed all
+five jobs after retrying a macOS disk-image packaging error. The complete engine and matching
+shell are now staged in both localhost previews. The isolated browser origin's regular backup
+was restored after fixtures, retaining the generated randomizer File 2 and its seed selection.
