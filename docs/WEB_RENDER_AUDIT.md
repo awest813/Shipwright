@@ -344,3 +344,10 @@ diagnosis, but does not replace validation of the final compiled patch without a
 The probe was disabled using the UI (zero enabled mods), and all ten original save/settings
 files were restored byte for byte (`build-tools/save-restore-after-native-depth-mod-probe.json`).
 The disabled diagnostic archive remains only on the isolated candidate origin.
+
+The same temporary shader probe also passes the 640×480 house with all 307,200 pixels exactly
+identical, and the frame-600 two-thirds 640×480 forest with every pixel within one RGB555
+channel level. The HD forest glow depth agrees exactly at 64108 and draws on both backends.
+Reports: `build-tools/comparison-2689a-house-hd-depth-mod-probe` and
+`build-tools/comparison-2689a-forest-hd-depth-mod-probe`. These are diagnostic probe results;
+the committed engine correction still requires its own mod-free build verification.
