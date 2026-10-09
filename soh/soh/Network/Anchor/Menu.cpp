@@ -246,6 +246,7 @@ void AnchorInstructionsMenu(WidgetInfo& info) {
 }
 
 void RegisterAnchorMenu() {
+#ifndef __EMSCRIPTEN__
     WidgetPath path = { "Network", "Anchor", SECTION_COLUMN_1 };
     SohGui::mSohMenu->AddWidget(path, "AnchorMainMenu", WIDGET_CUSTOM)
         .CustomFunction(AnchorMainMenu)
@@ -257,6 +258,7 @@ void RegisterAnchorMenu() {
     SohGui::mSohMenu->AddWidget(path, "AnchorInstructionsMenu", WIDGET_CUSTOM)
         .CustomFunction(AnchorInstructionsMenu)
         .HideInSearch(true);
+#endif
 }
 
 static RegisterMenuInitFunc menuInitFunc(RegisterAnchorMenu);
