@@ -483,7 +483,8 @@
 
   function backupPath(path) {
     return /^(Save|Randomizer|presets)\//.test(path) &&
-      !/[<>:"\\|?*\x00-\x1F\x7F]/.test(path) &&
+      !/[<>:"\\|?*]/.test(path) &&
+      !Array.from(path).some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) &&
       !path.split("/").some(part => part === ".." || part === "." || !part) ||
       ["shipofharkinian.json", "imgui.ini", "timesplitdata.json"].includes(path);
   }

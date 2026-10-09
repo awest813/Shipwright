@@ -34,6 +34,8 @@ def entrypoint(directory):
 def runtime_files(directory):
     entry = entrypoint(directory)
     html = entry.read_text(encoding='utf-8')
+    if '\x00' in html:
+        raise ValueError('Entry page contains a NUL byte, which breaks HTML script parsing. Rebuild with the updated launcher.')
     scripts = re.findall(r'<script\b[^>]*\bsrc\s*=\s*[\"\']?([^\s\"\'>]+)', html, re.I)
     engines = [name for name in scripts if re.fullmatch(r'soh-[\w-]+\.js', name)]
     if len(engines) != 1 or '{{{ SCRIPT }}}' in html:

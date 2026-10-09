@@ -57,6 +57,13 @@ class WebDistributionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'conversion bundle'):
             web.package(self.source, self.output)
 
+    def test_nul_in_compiled_html_prevents_packaging(self):
+        entry = self.source / 'soh-abc1234.html'
+        entry.write_text(entry.read_text() + '<script>/[\x00-\\x1F]/</script>')
+        with self.assertRaisesRegex(ValueError, 'NUL byte'):
+            web.package(self.source, self.output)
+        self.assertFalse(self.output.exists())
+
     def test_packaging_refuses_mixed_revisions_and_overwriting_existing_output(self):
         web.package(self.source, self.output)
         with self.assertRaisesRegex(ValueError, 'not empty'):
