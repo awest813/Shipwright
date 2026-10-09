@@ -404,6 +404,9 @@ static std::string newPresetName, oldPresetName;
 static bool saveSection[PRESET_SECTION_MAX];
 
 static bool PresetNameExists(const std::string& name, const std::string& previousName) {
+    if (name.empty()) {
+        return false;
+    }
     for (const auto& [existingName, preset] : presets) {
         if (existingName == previousName) {
             continue;
