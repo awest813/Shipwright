@@ -22,8 +22,8 @@ acceptable only with consistent pacing. Matched captures do not establish whole-
 | High | Creating a new preset can remove an existing Unnamed file; renaming to the same sanitized filename can remove the newly saved file | Fixed: only remove a nonempty previous name when its file path differs from the new one | Compiled new-preset and equivalent-filename rename/reload checks; existing Unnamed preset stayed byte-for-byte identical in all three exported backups |
 | Medium | Preset names with punctuation can collide on disk, or leave a deleted preset visible until reload | Fixed: validate the resulting filename and remove the matching display-name/file-name entry when deleting | Compiled colliding-name check disables Save; deleted punctuated preset disappears immediately and is absent from the next export |
 | Medium | Backup export silently skips presets with ordinary punctuation in their filenames | Fixed: accept safe names while rejecting traversal, control characters and invalid path characters | All 55 shell tests pass; actual browser export includes the punctuated preset, with renamed preset data preserved across restart |
-| High | Minifying the backup filter inserts a NUL byte into HTML and prevents launcher startup | Fixed in source: check control-character codes numerically; reject NUL-containing packages and compile the real shell/quit bridge before the full game | Emscripten 6.0.11 minification and JavaScript parser smoke check pass; all seven packaging tests pass |
-| Medium | Native Quit freezes the last menu image and leaves a stale FPS counter | Engine change queued: save native settings, notify the launcher when the game loop stops, and use the existing storage-aware return flow | Actual 4ba1f80 Quit reproduced the frozen menu; pending compiled check; two quit/storage-failure regression tests pass |
+| High | Minifying the backup filter inserts a NUL byte into HTML and prevents launcher startup | Fixed: check control-character codes numerically; reject NUL-containing packages and compile the real shell/quit bridge before the full game | Emscripten 6.0.11 minification and JavaScript parser checks pass locally and in CI; corrected launcher starts the compiled 9d5f719 engine in all three stores; seven packaging tests pass |
+| Medium | Native Quit freezes the last menu image and leaves a stale FPS counter | Fixed: save native settings, notify the launcher when the game loop stops, and use the existing storage-aware return flow | Compiled 9d5f719 Quit shows storage-flush feedback and automatically returns to a ready launcher; compact candidate and ordinary main gameplay checks pass; all four main save files remain byte-identical |
 | Medium | Web Network menu offers native socket connections that cannot work | Fixed: availability explanation replaces nonfunctional connection controls | e796e78 browser menu checked; desktop builds pass |
 | High | Removing desktop Network controls left the Anchor initializer targeting a missing sidebar, crashing Start | Fixed: omit native Anchor widget registration in web builds | Both existing save stores start with e796e78; all five CI jobs passed |
 | Medium | Graphics settings offer native window and synchronization controls that the browser cannot honor | Fixed: browser explanation points to the toolbar Fullscreen action; native window/vsync controls remain on desktop only | e796e78 graphics menu inspected; internal resolution and texture filtering remain available |
@@ -36,16 +36,17 @@ acceptable only with consistent pacing. Matched captures do not establish whole-
 | Medium | Disabled mods can be overwritten or reactivate when updated | Fixed previously: persistent enable/disable and collision checks | Actual shader mod enabled, rendered, disabled and stayed disabled across reload; regression tests |
 | Medium | Players may expect F5/F7 save states to survive closing the tab | Clarified: launcher and Tools explain session lifetime and normal-save/export persistence | Actual session-state save/load verified; save backups tested |
 | Medium | Seed generation pauses the browser without useful feedback | Partial: start/completion/failure status and blocked duplicate imports; generation still runs synchronously | Manual seed 7238872525 produced all 442 locations matching the previous reference; responsiveness remains open |
-| Medium | Presentation can average about 59 FPS while still having visible long intervals | Open: phase profiler identifies synchronous depth readback as most simulation time; reduce stalls without changing glow accuracy | 074d149 quiet regular house: 60.03 FPS, callback p99 17 ms; completion p99 24.9 ms and max 38.5 ms; no whole-game smoothness claim |
+| Medium | Presentation can average about 59 FPS while still having visible long intervals | Open: phase profiler identifies synchronous depth readback as most simulation time; reduce stalls without changing glow accuracy | Earlier quiet house sample: 60.03 FPS, callback p99 17 ms; latest 9d5f719 house check: 57.96 FPS, callback p99 33.4 ms, maximum 100 ms; pacing target is not met |
 | Medium | Device-specific controller, rumble, mobile or Safari issues may be missed | Open verification: physical Bluetooth/USB controllers and real iPhone/Safari still need checks | Chromium touch emulation and controller API regressions pass; not substitutes for hardware |
 
 The hosting package copies only the compiled engine, project conversion descriptions and optional
 diagnostics. It excludes player ROMs, game archives, saves, settings and unrelated build files.
 Changing site origin or browser gives a separate save store; export/import before moving hosts.
 
-The launcher, hosting helper, phone menu choices and preset lifecycle have passed compiled browser
-checks. Native quit return remains queued until its compiled artifact passes checks. These results
-cover the listed player problems; they do not establish a finished whole-game accuracy or pacing audit.
+The launcher, hosting helper, phone menu choices, preset lifecycle and native Quit return have
+passed browser checks with the compiled engine. The 9d5f719 engine passed all five CI jobs; its
+corrected launcher is source revision 43004c3. These results cover the listed player problems;
+they do not establish a finished whole-game accuracy or pacing audit.
 
 Repeat the automated launcher and distribution checks from the repository root:
 
@@ -53,6 +54,8 @@ Repeat the automated launcher and distribution checks from the repository root:
 node --test scripts/web-shell.test.cjs
 python scripts/web.test.py
 python scripts/render-audit.test.py
+# With Emscripten 6.0.11 activated:
+python scripts/web-bridge.test.py
 ```
 
 For a downloaded build, `python serve.py check` verifies its manifest before hosting. Native

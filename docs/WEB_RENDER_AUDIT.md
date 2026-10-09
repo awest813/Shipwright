@@ -398,3 +398,14 @@ presentations and the same number of browser callbacks. Callback p99 was 17.0 ms
 33.2 ms; engine completion p99 was 24.6 ms and maximum 44.1 ms. This verifies the revised
 toolbar in ordinary play without converting that average into a whole-game smoothness claim.
 Evidence: `build-tools/performance-e796e-regular-house-quiet.json`.
+
+The final UI check with engine `9d5f719` and launcher `43004c3` produced a poorer 30-second
+regular-house sample at the same 714×535 resolution and graphics settings: 57.956 FPS over
+1,740 presentations, callback p99 33.4 ms and maximum 100 ms. Presentation completion p99 was
+40.9 ms and maximum 104.5 ms; depth readback median was 5.7 ms and p99 15.5 ms. Native-menu
+frames were zero and the rendering context did not change. The Tools drawer was used around
+measurement start; this is a normal-play check rather than an isolated physical-display test.
+Madden was not running when background load was checked afterward. This sample does not meet
+the requested pacing target, and does not by itself isolate a code regression from workload or
+system variation. Retain it alongside the earlier better samples rather than claiming a pacing
+pass from the FPS counter. Evidence: `build-tools/performance-9d5f719-final-house.json`.
