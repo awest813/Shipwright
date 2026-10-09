@@ -496,7 +496,8 @@ void DrawEditPresetPopup() {
         presets[newPresetName].fileName = newPresetName;
         std::fill_n(presets[newPresetName].apply, PRESET_SECTION_MAX, true);
         SavePreset(newPresetName);
-        if (newPresetName != oldPresetName) {
+        if (!oldPresetName.empty() && newPresetName != oldPresetName &&
+            FormatPresetPath(newPresetName) != FormatPresetPath(oldPresetName)) {
             DeletePreset(oldPresetName);
         }
         newPresetName = "";
