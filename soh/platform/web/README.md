@@ -43,6 +43,10 @@ so an old entry page does not point at missing engine files. Avoid a single-page
 returns HTML for missing `.wasm`, `.data` or bundle requests. Revalidate `index.html` on updates;
 the engine filenames already contain their revision and can be cached separately.
 
+The `.bundle.gz` files are compressed payloads that the launcher decodes itself. Serve their
+stored bytes without adding `Content-Encoding: gzip` solely because of the filename; otherwise
+the browser can decode them before the launcher does. The supplied preview server handles this.
+
 HTTPS is required for ROM conversion away from localhost. Plain HTTP on a LAN IP may load the
 launcher but cannot use the browser's crypto API. Saves belong to the browser and site origin;
 changing host, port or browser creates a separate storage area. Export a backup before moving.

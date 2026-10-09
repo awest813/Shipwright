@@ -6,6 +6,20 @@ WebGL2, runs the opening sequence and supports initial gameplay, saves and reloa
 Wider scene, feature, browser and device coverage remains to be tested. Build and usage instructions are
 in [soh/platform/web/README.md](../soh/platform/web/README.md).
 
+### Player UI and distribution audit
+
+The launcher now separates the primary ROM/Start flow from archives, saves, mods and controls.
+Gameplay has a compact Settings/Tools toolbar, a clear Back to game action, and a full-width,
+scrollable browser menu. Returning to the launcher waits for pending storage writes; startup
+failures retain save export. Native window/network controls have browser-specific explanations.
+The [player bug list](WEB_PLAYER_BUGS.md) records each fix, its compiled checks and remaining work.
+
+The validated web artifact includes `index.html`, every supported ROM conversion bundle,
+`serve.py` and a checksum manifest. Players can run `python serve.py serve`; hosts upload the
+whole folder to a static HTTPS site. Contributors can build and package with
+`python scripts/web.py build --prebuilt /path/to/soh.o2r`. See the linked build guide for SDK
+requirements, subfolder hosting, MIME types, updates and save transfer between origins.
+
 ### October 7–8, 2026 audit (in progress)
 
 The shipped CI baseline recognizes the supported USA Rev 2 ROM but fails extraction with

@@ -391,3 +391,10 @@ no native-menu frames averaged 59.980 FPS over 30 seconds. Callback p99 was 17.0
 33.3 ms; engine completion p99 was 31.1 ms and maximum 41.9 ms. Median depth readback was
 4.3 ms (p95 6.1 ms). This controlled debug-spawn timing fixture used ordinary wall-clock presentation,
 not deterministic render-audit steps. Evidence: `build-tools/performance-074d1-controlled-forest-quiet.json`.
+
+The playable UI build `e796e78` also completed a quiet 30-second regular-house sample at 714×535,
+with no native-menu frames or rendering-context changes. It averaged 60.008 FPS, with 1,801
+presentations and the same number of browser callbacks. Callback p99 was 17.0 ms and maximum
+33.2 ms; engine completion p99 was 24.6 ms and maximum 44.1 ms. This verifies the revised
+toolbar in ordinary play without converting that average into a whole-game smoothness claim.
+Evidence: `build-tools/performance-e796e-regular-house-quiet.json`.
