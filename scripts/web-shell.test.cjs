@@ -179,6 +179,21 @@ test('failed engine download explains the failure and offers reload before runti
   assert.equal(reloads, 1);
 });
 
+test('a startup exception offers readable recovery and export without scheduling failed-engine writes', () => {
+  const h = harness(); let writesScheduled = 0;
+  h.context.requestAnimationFrame = callback => callback();
+  h.context.setTimeout = callback => callback();
+  h.context.setInterval = () => writesScheduled++;
+  h.context.console = { ...console, error() {} };
+  h.evaluate('ready = true; startButton.disabled = false; Module.callMain = () => { throw {}; }; startGame()');
+  assert.match(h.elements.get('message').textContent, /couldn't start/);
+  assert.doesNotMatch(h.elements.get('message').textContent, /\[object/);
+  assert.equal(h.elements.get('reload-launcher').hidden, false);
+  assert.equal(h.elements.get('backup').disabled, false);
+  assert.equal(h.elements.get('start').disabled, true);
+  assert.equal(writesScheduled, 0);
+});
+
 test('rumble targets sparse browser indexes, scales both motors and renews bounded effects', () => {
   const h = rumbleHarness(); h.pad(2); h.pad(5);
   assert.equal(h.evaluate('Module.webControllerRumble(5, 65535, 32768)'), 1);

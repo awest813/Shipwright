@@ -376,3 +376,18 @@ all 307,200 pixels were within one RGB555 channel level (mean 8-bit error 0.0007
 maximum 8.22581). Evidence: `build-tools/render-native-074d1-zora-hd-noinput.json`,
 `build-tools/render-web-074d1-zora-hd-no-mod.json`, and
 `build-tools/comparison-074d1-zora-hd-no-mod/report.json`.
+
+The normal regular-save house pacing sample (`build-tools/performance-074d1-regular-house-quiet.json`)
+ran for 30 seconds with no native-menu frames or scene/settings changes. It averaged 60.029 FPS.
+Browser callback intervals were 16.7 ms median, 16.8 ms p95, 17.0 ms p99 and 17.6 ms maximum.
+Engine presentation-completion intervals were 23.0 ms p95, 24.9 ms p99 and 38.5 ms maximum;
+these measure completion cadence rather than physical screen refresh. Simulation updates averaged
+most of their CPU time in synchronous depth readback: median 3.9 ms, p95 5.9 ms, maximum 19.4 ms.
+This supports focusing the remaining pacing work on depth readback; it does not prove other scenes
+or physical devices meet the pacing target.
+
+A warmed-up adult Kokiri Forest sample with render capture disabled, the main game stopped and
+no native-menu frames averaged 59.980 FPS over 30 seconds. Callback p99 was 17.0 ms and maximum
+33.3 ms; engine completion p99 was 31.1 ms and maximum 41.9 ms. Median depth readback was
+4.3 ms (p95 6.1 ms). This controlled debug-spawn timing fixture used ordinary wall-clock presentation,
+not deterministic render-audit steps. Evidence: `build-tools/performance-074d1-controlled-forest-quiet.json`.

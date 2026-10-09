@@ -1165,7 +1165,9 @@
       try {
         Module.callMain([]);
       } catch (e) {
-        stop(`The game crashed while starting (${e.message || e}).`);
+        console.error("Game startup failed", e);
+        stop("The game couldn't start. Export your saves before reloading if browser storage is unavailable.");
+        return;
       }
       setInterval(persist, 10000);
       if (!started) {
