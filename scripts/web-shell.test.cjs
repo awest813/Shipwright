@@ -158,6 +158,35 @@ test('native menu changes close the tools drawer and label the way back to gamep
   assert.equal(h.elements.get('settings-game').textContent, 'Settings');
 });
 
+test('native quit waits for pending writes and returns to the launcher once', async () => {
+  const h = harness(); let reloads = 0;
+  h.context.window.location = { reload: () => reloads++ };
+  h.evaluate('ready = true; started = true; running = true');
+  const pending = h.evaluate('Module.onGameStopped()');
+  await h.evaluate('Module.onGameStopped()');
+  assert.equal(h.evaluate('stopped'), true);
+  assert.equal(h.elements.get('fps').textContent, 'Game closed');
+  assert.equal(reloads, 0);
+  const followUp = h.evaluate('persist()');
+  h.syncs.shift()(null); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reloads, 0);
+  h.syncs.shift()(null); await Promise.all([pending, followUp]);
+  assert.equal(reloads, 1);
+});
+
+test('native quit retains backup recovery when browser storage fails', async () => {
+  const h = harness(); let reloads = 0;
+  h.context.window.location = { reload: () => reloads++ };
+  h.evaluate('ready = true; started = true; running = true');
+  const pending = h.evaluate('Module.onGameStopped()');
+  h.syncs.shift()(Error('storage full')); await pending;
+  assert.equal(reloads, 0);
+  assert.equal(h.elements.get('backup').disabled, false);
+  assert.equal(h.elements.get('start').disabled, true);
+  assert.equal(h.elements.get('reload-launcher').hidden, false);
+  assert.match(h.elements.get('message').textContent, /Export your saves/);
+});
+
 test('an engine failure keeps save export available while blocking imports and restart', () => {
   const h = harness(); h.evaluate('ready = true; started = true; running = true; stop("Graphics context lost.")');
   assert.equal(h.elements.get('backup').disabled, false);
@@ -281,10 +310,10 @@ test('controller status handles sparse devices, disconnects and blocked access',
 
 test('backup path validation excludes archives and traversal', () => {
   const h = harness();
-  for (const path of ['Save/file1.sav', 'presets/my preset.json', 'Randomizer/seed.json', 'shipofharkinian.json']) {
+  for (const path of ['Save/file1.sav', 'presets/my preset.json', "presets/Player's #1!.json", 'presets/my..preset.json', 'presets/Café.json', 'Randomizer/seed.json', 'shipofharkinian.json']) {
     h.context.path = path; assert.equal(h.evaluate('backupPath(path)'), true);
   }
-  for (const path of ['Save/../oot.o2r', 'Save/./file', '/data/Save/file', 'Save//file', 'mods/mod.o2r', 'oot.o2r', 'Save/back\\slash']) {
+  for (const path of ['Save/../oot.o2r', 'Save/./file', '/data/Save/file', 'Save//file', 'mods/mod.o2r', 'oot.o2r', 'Save/back\\slash', 'Save/end\n', 'Save/file:stream', 'presets/bad\u0000name.json']) {
     h.context.path = path; assert.equal(h.evaluate('backupPath(path)'), false);
   }
 });

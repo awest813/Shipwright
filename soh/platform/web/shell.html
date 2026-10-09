@@ -482,7 +482,8 @@
   document.addEventListener("visibilitychange", () => { if (document.hidden) stopAllControllerRumble(); });
 
   function backupPath(path) {
-    return /^(Save|Randomizer|presets)\/[A-Za-z0-9_. /-]+$/.test(path) &&
+    return /^(Save|Randomizer|presets)\//.test(path) &&
+      !/[<>:"\\|?*\x00-\x1F\x7F]/.test(path) &&
       !path.split("/").some(part => part === ".." || part === "." || !part) ||
       ["shipofharkinian.json", "imgui.ini", "timesplitdata.json"].includes(path);
   }
@@ -813,6 +814,17 @@
     print: (text) => console.log(text),
     printErr: (text) => console.warn(text),
     onAbort: (what) => stop(`The game stopped: ${what}.`),
+    onGameStopped: () => {
+      if (stopped) return;
+      stopped = true;
+      finishBenchmark("game closed");
+      overlay.style.display = "";
+      setControlsEnabled(false);
+      startButton.hidden = true;
+      document.getElementById("reload-launcher").hidden = false;
+      document.getElementById("fps").textContent = "Game closed";
+      return returnToLauncher();
+    },
     onGameStarted: () => {
       started = true;
       document.getElementById("settings-game").disabled = typeof Module._WebToggleMenu !== "function";

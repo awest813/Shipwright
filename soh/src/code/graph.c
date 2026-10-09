@@ -550,7 +550,12 @@ static void Graph_WebFrame(void) {
     double interval = 1000.0 * (R_UPDATE_RATE > 0 ? R_UPDATE_RATE : 1) / 60.0;
 
     if (!WindowIsRunning()) {
+        CVarSave();
         emscripten_cancel_main_loop();
+        EM_ASM({
+            if (typeof Module.onGameStopped == = 'function')
+                Module.onGameStopped();
+        });
         return;
     }
     // A tick is usually a whole number of display refreshes (50 ms = 3 at 60 Hz), and callback times
