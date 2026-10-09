@@ -1,4 +1,5 @@
 #include <unordered_set>
+#include <string>
 
 #include <ship/Context.h>
 
@@ -729,7 +730,16 @@ void SohMenu::AddMenuRandomizer() {
         .SameLine(true);
     AddWidget(path, "Spoiler File", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
         if (!CVarGetInteger(CVAR_RANDOMIZER_SETTING("DontGenerateSpoiler"), 0)) {
+#ifdef __EMSCRIPTEN__
+            std::string seedName = CVarGetString(CVAR_GENERAL("SpoilerLog"), "");
+            const auto separator = seedName.find_last_of("/\\");
+            if (separator != std::string::npos) {
+                seedName.erase(0, separator + 1);
+            }
+            ImGui::TextWrapped("Selected seed: %s", seedName.c_str());
+#else
             ImGui::Text("Spoiler File: %s", CVarGetString(CVAR_GENERAL("SpoilerLog"), ""));
+#endif
         }
     });
 

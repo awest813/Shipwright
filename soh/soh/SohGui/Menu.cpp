@@ -691,9 +691,9 @@ void Menu::DrawElement() {
             headerIndex = menuOrder.front();
         }
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::BeginCombo("##MenuCategory", headerIndex.c_str())) {
+        if (ImGui::BeginCombo("##MenuCategory", headerIndex.c_str(), ImGuiComboFlags_HeightLarge)) {
             for (const auto& label : menuOrder) {
-                if (ImGui::Selectable(label.c_str(), headerIndex == label)) {
+                if (ImGui::Selectable(label.c_str(), headerIndex == label, 0, ImVec2(0, ImGui::GetFrameHeight()))) {
                     headerIndex = label;
                     menuSearch.Clear();
                     CVarSetString(headerCvar, label.c_str());
@@ -708,9 +708,9 @@ void Menu::DrawElement() {
             sectionIndex = mainEntry.sidebarOrder.front();
         }
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::BeginCombo("##MenuSection", sectionIndex.c_str())) {
+        if (ImGui::BeginCombo("##MenuSection", sectionIndex.c_str(), ImGuiComboFlags_HeightLarge)) {
             for (const auto& label : mainEntry.sidebarOrder) {
-                if (ImGui::Selectable(label.c_str(), sectionIndex == label)) {
+                if (ImGui::Selectable(label.c_str(), sectionIndex == label, 0, ImVec2(0, ImGui::GetFrameHeight()))) {
                     sectionIndex = label;
                     menuSearch.Clear();
                     CVarSetString(mainEntry.sidebarCvar, label.c_str());
