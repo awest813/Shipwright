@@ -8,7 +8,7 @@ acceptable only with consistent pacing. Matched captures do not establish whole-
 | --- | --- | --- | --- |
 | High | Start failed after converting a supported ROM | Fixed previously: persist conversion, release temporary extraction data, restart with the gameplay heap and resume exactly once | Supplied USA Rev 2 ROM reached real gameplay; resume and storage-failure tests |
 | Medium | Selecting a wrong file could leave players unsure whether their cached game was lost | Verified recovery: invalid ROM errors identify the file and leave the cached game ready with Start available | Actual 32-byte invalid-ROM selection reported that it was not an N64 ROM; cached-game status and enabled Start remained |
-| High | A damaged backup can overwrite saves before a later file-path conflict fails, or silently import unreadable settings | Fixed: validate settings and all file/directory conflicts before writing any files; explain that rejected imports leave current data unchanged | Two reproduced regressions now pass; actual invalid settings and conflicting-path imports preserve all five exported files byte for byte; legitimate backup still imports |
+| High | A damaged backup can overwrite saves before a later file-path conflict fails, or silently import unreadable settings | Fixed: validate settings and all file/directory conflicts before writing any files; explain that rejected imports leave current data unchanged | Two reproduced regressions now pass; actual final-package invalid settings and conflicting-path imports preserve all 12 exported files byte for byte; legitimate backup still imports |
 | Medium | A desktop backup may request a graphics backend unavailable in the browser | Verified compatibility: select an available browser renderer when the saved backend is unsupported | Imported a desktop-style DirectX 11 setting in the isolated test store; Start selected OpenGL and reached the game |
 | High | Graphics failure tells players to export, but disables launcher export | Fixed: save export stays enabled after engine failure; imports and restart stay blocked | Regression test and actual compiled startup exception; all ten exported files match the pre-failure backup byte for byte |
 | High | Returning to setup can reload before browser storage finishes writing | Fixed: Tools > Return to launcher waits for all outstanding flushes; failed storage keeps the game/export available | Duplicate-click, follow-up-write and storage-failure tests; new regular save exported before and after return/reload, with all file bytes identical |
@@ -47,8 +47,13 @@ Changing site origin or browser gives a separate save store; export/import befor
 The launcher, hosting helper, phone menu choices, preset lifecycle and native Quit return have
 passed browser checks with the compiled engine. The complete 43004c3 build passed all five CI
 jobs. The backup preflight fix also passes 57 shell tests and compiled-launcher parsing checks.
-These results cover the listed player problems;
-they do not establish a finished whole-game accuracy or pacing audit.
+These results cover the listed player problems; they do not establish a finished whole-game accuracy or pacing audit.
+
+The current local hosting package is `dist/shipwright-web-43004c3-ui2704653.zip`: the
+CI-built 43004c3 engine with the browser-tested 2704653 launcher. The original minified
+43004c3 launcher also passed browser startup and native Quit checks. The new launcher
+contains no engine changes; its full CI rebuild is tracked separately. Final package
+backup rejection evidence is `build-tools/backup-preflight-final-package-proof.json`.
 
 Repeat the automated launcher and distribution checks from the repository root:
 
