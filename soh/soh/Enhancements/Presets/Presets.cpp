@@ -386,18 +386,37 @@ void SavePreset(std::string& presetName) {
 }
 
 void DeletePreset(std::string& presetName) {
-    std::string presetPath = FormatPresetPath(presetName);
+    const std::string name = presetName;
+    std::string presetPath = FormatPresetPath(name);
     if (fs::exists(presetPath)) {
         fs::remove(presetPath);
     }
-    presets.erase(presetName);
+    for (auto preset = presets.begin(); preset != presets.end();) {
+        if (preset->first == name || preset->second.fileName == name) {
+            preset = presets.erase(preset);
+        } else {
+            ++preset;
+        }
+    }
 }
 
 static std::string newPresetName, oldPresetName;
 static bool saveSection[PRESET_SECTION_MAX];
 
+static bool PresetNameExists(const std::string& name, const std::string& previousName) {
+    for (const auto& [existingName, preset] : presets) {
+        if (existingName == previousName) {
+            continue;
+        }
+        if (existingName == name || (!preset.isBuiltIn && FormatPresetPath(existingName) == FormatPresetPath(name))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void DrawEditPresetPopup() {
-    bool nameExists = presets.contains(newPresetName) && newPresetName != oldPresetName;
+    bool nameExists = PresetNameExists(newPresetName, oldPresetName);
     ImVec2 popupPadding(6, 6);
 #ifdef __EMSCRIPTEN__
     if (ImGui::GetIO().DisplaySize.x < 1000) {
@@ -418,7 +437,7 @@ void DrawEditPresetPopup() {
                                    .ErrorText("Preset name already exists")
                                    .HasError(nameExists));
     }
-    nameExists = presets.contains(newPresetName) && newPresetName != oldPresetName;
+    nameExists = PresetNameExists(newPresetName, oldPresetName);
     bool noneSelected = true;
     for (int i = PRESET_SECTION_SETTINGS; i < PRESET_SECTION_MAX; i++) {
         if (saveSection[i]) {
