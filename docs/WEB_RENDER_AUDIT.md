@@ -357,3 +357,22 @@ state and passes all 307,200 pixels within one RGB555 channel level with the tem
 shader probe (`build-tools/comparison-2689a-zora-hd-depth-mod-probe`). Water, transparency
 and the HD outdoor/interior captures support the diagnosis; they remain scoped scene tests.
 The profiler's `37282cf` build passed all five CI jobs and is ready for normal gameplay timing.
+## Compiled native-depth fix: 074d149
+
+The permanent default-vertex depth-range patch passed a mod-free 640×480 adult Kokiri Forest
+capture at simulation frame 600 and two-thirds interpolation. Desktop and web captures both
+identify commit `074d149`, pass the complete state gate and contain 307,200 pixels. All pixels
+were within one RGB555 channel level (mean 8-bit channel error 0.00331139; maximum 8.22581).
+The shader diagnostic mod remained disabled in the browser throughout this check. This confirms
+the compiled fix for this fixture; it does not establish whole-game accuracy or frame pacing.
+
+Evidence: `build-tools/render-native-074d1-forest-hd-noinput.json`,
+`build-tools/render-web-074d1-forest-hd-no-mod.json`, and
+`build-tools/comparison-074d1-forest-hd-no-mod/report.json`.
+
+The same compiled patch passed the mod-free 640×480 Zora's Domain room-1 water capture at
+simulation frame 240 and two-thirds interpolation. The complete desktop/web state gate passed;
+all 307,200 pixels were within one RGB555 channel level (mean 8-bit error 0.000749748;
+maximum 8.22581). Evidence: `build-tools/render-native-074d1-zora-hd-noinput.json`,
+`build-tools/render-web-074d1-zora-hd-no-mod.json`, and
+`build-tools/comparison-074d1-zora-hd-no-mod/report.json`.
