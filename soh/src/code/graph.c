@@ -553,7 +553,7 @@ static void Graph_WebFrame(void) {
         CVarSave();
         emscripten_cancel_main_loop();
         EM_ASM({
-            if (typeof Module.onGameStopped == = 'function')
+            if (typeof Module.onGameStopped == 'function')
                 Module.onGameStopped();
         });
         return;
