@@ -409,3 +409,19 @@ Madden was not running when background load was checked afterward. This sample d
 the requested pacing target, and does not by itself isolate a code regression from workload or
 system variation. Retain it alongside the earlier better samples rather than claiming a pacing
 pass from the FPS counter. Evidence: `build-tools/performance-9d5f719-final-house.json`.
+
+### Warmed house repeat during backup recovery audit
+
+`build-tools/performance-9d5f719-polish-warmed-house.json` records 30,014.9 ms of
+ordinary scene 52 gameplay: 1,799 presentations (59.9369 FPS), 1,800 browser
+callbacks, callback p99 17.1 ms and maximum 33.3 ms. Presentation completion
+interval p99 was 27.1 ms and maximum 52.7 ms; completion delay p99 was 18.8 ms
+and maximum 40.4 ms. No native-menu frames or rendering-setting changes occurred.
+
+This run used a copied normal save in the isolated 8099 store, a warmed stationary
+house scene, no input during measurement and Tools closed immediately after
+starting. The canvas was 959x720 in a 1280x720 viewport at DPR 1.25, so it is not
+a controlled same-size A/B against the earlier 714x535 sample. No Madden build
+was running. It shows that sustained near-60 FPS remains possible, but does not
+explain away the previous 100 ms stalls or certify physical display pacing. Depth
+readback still dominates simulation CPU time (median 5.5 ms, p99 9.4 ms).

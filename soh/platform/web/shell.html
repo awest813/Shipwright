@@ -993,10 +993,11 @@
     const file = event.target.files[0]; event.target.value = "";
     if (!file || !ready || running || busy) return;
     busy = true; setControlsEnabled(false);
+    let filesChanged = false;
     try {
       if (file.size > 32 * 1024 * 1024) throw new Error("backup exceeds 32 MB");
       const backup = JSON.parse(await file.text());
-      if (backup.format !== "shipwright-web-backup" || backup.version !== 1 || !Array.isArray(backup.files)) throw new Error("unsupported backup format");
+      if (!backup || backup.format !== "shipwright-web-backup" || backup.version !== 1 || !Array.isArray(backup.files)) throw new Error("unsupported backup format");
       const paths = new Set(); let total = 0;
       const files = backup.files.map(entry => {
         if (typeof entry.path !== "string" || !backupPath(entry.path) || paths.has(entry.path) || typeof entry.data !== "string") throw new Error("invalid backup file path");
@@ -1007,11 +1008,31 @@
       });
       // Validate the entire package before changing any saved files.
       for (const entry of files) {
+        const relative = entry.path.slice(DATA_DIR.length + 1);
+        if (relative === "shipofharkinian.json") {
+          try { parseSettings(new TextDecoder().decode(entry.bytes)); }
+          catch (error) { throw new Error("the backup contains unreadable settings"); }
+        }
+        if (hasFile(entry.path) && FS.isDir(FS.stat(entry.path).mode)) {
+          throw new Error(`backup file conflicts with an existing directory: ${relative}`);
+        }
+        const parts = relative.split("/");
+        for (let i = 1; i < parts.length; ++i) {
+          const parent = parts.slice(0, i).join("/");
+          if (paths.has(parent) || (hasFile(`${DATA_DIR}/${parent}`) && !FS.isDir(FS.stat(`${DATA_DIR}/${parent}`).mode))) {
+            throw new Error(`backup directory conflicts with a file: ${parent}`);
+          }
+        }
+      }
+      for (const entry of files) {
+        filesChanged = true;
         FS.mkdirTree(entry.path.substring(0, entry.path.lastIndexOf("/")));
         FS.writeFile(entry.path, entry.bytes);
       }
       if (await persist()) showMessage(`Imported ${files.length} save/settings files.`);
-    } catch (e) { showMessage(`Could not import backup: ${e.message}`, true); }
+    } catch (e) {
+      showMessage(`Could not import backup: ${e.message}.${filesChanged ? "" : " Current saves and settings were not changed."}`, true);
+    }
     finally { busy = false; setControlsEnabled(!running && !stopped); }
   });
 
@@ -1038,15 +1059,19 @@
     finally { busy = false; setControlsEnabled(!running && !stopped); }
   });
 
-  function readSeedConfig() {
-    const path = `${DATA_DIR}/shipofharkinian.json`;
-    const config = hasFile(path) ? JSON.parse(new TextDecoder().decode(FS.readFile(path))) : {};
+  function parseSettings(text) {
+    const config = JSON.parse(text);
     for (const value of [config, config && config.CVars, config && config.CVars && config.CVars.gGeneral]) {
       if (value !== undefined && (!value || typeof value !== "object" || Array.isArray(value))) {
         throw new Error("the saved settings are not a valid config object");
       }
     }
     return config;
+  }
+
+  function readSeedConfig() {
+    const path = `${DATA_DIR}/shipofharkinian.json`;
+    return parseSettings(hasFile(path) ? new TextDecoder().decode(FS.readFile(path)) : "{}");
   }
 
   function shouldRestoreImportedSeed() {

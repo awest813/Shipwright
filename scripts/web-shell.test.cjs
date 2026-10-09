@@ -442,6 +442,41 @@ test('backup export includes saves and settings, excluding game assets', () => {
   assert.deepEqual(Array.from(h.context.backupResult.files, file => file.path).sort(), ['Save/file.sav', 'shipofharkinian.json']);
 });
 
+test('an unreadable settings backup cannot replace existing saves or settings', async () => {
+  for (const settings of ['{broken', 'null', '[]', '{"CVars":[]}']) {
+    const h = harness(); h.evaluate('ready = true');
+    const original = new Uint8Array([1, 2, 3]);
+    h.files.set('/data/Save/file.sav', original);
+    h.files.set('/data/shipofharkinian.json', new TextEncoder().encode('{}'));
+    h.context.FS.syncfs = (_, callback) => callback(null);
+    const file = { size: 100, text: async () => JSON.stringify({ format: 'shipwright-web-backup', version: 1, files: [
+      { path: 'Save/file.sav', data: 'BAUG' },
+      { path: 'shipofharkinian.json', data: Buffer.from(settings).toString('base64') },
+    ] }) };
+    await h.elements.get('backup-input').listeners.change({ target: { files: [file] } });
+    assert.deepEqual(h.files.get('/data/Save/file.sav'), original);
+    assert.equal(Buffer.from(h.files.get('/data/shipofharkinian.json')).toString(), '{}');
+    assert.match(h.elements.get('message').textContent, /settings/);
+  }
+});
+
+test('backup file and directory conflicts are rejected before any save changes', async () => {
+  for (const conflict of ['backup parent', 'existing parent', 'existing directory']) {
+    const h = harness(); h.evaluate('ready = true');
+    const original = new Uint8Array([1, 2, 3]);
+    h.files.set('/data/Save/file.sav', original);
+    const entries = [{ path: 'Save/file.sav', data: 'BAUG' }];
+    if (conflict === 'backup parent') entries.push({ path: 'Save/nested', data: '' }, { path: 'Save/nested/child.sav', data: '' });
+    if (conflict === 'existing parent') { h.files.set('/data/Save/nested', original); entries.push({ path: 'Save/nested/child.sav', data: '' }); }
+    if (conflict === 'existing directory') { h.context.FS.mkdirTree('/data/Save/nested'); entries.push({ path: 'Save/nested', data: '' }); }
+    h.context.FS.syncfs = (_, callback) => callback(null);
+    const file = { size: 100, text: async () => JSON.stringify({ format: 'shipwright-web-backup', version: 1, files: entries }) };
+    await h.elements.get('backup-input').listeners.change({ target: { files: [file] } });
+    assert.deepEqual(h.files.get('/data/Save/file.sav'), original);
+    assert.match(h.elements.get('message').textContent, /conflict/);
+  }
+});
+
 test('supported ROM asset versions may contain hyphens; malformed bundles do not write', async () => {
   const h = harness();
   h.context.fetch = async () => ({ ok: true, arrayBuffer: async () => new Uint8Array([1, 0, 0, 0]).buffer });
