@@ -332,6 +332,22 @@ test('concurrent persistence waits for the follow-up flush', async () => {
   assert.equal(await second, true);
 });
 
+test('a stream of file writes is flushed 250 ms after the first one instead of being held off', async () => {
+  const h = harness(), timers = new Map(); let now = 0, nextTimer = 0;
+  h.context.setTimeout = (callback, delay) => { timers.set(++nextTimer, { callback, at: now + delay }); return nextTimer; };
+  h.context.clearTimeout = id => timers.delete(id);
+  const advance = ms => {
+    now += ms;
+    for (const [id, timer] of [...timers]) if (timer.at <= now) { timers.delete(id); timer.callback(); }
+  };
+  for (let i = 0; i < 10; i++) { h.evaluate('Module.onFileWritten()'); advance(50); }
+  // Writes kept coming every 50 ms, yet the first flush started once 250 ms had passed.
+  assert.equal(h.syncs.length, 1);
+  h.syncs.shift()(null); await new Promise(resolve => setImmediate(resolve));
+  advance(250); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.syncs.length, 1);
+});
+
 function convertedStartupHarness() {
   const h = harness(), markers = new Map(); let reloads = 0;
   h.context.sessionStorage = {

@@ -121,8 +121,8 @@ does not work.
    archive is stored in the browser (IndexedDB), together with saves and settings, so this is only
    needed once. The ROM itself is not kept.
 
-Saves reach browser storage within a quarter of a second of being written. Other files, such as
-settings, follow within 10 seconds and whenever the tab is hidden. In a private window the browser
+Saves and settings reach browser storage within a quarter of a second of being written. Anything
+else also follows every 10 seconds and whenever the tab is hidden. In a private window the browser
 may refuse storage altogether; the page says so, and nothing is kept after it closes.
 
 Open **Saves, mods & controls** before startup to export/import saves and settings or install

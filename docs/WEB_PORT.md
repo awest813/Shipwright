@@ -781,8 +781,9 @@ Both are submodules owned by other repos. Land those changes upstream
   no ImGui viewports, canvas at CSS-pixel resolution with preserved aspect ratio, browser keys
   kept away from the game, and browser-paced matrix interpolation targeting 60 Hz presentation.
 - **Storage:** IDBFS at `/data` (`GetAppDirectoryPath`), bundled files preloaded at `/app`
-  (`GetAppBundlePath`). Writes through `WriteFileSafely` and save deletes/copies are flushed to
-  IndexedDB within 250 ms; everything else every 10 s and when the tab is hidden.
+  (`GetAppBundlePath`). Writes through `WriteFileSafely`, save deletes/copies and config saves
+  (`Config::Save`) are flushed to IndexedDB within 250 ms; everything else every 10 s and when
+  the tab is hidden.
 - **In-browser ROM conversion** (section 2.3 had planned a Worker; it runs on the main thread
   instead, reusing `RunExtract`): the page normalizes the byte order, looks up the SHA-1 in
   `rom-versions.json` (generated from `soh/assets/yml/config.yml`), fetches that version's ~450 KB
