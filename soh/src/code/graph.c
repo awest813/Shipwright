@@ -512,7 +512,7 @@ static void RunFrame() {
 #ifdef __EMSCRIPTEN__
             afterCommands = emscripten_get_now();
             Graph_WebSetSimulationTimings(afterState - phaseStart, afterInput - afterState, afterUpdate - afterInput,
-                                         afterCommands - afterUpdate);
+                                          afterCommands - afterUpdate);
 #endif
 
             // uint64_t diff = (ticksB - ticksA) / (freq / 1000);

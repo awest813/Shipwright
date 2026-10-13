@@ -80,7 +80,8 @@ bool Rando_HandleSpoilerDrop(char* filePath) {
 
 #ifdef __EMSCRIPTEN__
 extern "C" EMSCRIPTEN_KEEPALIVE int WebLoadRandomizerSeed(void) {
-    if (randoGenerating.load()) return 0;
+    if (randoGenerating.load())
+        return 0;
     char path[] = "/data/Randomizer/imported-seed.json";
     return Rando_HandleSpoilerDrop(path) ? 1 : 0;
 }
