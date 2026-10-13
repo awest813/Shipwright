@@ -1207,11 +1207,11 @@
         stop("The game couldn't start. Export your saves before reloading if browser storage is unavailable.");
         return;
       }
-      setInterval(persist, 10000);
       if (!started) {
         // main() exited during startup; it has already explained why in a dialog.
         stop("The game couldn't start.");
       }
+      if (!stopped) setInterval(persist, 10000);
       if (stopped || conversionFinishing) return;
       showGameControls();
     }, 50));
