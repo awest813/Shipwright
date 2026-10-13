@@ -928,8 +928,11 @@
         lastFrameReport = now;
       }
     },
-    // Saves and other files the game writes go to browser storage right away.
-    onFileWritten: () => { clearTimeout(persistSoon); persistSoon = setTimeout(persist, 250); },
+    // Saves and settings the game writes go to browser storage shortly after the first unflushed write,
+    // even if more keep coming (a settings slider being dragged saves every frame).
+    onFileWritten: () => {
+      if (!persistSoon) persistSoon = setTimeout(() => { persistSoon = 0; persist(); }, 250);
+    },
     // The game wrote oot.o2r / oot-mq.o2r from the staged ROM; the ROM and asset descriptions can go.
     onArchiveExtracted: () => {
       clearStagedRom();
