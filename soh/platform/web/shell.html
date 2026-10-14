@@ -29,6 +29,8 @@
   button#start, button#reload-launcher { width: 100%; margin-top: 12px; min-height: 52px; background: #91e4ad; border-color: #91e4ad; color: #092116; font-weight: 750; font-size: 17px; }
   button#start:hover, button#reload-launcher:hover { background: #b0f2c7; }
   button:disabled, label.button.disabled { opacity: .5; cursor: default; }
+  button[aria-pressed="true"] { border-color: var(--accent); background: #2d5a3e; }
+  button[aria-pressed="true"]::after { content: ": on"; }
   input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
   #message { min-height: 1.5em; font-size: 13px; margin-top: 12px; overflow-wrap: anywhere; }
   #message.error, #web-status.error { color: var(--error); }
@@ -50,12 +52,21 @@
   #game-tools-panel { position: absolute; right: 0; bottom: 54px; width: min(360px, calc(100vw - 16px)); max-height: calc(100dvh - 90px); overflow: auto; padding: 18px; border: 1px solid #486153; border-radius: 14px; background: #14201df7; box-shadow: 0 8px 40px #0008; }
   #game-tools-panel h2:first-child { margin-top: 0; }
   #touch-controls { position: fixed; inset: 0; pointer-events: none; z-index: 3; user-select: none; -webkit-user-select: none; }
-  #touch-stick { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); width: 124px; height: 124px; border: 2px solid #ffffff60; border-radius: 50%; background: #1118; touch-action: none; pointer-events: auto; }
-  #touch-stick-knob { position: absolute; left: 38px; top: 38px; width: 44px; height: 44px; border-radius: 50%; background: #ffffff70; pointer-events: none; }
-  #touch-buttons { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(3, 44px); gap: 6px; pointer-events: auto; }
-  #touch-buttons button { padding: 0; height: 44px; background: #14201dbb; touch-action: none; }
+  /* Sized from the short screen side so thumbs reach them on phones and they stay modest on tablets. */
+  #touch-controls { --pad: clamp(44px, 12.5vmin, 60px); --stick: clamp(124px, 34vmin, 168px); }
+  #touch-stick { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); width: var(--stick); height: var(--stick); border: 2px solid #ffffff60; border-radius: 50%; background: #1118; touch-action: none; pointer-events: auto; }
+  #touch-stick-knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: #ffffff70; pointer-events: none; }
+  #touch-buttons { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(3, var(--pad)); gap: 6px; pointer-events: auto; }
+  #touch-buttons button { padding: 0; height: var(--pad); min-height: 0; background: #14201dbb; touch-action: none; }
   #touch-buttons button.pressed { background: #3a9b63dd; }
-  #touch-buttons button:last-child { grid-column: span 3; }
+  #touch-buttons button:last-child { grid-column: span 3; height: 44px; }
+  /* N64 colors: blue A, green B, yellow C buttons. */
+  #touch-buttons button.c { color: #f4d35e; font-weight: 700; }
+  #touch-buttons button.face { border-radius: 50%; font-weight: 800; font-size: 18px; color: #fff; }
+  #touch-buttons button.a { background: #2f5fc4cc; border-color: #6f97ef; }
+  #touch-buttons button.b { background: #23874acc; border-color: #5fc184; }
+  #touch-buttons button.a.pressed { background: #5b86e6; }
+  #touch-buttons button.b.pressed { background: #3fb36b; }
   body.touch-enabled #web-tools { bottom: auto; top: max(8px, env(safe-area-inset-top)); }
   body.touch-enabled #game-tools-panel { bottom: auto; top: 54px; }
   body.touch-enabled #web-status { bottom: auto; top: max(64px, env(safe-area-inset-top)); }
@@ -100,8 +111,8 @@
   <div id="touch-stick" role="group" aria-label="Movement joystick"><span id="touch-stick-knob"></span></div>
   <div id="touch-buttons">
     <button data-pad="32" aria-label="L shoulder">L</button><button data-pad="8192" aria-label="Z target">Z</button><button data-pad="16" aria-label="R shoulder">R</button>
-    <button data-pad="2" aria-label="C left">C←</button><button data-pad="8" aria-label="C up">C↑</button><button data-pad="1" aria-label="C right">C→</button>
-    <button data-pad="16384" aria-label="B button">B</button><button data-pad="4" aria-label="C down">C↓</button><button data-pad="32768" aria-label="A button">A</button>
+    <button class="c" data-pad="2" aria-label="C left">C←</button><button class="c" data-pad="8" aria-label="C up">C↑</button><button class="c" data-pad="1" aria-label="C right">C→</button>
+    <button class="face b" data-pad="16384" aria-label="B button">B</button><button class="c" data-pad="4" aria-label="C down">C↓</button><button class="face a" data-pad="32768" aria-label="A button">A</button>
     <button data-pad="4096" aria-label="Start button">Start</button>
   </div>
 </div>
@@ -183,6 +194,8 @@
   let renderAuditPath = null;
   let performanceContext = null;
   let runtimeDiagnostics = null;
+  let leavingPage = false; // an intentional reload is under way (no "leave page?" prompt)
+  let wakeLock = null;     // screen wake lock held while the game is on screen
 
   // SDL listens on the window. Leave native HTML keyboard behavior available in
   // the web controls, but always forward releases for keys held in the game.
@@ -194,6 +207,9 @@
       if (webControlKeys.has(key) || (inWebControls && !gameKeys.has(key))) {
         webControlKeys.add(key);
         event.stopImmediatePropagation();
+        // Escape leaves the Tools panel for the game (its toggle handler refocuses the canvas).
+        const tools = document.getElementById("game-tools");
+        if (key === "Escape" && tools.open && event.target?.closest?.("#web-tools")) tools.open = false;
       } else {
         gameKeys.add(key);
       }
@@ -342,12 +358,12 @@
     return (buttons | (stickPointer !== null ? 0x80 : 0) | ((stickX & 255) << 16) | ((stickY & 255) << 24)) | 0;
   }
 
-  function setTouchEnabled(enabled) {
+  function setTouchEnabled(enabled, focusGame = true) {
     touchEnabled = enabled; resetTouchInput();
     document.getElementById("touch-controls").hidden = !enabled || gameMenuVisible;
     document.getElementById("touch-toggle").setAttribute("aria-pressed", String(enabled));
     document.body.classList.toggle("touch-enabled", enabled);
-    Module.canvas.focus();
+    if (focusGame) Module.canvas.focus();
   }
 
   document.getElementById("touch-toggle").addEventListener("click", () => {
@@ -384,7 +400,9 @@
     // Small center movements stay neutral; rescale the remaining travel to full stick range.
     const scale = length < 0.12 ? 0 : (Math.min(length, 1) - 0.12) / (0.88 * Math.min(length, 1));
     stickX = Math.round(x * scale * 85); stickY = Math.round(y * scale * 85);
-    document.getElementById("touch-stick-knob").style.transform = `translate(${x * 36}px, ${-y * 36}px)`;
+    // The knob may travel until its edge meets the ring (44 px knob, 2 px border).
+    const travel = rect.width / 2 - 24;
+    document.getElementById("touch-stick-knob").style.transform = `translate(${x * travel}px, ${-y * travel}px)`;
   }
   touchStick.addEventListener("pointerdown", event => {
     if (!touchEnabled || gameMenuVisible || !started || stopped || stickPointer !== null) return;
@@ -400,13 +418,24 @@
   window.addEventListener("blur", resetTouchInput);
   document.addEventListener("visibilitychange", () => { if (document.hidden) resetTouchInput(); });
 
+  function connectedGamepads() {
+    return Array.from(navigator.getGamepads()).filter(pad => pad && pad.connected);
+  }
+
+  // Browsers decorate gamepad ids: Chrome appends "(STANDARD GAMEPAD Vendor: 054c Product: 0ce6)",
+  // Firefox prefixes "054c-0ce6-". Show just the product name.
+  function controllerName(id) {
+    const name = String(id).replace(/^[0-9a-f]{4}-[0-9a-f]{4}-/i, "").replace(/\s*\([^()]*\)\s*$/, "").trim();
+    return name || "Controller";
+  }
+
   function updateControllers() {
     let text;
     try {
       if (typeof navigator.getGamepads !== "function") text = "Gamepad access is unavailable in this browser.";
       else {
-        const pads = Array.from(navigator.getGamepads()).filter(pad => pad && pad.connected);
-        text = pads.length ? `${pads.length} controller(s) connected: ${pads.map(pad => pad.id).join(", ")}` :
+        const names = connectedGamepads().map(pad => controllerName(pad.id));
+        text = names.length ? `Connected: ${names.join(", ")}. Configure it in Settings > Controls.` :
           "Press a button on your paired controller to detect it.";
       }
     } catch (e) { text = "Gamepad access is blocked in this browser. Check its permissions."; }
@@ -416,6 +445,13 @@
     }
   }
   window.addEventListener("gamepadconnected", updateControllers);
+  // Browsers only report a controller once a button is pressed on it, so this means someone is playing
+  // with it: move the touch pad out of the way of the game. Tools can bring it back.
+  window.addEventListener("gamepadconnected", () => {
+    if (!touchEnabled || !started || stopped) return;
+    setTouchEnabled(false);
+    showMessage("Controller connected, so touch controls are hidden. Turn them back on in Tools.");
+  });
   window.addEventListener("gamepaddisconnected", updateControllers);
 
   const controllerRumbles = new Map();
@@ -532,11 +568,14 @@
     }
   }
 
+  // File inputs are hidden inside their <label class="button">, so the label carries the disabled look.
+  function setFileInputEnabled(input, enabled) {
+    input.disabled = !enabled;
+    input.parentElement?.classList.toggle("disabled", !enabled);
+  }
+
   function setControlsEnabled(enabled) {
-    for (const input of fileInputs) {
-      input.disabled = !enabled;
-      input.parentElement.classList.toggle("disabled", !enabled);
-    }
+    for (const input of fileInputs) setFileInputEnabled(input, enabled);
     refreshArchiveStatus();
   }
 
@@ -545,6 +584,8 @@
     if (stopped) return;
     stopped = true;
     stopAllControllerRumble();
+    setTouchEnabled(false, false);
+    wakeLock?.release().catch(() => {});
     finishBenchmark("game stopped");
     overlay.style.display = "";
     setControlsEnabled(false);
@@ -745,6 +786,12 @@
     return syncing;
   }
 
+  // Reloads the page on purpose, without the "leave this page?" prompt that guards a running game.
+  function reloadPage() {
+    leavingPage = true;
+    window.location.reload();
+  }
+
   function conversionResumeKey() {
     return `shipwright-converted-start:${window.location.pathname}`;
   }
@@ -762,7 +809,7 @@
     if (saved && storageWorks) {
       try {
         sessionStorage.setItem(conversionResumeKey(), String(Date.now()));
-        window.location.reload();
+        reloadPage();
         return;
       } catch (error) {
         // Session storage may be unavailable even when IndexedDB works; keep this game playable.
@@ -818,6 +865,9 @@
     onGameStopped: () => {
       if (stopped) return;
       stopped = true;
+      stopAllControllerRumble();
+      setTouchEnabled(false, false);
+      wakeLock?.release().catch(() => {});
       finishBenchmark("game closed");
       overlay.style.display = "";
       setControlsEnabled(false);
@@ -838,7 +888,7 @@
     onRandomizerGenerationStarted: () => {
       randomizerGenerating = true;
       finishBenchmark("randomizer generation");
-      document.getElementById("seed-game-input").disabled = true;
+      setFileInputEnabled(document.getElementById("seed-game-input"), false);
       document.getElementById("benchmark-game").disabled = true;
       document.getElementById("return-launcher").disabled = true;
       showMessage("Generating a randomizer seed. Keep this tab open; the game pauses while generation runs.");
@@ -846,7 +896,7 @@
     onRandomizerGenerationFinished: (success) => {
       randomizerGenerating = false;
       document.getElementById("return-launcher").disabled = false;
-      document.getElementById("seed-game-input").disabled = !started || stopped || busy;
+      setFileInputEnabled(document.getElementById("seed-game-input"), started && !stopped && !busy);
       document.getElementById("benchmark-game").disabled = !started || stopped;
       frameTimes.length = 0; lastFrameReport = 0;
       document.getElementById("fps").textContent = "Measuring FPS…";
@@ -953,14 +1003,14 @@
         showMessage("Could not save to browser storage. Export your saves before leaving.", true);
         return;
       }
-      window.location.reload();
+      reloadPage();
     } catch (error) {
       showMessage(`Could not return to the launcher: ${error.message}. Export your saves before leaving.`, true);
     } finally { busy = false; button.disabled = false; }
   }
   document.getElementById("return-launcher").addEventListener("click", returnToLauncher);
   document.getElementById("reload-launcher").addEventListener("click", () => {
-    if (!ready) window.location.reload();
+    if (!ready) reloadPage();
     else returnToLauncher();
   });
   window.addEventListener("error", event => {
@@ -988,6 +1038,8 @@
       Module.canvas.focus();
     } catch (e) { showMessage("Fullscreen is unavailable in this browser. You can still play in the tab.", true); }
   });
+  // iPhone Safari has no element fullscreen; don't offer a button that can only fail there.
+  if (document.fullscreenEnabled === false) document.getElementById("fullscreen").hidden = true;
   document.addEventListener("fullscreenchange", () => {
     document.getElementById("fullscreen").textContent = document.fullscreenElement ? "Exit fullscreen" : "Fullscreen";
   });
@@ -1120,7 +1172,7 @@
       } catch (e) { showMessage(`Could not import seed: ${e.message}`, true); }
       finally {
         busy = false; setControlsEnabled(!running && !stopped);
-        document.getElementById("seed-game-input").disabled = !started || stopped || randomizerGenerating;
+        setFileInputEnabled(document.getElementById("seed-game-input"), started && !stopped && !randomizerGenerating);
         if (started && !stopped) Module.canvas.focus();
       }
     });
@@ -1191,8 +1243,12 @@
     overlay.style.display = "none";
     document.getElementById("web-tools").hidden = false;
     document.getElementById("web-status").textContent = "";
-    document.getElementById("seed-game-input").disabled = false;
-    if (typeof Module._WebTouchInputSupported === "function" && window.matchMedia && window.matchMedia("(pointer: coarse)").matches) setTouchEnabled(true);
+    setFileInputEnabled(document.getElementById("seed-game-input"), true);
+    let hasGamepad = false;
+    try { hasGamepad = typeof navigator.getGamepads === "function" && connectedGamepads().length > 0; } catch (e) {}
+    keepScreenAwake();
+    if (typeof Module._WebTouchInputSupported === "function" && !hasGamepad &&
+        window.matchMedia && window.matchMedia("(pointer: coarse)").matches) setTouchEnabled(true);
     Module.canvas.focus();
   }
 
@@ -1223,6 +1279,26 @@
 
   document.addEventListener("visibilitychange", () => { if (document.hidden && running) persist(); });
   window.addEventListener("pagehide", () => { if (running) persist(); });
+  // Closing the tab mid-game loses progress since the last in-game save, so ask first. (Saves and
+  // settings are already in browser storage.)
+  window.addEventListener("beforeunload", (event) => {
+    if (!started || stopped || leavingPage) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
+
+  // Controller-only play isn't user activity to the OS, so keep the screen from dimming while the game
+  // is on screen. Browsers drop the lock whenever the tab is hidden; take it again on return.
+  async function keepScreenAwake() {
+    if (!started || stopped || document.hidden || wakeLock || !navigator.wakeLock) return;
+    try {
+      const lock = await navigator.wakeLock.request("screen");
+      if (stopped) { lock.release().catch(() => {}); return; } // the game ended while we waited
+      wakeLock = lock;
+      lock.addEventListener("release", () => { if (wakeLock === lock) wakeLock = null; });
+    } catch (error) { wakeLock = null; } // Denied (battery saver, permissions policy): play on without it.
+  }
+  document.addEventListener("visibilitychange", keepScreenAwake);
   Module.canvas.addEventListener("webglcontextlost", (event) => {
     event.preventDefault();
     stop("The browser lost the graphics context. Export your saves before reloading if storage is unavailable.");
