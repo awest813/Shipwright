@@ -134,6 +134,10 @@ the web toolbar provides Settings, fullscreen, and measured presentation FPS. **
 save export and secondary actions. The engine still
 simulates at the original game tick rate; 60 FPS uses matrix interpolation. Tab navigates the
 web controls, and Enter/Space activates their buttons without sending those presses to the game.
+Esc closes **Tools** and returns to the game. Fullscreen is not offered where the browser can't do
+it (iPhone Safari). While the game is on screen the page keeps the display awake (Screen Wake Lock,
+where available), since controller-only play doesn't count as activity, and asks before the tab is
+closed or navigated away; returning to the launcher doesn't ask.
 
 Use **Tools > Performance & diagnostics > Measure FPS** during gameplay for a 30-second presentation sample, then **Export FPS
 report** to save the average FPS, frame-time percentiles, stalls and rendering dimensions.
@@ -179,8 +183,10 @@ focus, hiding the tab or a game failure. The controller menu's rumble test uses 
 Bluetooth/USB input and vibration still need checks on actual devices; browser detection alone
 does not prove those functions.
 
-**Touch controls** toggles an on-screen movement joystick and N64 buttons. They also appear
-automatically on browsers reporting a coarse pointer. Use **Settings** to open the in-game menu;
+**Touch controls** toggles an on-screen movement joystick and N64 buttons, sized from the
+screen's short side. They also appear automatically on browsers reporting a coarse pointer,
+unless a controller is already connected; pressing a button on a controller during play hides
+them again (turn them back on in **Tools**). Use **Settings** to open the in-game menu;
 touch controls hide while that menu is open. At narrow widths, category and section selectors
 leave settings the full available width and height. Closing the menu restores the game's aspect
 ratio. These controls require matching updated shell and

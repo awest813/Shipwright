@@ -294,11 +294,87 @@ test('ROM normalization preserves all supported byte orders', () => {
   assert.throws(() => h.evaluate('toBigEndian(new Uint8Array(4096))'), /N64 ROM/);
 });
 
+test('the in-game seed button looks enabled exactly when it works', () => {
+  const h = harness(), label = new Set();
+  h.context.document.getElementById('seed-game-input').parentElement = { classList: { toggle: (name, on) => on ? label.add(name) : label.delete(name) } };
+  label.add('disabled'); // as left by setControlsEnabled(false) when Start was pressed
+  h.evaluate('ready = running = started = true; showGameControls()');
+  assert.equal(h.elements.get('seed-game-input').disabled, false);
+  assert.equal(label.has('disabled'), false);
+  h.evaluate('Module.onRandomizerGenerationStarted()');
+  assert.equal(label.has('disabled'), true);
+  h.evaluate('Module.onRandomizerGenerationFinished(true)');
+  assert.equal(label.has('disabled'), false);
+});
+
+test('Escape in the Tools panel closes it instead of reaching the game', () => {
+  const h = keyboardHarness();
+  const tools = h.context.document.getElementById('game-tools');
+  tools.open = true;
+  const event = h.dispatch('keydown', 'Escape', true);
+  assert.equal(event.stopped, true);
+  assert.equal(tools.open, false);
+  assert.equal(h.pressed.has('Escape'), false);
+});
+
+test('leaving mid-game asks first, but intentional reloads and stopped games do not', async () => {
+  const h = harness();
+  const leave = () => { const event = { prevented: false, preventDefault() { this.prevented = true; } };
+    for (const listener of h.windowListeners.get('beforeunload')) listener(event); return event.prevented; };
+  assert.equal(leave(), false);
+  h.evaluate('ready = running = started = true');
+  assert.equal(leave(), true);
+  h.context.window.location = { reload() {} };
+  h.context.FS.syncfs = (_, callback) => callback(null);
+  await h.evaluate('returnToLauncher()');
+  assert.equal(leave(), false);
+  const stopped = harness();
+  stopped.evaluate('ready = running = started = true; stop("test")');
+  const event = { prevented: false, preventDefault() { this.prevented = true; } };
+  for (const listener of stopped.windowListeners.get('beforeunload')) listener(event);
+  assert.equal(event.prevented, false);
+});
+
+test('stopping the game drops touch input and the touch pad', () => {
+  const h = harness();
+  h.context.Module._WebTouchInputSupported = () => 1;
+  h.evaluate('ready = running = started = true; setTouchEnabled(true); touchLatched = 0x8000');
+  h.evaluate('stop("test")');
+  assert.equal(h.evaluate('touchEnabled'), false);
+  assert.equal(h.evaluate('touchLatched'), 0);
+  assert.equal(h.elements.get('touch-controls').hidden, true);
+});
+
+test('controller names drop the vendor details browsers add', () => {
+  const h = harness();
+  const name = id => h.evaluate(`controllerName(${JSON.stringify(id)})`);
+  assert.equal(name('Xbox 360 Controller (XInput STANDARD GAMEPAD)'), 'Xbox 360 Controller');
+  assert.equal(name('DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)'), 'DualSense Wireless Controller');
+  assert.equal(name('054c-0ce6-DualSense Wireless Controller'), 'DualSense Wireless Controller');
+  assert.equal(name('8BitDo Pro 2'), '8BitDo Pro 2');
+  assert.equal(name('(STANDARD GAMEPAD)'), 'Controller');
+});
+
+test('a controller in use hides the touch pad, and is not covered by it at startup', () => {
+  const h = harness();
+  h.context.Module._WebTouchInputSupported = () => 1;
+  h.context.window.matchMedia = () => ({ matches: true });
+  h.context.navigator.getGamepads = () => [{ connected: true, id: 'Pad' }];
+  h.evaluate('ready = running = started = true; showGameControls()');
+  assert.equal(h.evaluate('touchEnabled'), false);
+  h.context.navigator.getGamepads = () => [];
+  h.evaluate('showGameControls()');
+  assert.equal(h.evaluate('touchEnabled'), true);
+  for (const listener of h.windowListeners.get('gamepadconnected')) listener({ gamepad: { index: 0 } });
+  assert.equal(h.evaluate('touchEnabled'), false);
+  assert.match(h.elements.get('message').textContent, /touch controls are hidden/);
+});
+
 test('controller status handles sparse devices, disconnects and blocked access', () => {
   const h = harness();
   h.context.navigator.getGamepads = () => [null, { connected: true, id: 'Test Controller' }, { connected: false, id: 'Disconnected' }];
   h.evaluate('updateControllers()');
-  assert.equal(h.elements.get('controller-status').textContent, '1 controller(s) connected: Test Controller');
+  assert.equal(h.elements.get('controller-status').textContent, 'Connected: Test Controller. Configure it in Settings > Controls.');
   assert.equal(h.elements.get('controller-game-status').textContent, h.elements.get('controller-status').textContent);
   h.context.navigator.getGamepads = () => [];
   h.evaluate('updateControllers()');
