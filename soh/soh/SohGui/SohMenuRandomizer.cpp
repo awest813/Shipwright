@@ -736,7 +736,12 @@ void SohMenu::AddMenuRandomizer() {
             if (separator != std::string::npos) {
                 seedName.erase(0, separator + 1);
             }
-            ImGui::TextWrapped("Selected seed: %s", seedName.c_str());
+            if (seedName.empty()) {
+                ImGui::TextWrapped("No seed selected yet. Generate one, or import a spoiler JSON from the web "
+                                   "toolbar's Tools.");
+            } else {
+                ImGui::TextWrapped("Selected seed: %s", seedName.c_str());
+            }
 #else
             ImGui::Text("Spoiler File: %s", CVarGetString(CVAR_GENERAL("SpoilerLog"), ""));
 #endif

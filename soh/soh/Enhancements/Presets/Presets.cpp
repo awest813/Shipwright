@@ -19,6 +19,9 @@
 #include "soh/Enhancements/randomizer/settings.h"
 #include "soh/ShipInit.hpp"
 #include "soh/config/ConfigUpdaters.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -390,6 +393,13 @@ void DeletePreset(std::string& presetName) {
     std::string presetPath = FormatPresetPath(name);
     if (fs::exists(presetPath)) {
         fs::remove(presetPath);
+#ifdef __EMSCRIPTEN__
+        // Files only live in memory until the web page copies them to browser storage, so tell it.
+        EM_ASM({
+            if (Module.onFileWritten)
+                Module.onFileWritten();
+        });
+#endif
     }
     for (auto preset = presets.begin(); preset != presets.end();) {
         if (preset->first == name || preset->second.fileName == name) {
@@ -612,9 +622,10 @@ void PresetsCustomWidget(WidgetInfo& info) {
                                                     .Size(UIWidgets::Sizes::Inline)
                                                     .Padding({ 10, 14 })
                                                     .Color(THEME_COLOR))) {
-                    DeletePreset(preset.fileName);
-                    ImGui::PopID();
-                    break;
+                    // Delete sits right beside Edit at touch size, so confirm before removing the file.
+                    SohGui::RegisterPopup("Delete preset", "Delete the preset \"" + name + "\"? This can't be undone.",
+                                          "Delete", "Cancel",
+                                          [fileName = preset.fileName]() mutable { DeletePreset(fileName); });
                 }
             }
             ImGui::PopID();

@@ -523,6 +523,36 @@ test('backup import validates all paths before writing files', async () => {
   assert.match(h.elements.get('message').textContent, /invalid backup file path/);
 });
 
+test('backups leave out the oldest unselected spoiler logs only when they would be too big to import', () => {
+  const h = harness(), MB = 1024 * 1024;
+  h.files.set('/data/shipofharkinian.json', new TextEncoder().encode(JSON.stringify({ CVars: { gGeneral: { SpoilerLog: '/data/Randomizer/selected.json' } } })));
+  const entry = (path, size, mtime) => ({ path, bytes: { length: size }, mtime });
+  h.context.small = [entry('Save/file1.sav', 1000, 0), entry('Randomizer/a.json', MB, 1)];
+  assert.equal(h.evaluate('trimSpoilerLogs(small).omitted'), 0);
+  h.context.big = [
+    entry('Save/file1.sav', 2 * MB, 0), entry('shipofharkinian.json', 1000, 0),
+    entry('Randomizer/selected.json', 3 * MB, 1), entry('Randomizer/imported-seed.json', 3 * MB, 2),
+    ...Array.from({ length: 10 }, (_, i) => entry(`Randomizer/seed${i}.json`, 2 * MB, 10 + i)),
+  ];
+  h.evaluate('result = trimSpoilerLogs(big)');
+  const kept = h.evaluate('result.entries.map(entry => entry.path)');
+  assert.equal(h.evaluate('result.tooLarge'), false);
+  assert.ok(kept.includes('Save/file1.sav') && kept.includes('shipofharkinian.json'));
+  assert.ok(kept.includes('Randomizer/selected.json') && kept.includes('Randomizer/imported-seed.json'));
+  // 28 MB total, so the oldest spoiler logs go until both the contents and the encoded file fit.
+  assert.deepEqual(kept.filter(path => /seed\d/.test(path)), ['Randomizer/seed3.json', 'Randomizer/seed4.json', 'Randomizer/seed5.json',
+    'Randomizer/seed6.json', 'Randomizer/seed7.json', 'Randomizer/seed8.json', 'Randomizer/seed9.json']);
+  assert.equal(h.evaluate('result.omitted'), 3);
+  // Contents exactly at the 24 MB limit still make a file just over the 32 MB import accepts once
+  // base64-encoded, so that backup is flagged rather than reported as importable.
+  h.context.atLimit = [entry('Randomizer/old.json', 10, 0), entry('Randomizer/selected.json', 24 * MB - 10, 1)];
+  h.evaluate('atLimitResult = trimSpoilerLogs(atLimit)');
+  assert.equal(h.evaluate('atLimitResult.omitted'), 1);
+  assert.equal(h.evaluate('atLimitResult.tooLarge'), true);
+  h.context.saves = [entry('Save/file1.sav', 30 * MB, 0)];
+  assert.equal(h.evaluate('trimSpoilerLogs(saves).tooLarge'), true);
+});
+
 test('backup export includes saves and settings, excluding game assets', () => {
   const h = harness(); h.evaluate('ready = true');
   h.context.FS.mkdirTree('/data/Save');

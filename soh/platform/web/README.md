@@ -128,7 +128,10 @@ may refuse storage altogether; the page says so, and nothing is kept after it cl
 Open **Saves, mods & controls** before startup to export/import saves and settings or install
 compatible `.o2r` mods. Installed mods have an enable/disable selector on that start screen;
 disabling keeps the archive, and changes apply at the next Start. Updating a disabled mod keeps
-it disabled. Backups exclude ROMs, game archives, and mods. Import replaces matching
+it disabled. Backups exclude ROMs, game archives, and mods. Each generated seed leaves a spoiler log in
+`Randomizer/`; if those would push a backup past what import accepts (32 MB), export leaves out the
+oldest ones and says how many. Saves, settings, presets, the selected seed and an imported seed are
+always included, and randomizer saves carry their own seed data. Import replaces matching
 save/settings files, so export a backup first when keeping existing progress matters. During play,
 the web toolbar provides Settings, fullscreen, and measured presentation FPS. **Tools** contains
 save export and secondary actions. The engine still

@@ -532,25 +532,60 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  // Import refuses backups past these sizes (the file, and its decoded contents).
+  const BACKUP_FILE_LIMIT = 32 * 1024 * 1024, BACKUP_CONTENT_LIMIT = 24 * 1024 * 1024;
+
+  // Every generated seed leaves a spoiler log in Randomizer/. Saves don't need them (a randomizer save
+  // carries its own seed data), but they pile up, so when a backup would be too big to import again,
+  // leave out the oldest ones. The selected seed and an imported seed always stay.
+  function trimSpoilerLogs(entries) {
+    // Contents, and the exported JSON: base64 data plus each entry's path and punctuation.
+    const encodedSize = entry => Math.ceil(entry.bytes.length / 3) * 4 + entry.path.length + 32;
+    let contents = 0, encoded = 64;
+    for (const entry of entries) { contents += entry.bytes.length; encoded += encodedSize(entry); }
+    const fits = () => contents <= BACKUP_CONTENT_LIMIT && encoded <= BACKUP_FILE_LIMIT;
+    if (fits()) return { entries, omitted: 0 };
+    let selected = "";
+    try { selected = String(readSeedConfig().CVars?.gGeneral?.SpoilerLog || "").replace(/^(\/data\/|\.\/)/, ""); }
+    catch (error) {} // Unreadable settings: no seed counts as selected.
+    const removable = entries.filter(entry => /^Randomizer\/[^/]+\.json$/.test(entry.path) &&
+      entry.path !== selected && entry.path !== "Randomizer/imported-seed.json").sort((a, b) => a.mtime - b.mtime);
+    const omitted = new Set();
+    for (const entry of removable) {
+      if (fits()) break;
+      omitted.add(entry); contents -= entry.bytes.length; encoded -= encodedSize(entry);
+    }
+    return { entries: entries.filter(entry => !omitted.has(entry)), omitted: omitted.size, tooLarge: !fits() };
+  }
+
   function exportBackup() {
     if (!ready) return;
-    const files = [];
+    const entries = [];
     function visit(dir, relative) {
       for (const name of FS.readdir(dir)) {
         if (name === "." || name === "..") continue;
         const path = `${dir}/${name}`, rel = relative ? `${relative}/${name}` : name;
-        if (FS.isDir(FS.stat(path).mode)) {
+        const stat = FS.stat(path);
+        if (FS.isDir(stat.mode)) {
           if (["Save", "Randomizer", "presets"].includes(rel) || relative) visit(path, rel);
         } else if (backupPath(rel)) {
-          const bytes = FS.readFile(path);
-          let binary = "";
-          for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-          files.push({ path: rel, data: btoa(binary) });
+          entries.push({ path: rel, bytes: FS.readFile(path), mtime: +stat.mtime || 0 });
         }
       }
     }
     visit(DATA_DIR, "");
+    const backup = trimSpoilerLogs(entries);
+    const files = backup.entries.map(({ path, bytes }) => {
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+      return { path, data: btoa(binary) };
+    });
     download("shipwright-backup.json", JSON.stringify({ format: "shipwright-web-backup", version: 1, files }), "application/json");
+    if (backup.tooLarge) {
+      showMessage("This backup is larger than import accepts (32 MB), so it can't be imported again as is.", true);
+    } else if (backup.omitted) {
+      showMessage(`Backup exported without ${backup.omitted} older randomizer spoiler log(s), so it stays small enough to import. Your saves, settings and selected seed are all included.`);
+    }
   }
 
   function showMessage(text, isError) {
@@ -1050,7 +1085,7 @@
     busy = true; setControlsEnabled(false);
     let filesChanged = false;
     try {
-      if (file.size > 32 * 1024 * 1024) throw new Error("backup exceeds 32 MB");
+      if (file.size > BACKUP_FILE_LIMIT) throw new Error("backup exceeds 32 MB");
       const backup = JSON.parse(await file.text());
       if (!backup || backup.format !== "shipwright-web-backup" || backup.version !== 1 || !Array.isArray(backup.files)) throw new Error("unsupported backup format");
       const paths = new Set(); let total = 0;
@@ -1058,7 +1093,7 @@
         if (typeof entry.path !== "string" || !backupPath(entry.path) || paths.has(entry.path) || typeof entry.data !== "string") throw new Error("invalid backup file path");
         paths.add(entry.path);
         const binary = atob(entry.data); total += binary.length;
-        if (total > 24 * 1024 * 1024) throw new Error("backup contents exceed 24 MB");
+        if (total > BACKUP_CONTENT_LIMIT) throw new Error("backup contents exceed 24 MB");
         return { path: `${DATA_DIR}/${entry.path}`, bytes: Uint8Array.from(binary, c => c.charCodeAt(0)) };
       });
       // Validate the entire package before changing any saved files.
