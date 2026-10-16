@@ -7,6 +7,17 @@ Current state: single-threaded, WebGL2, browser-paced interpolation targeting 60
 the player's ROM into `oot.o2r` / `oot-mq.o2r` in the browser, or accepts archives made by desktop SoH
 of the same version.
 
+## Play online
+
+When the repository publishes to GitHub Pages (see [GitHub Pages](#github-pages)), open the site,
+choose **Load ROM**, then **Start**. Nothing is uploaded: the ROM is converted in the browser, and
+the converted game, saves and settings stay in that browser.
+
+Use a current desktop version of Chrome, Edge, Firefox or Safari. The game needs WebGL 2 and
+WebAssembly exception handling; the start screen says which one is missing on a browser that
+can't run it. Phones and tablets can run the launcher and touch controls, but are still being
+tested and may not have enough memory.
+
 ## Play a downloaded build
 
 Download the **soh-web** artifact from a successful GitHub Actions **generate-builds** run and
@@ -47,6 +58,25 @@ The `.bundle.gz` files are compressed payloads. The supplied preview server serv
 bytes and the launcher decompresses them. The launcher also accepts bundles already decoded by
 the browser when a host sends `Content-Encoding: gzip`; it checks the gzip signature before
 decompressing. Keep the original bundle files intact when copying a deployment.
+
+### GitHub Pages
+
+Pushes to `main` publish the checked **soh-web** package to GitHub Pages (the `deploy-web` job in
+`.github/workflows/generate-builds.yml`). One-time setup:
+
+1. In the repository's **Settings > Pages**, set **Build and deployment > Source** to **GitHub Actions**.
+2. Pages accepts deployments only from the default branch. Make `main` the default branch
+   (**Settings > General**), or add `main` under **Settings > Environments > github-pages >
+   Deployment branches and tags**.
+
+The site appears at `https://<owner>.github.io/<repository>/`. To publish again without a new
+commit, run **generate-builds** on `main` from the Actions tab.
+
+Pages already meets the requirements above: HTTPS, `application/wasm` for `.wasm`, no rewrites, and
+no special headers (the single-threaded build doesn't need cross-origin isolation). Pages lets
+browsers reuse every file for 10 minutes. When a reused launcher names engine files that an update
+replaced, the launcher finds the current page and reloads once. Players don't have to clear their
+cache. Saves are kept per origin, so they carry over between updates of the same site.
 
 HTTPS is required for ROM conversion away from localhost. Plain HTTP on a LAN IP may load the
 launcher but cannot use the browser's crypto API. Saves belong to the browser and site origin;

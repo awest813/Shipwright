@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const shell = fs.readFileSync('soh/platform/web/shell.html', 'utf8').split('<script>')[1].split('</script>')[0];
 
-function harness() {
+function harness(options = {}) {
   const elements = new Map();
   function element(id) {
     if (!elements.has(id)) elements.set(id, {
@@ -32,8 +32,8 @@ function harness() {
     btoa: text => Buffer.from(text, 'binary').toString('base64'),
     atob: text => { if (!/^[A-Za-z0-9+/]*={0,2}$/.test(text)) throw Error('Invalid base64'); return Buffer.from(text, 'base64').toString('binary'); },
     URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
-    document: { body: element('body'), getElementById: element, querySelectorAll: selector => selector === '[data-pad]' ? padButtons : [], createElement: tag => tag === 'option' ? { value: '', textContent: '' } : element('download'), addEventListener(name, fn) { listen(documentListeners, name, fn); } },
-    window: { addEventListener(name, fn) { listen(windowListeners, name, fn); } }, navigator: {}, WebAssembly,
+    document: { body: element('body'), getElementById: element, querySelectorAll: selector => selector === '[data-pad]' ? padButtons : [], createElement: tag => tag === 'option' ? { value: '', textContent: '' } : tag === 'canvas' ? { getContext: () => options.webgl2 === false ? null : { getExtension: () => null } } : element('download'), addEventListener(name, fn) { listen(documentListeners, name, fn); } },
+    window: { addEventListener(name, fn) { listen(windowListeners, name, fn); } }, navigator: {}, WebAssembly: options.WebAssembly ?? WebAssembly,
     FS: {
       analyzePath: path => ({ exists: files.has(path) || dirs.has(path) }),
       mkdirTree(path) { const parts = path.split('/'); for (let i = 2; i <= parts.length; i++) dirs.add(parts.slice(0, i).join('/')); },
@@ -198,14 +198,93 @@ test('an engine failure keeps save export available while blocking imports and r
   assert.equal(h.evaluate('exported.files[0].path'), 'Save/file1.sav');
 });
 
-test('failed engine download explains the failure and offers reload before runtime initialization', () => {
+test('failed engine download explains the failure and offers reload before runtime initialization', async () => {
   const h = harness(); let reloads = 0;
   h.context.window.location = { reload: () => reloads++ };
   for (const listener of h.windowListeners.get('error')) listener({target:{tagName:'SCRIPT'}});
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal(h.elements.get('reload-launcher').hidden, false);
   assert.match(h.elements.get('message').textContent, /could not be downloaded/);
   h.elements.get('reload-launcher').listeners.click();
   assert.equal(reloads, 1);
+});
+
+function stalePageHarness(hostedEngine) {
+  const h = harness(), storage = new Map(), fetches = [];
+  let reloads = 0;
+  h.context.document.scripts = [{ getAttribute: name => name === 'src' ? 'soh-1111111.js' : null }];
+  h.context.sessionStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
+  h.context.window.location = { href: 'https://example.github.io/Shipwright/', pathname: '/Shipwright/', reload: () => reloads++ };
+  h.context.fetch = async (url, init) => {
+    fetches.push({ url, init });
+    return { ok: true, text: async () => `<!doctype html><script async src=${hostedEngine}.js></script>` };
+  };
+  const fail = async () => {
+    for (const listener of h.windowListeners.get('error')) listener({ target: { tagName: 'SCRIPT' } });
+    for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
+  };
+  return { ...h, storage, fetches, fail, reloads: () => reloads };
+}
+
+test('a cached page naming replaced engine files reloads once for the updated page', async () => {
+  const h = stalePageHarness('soh-2222222');
+  await h.fail();
+  assert.equal(h.reloads(), 1);
+  assert.equal(h.fetches[0].url, 'https://example.github.io/Shipwright/');
+  assert.equal(h.fetches[0].init.cache, 'reload');
+  assert.equal(h.evaluate('stopped'), false);
+  // If the reload still gets the old page, explain instead of reloading in a loop.
+  const again = stalePageHarness('soh-2222222');
+  again.storage.set('shipwright-page-refresh', String(Date.now()));
+  await again.fail();
+  assert.equal(again.reloads(), 0);
+  assert.match(again.elements.get('message').textContent, /could not be downloaded/);
+});
+
+test('an engine download failure on a current page explains it without reloading', async () => {
+  const h = stalePageHarness('soh-1111111');
+  await h.fail();
+  assert.equal(h.reloads(), 0);
+  assert.match(h.elements.get('message').textContent, /could not be downloaded/);
+  assert.equal(h.elements.get('reload-launcher').hidden, false);
+  // Download progress arriving afterwards doesn't hide the explanation.
+  h.evaluate('Module.setStatus("Downloading data… (1/2)")');
+  assert.match(h.elements.get('message').textContent, /could not be downloaded/);
+});
+
+test('a failed data package download and an engine that cannot compile are explained', async () => {
+  const h = stalePageHarness('soh-1111111');
+  for (const listener of h.windowListeners.get('unhandledrejection')) listener({ reason: new Error('404: https://example.github.io/Shipwright/soh-1111111.data') });
+  for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.match(h.elements.get('message').textContent, /game files could not be downloaded/);
+  const memory = harness();
+  for (const listener of memory.windowListeners.get('unhandledrejection')) listener({ reason: new RangeError('WebAssembly.Memory(): could not allocate memory') });
+  assert.match(memory.elements.get('message').textContent, /enough memory/);
+  const compile = harness();
+  compile.evaluate('Module.onAbort(new WebAssembly.CompileError("invalid opcode"))');
+  assert.match(compile.elements.get('message').textContent, /can't run the game/);
+  assert.equal(compile.elements.get('reload-launcher').hidden, true);
+});
+
+test('browsers without WebGL 2 or Wasm exceptions are told before the engine downloads', () => {
+  const noGl = harness({ webgl2: false });
+  assert.equal(noGl.evaluate('stopped'), true);
+  assert.equal(typeof noGl.evaluate('Module.instantiateWasm'), 'function');
+  assert.match(noGl.elements.get('message').textContent, /WebGL 2/);
+  assert.equal(noGl.elements.get('reload-launcher').hidden, true);
+  const oldWasm = harness({ WebAssembly: { validate: () => false, CompileError: WebAssembly.CompileError, RuntimeError: WebAssembly.RuntimeError } });
+  assert.match(oldWasm.elements.get('message').textContent, /exception handling/);
+  const supported = harness();
+  assert.equal(supported.evaluate('stopped'), false);
+  assert.equal(supported.evaluate('Module.instantiateWasm'), undefined);
+});
+
+test('the start screen shows which engine build is running', () => {
+  const h = harness();
+  h.context.document.scripts = [{ getAttribute: () => 'soh-54d7909.js' }];
+  h.context.setInterval = () => 0;
+  h.evaluate('Module.onRuntimeInitialized()');
+  assert.equal(h.elements.get('build-id').textContent, ' Build 54d7909.');
 });
 
 test('a startup exception offers readable recovery and export without scheduling failed-engine writes', () => {

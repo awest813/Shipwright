@@ -20,6 +20,12 @@ whole folder to a static HTTPS site. Contributors can build and package with
 `python scripts/web.py build --prebuilt /path/to/soh.o2r`. See the linked build guide for SDK
 requirements, subfolder hosting, MIME types, updates and save transfer between origins.
 
+The `deploy-web` CI job publishes the checked package to GitHub Pages from `main`.
+Pages lets browsers reuse files for 10 minutes, so after an update a reused launcher can name
+engine files that no longer exist. The launcher then fetches the current page, and reloads once if
+it names a different engine. Before downloading the engine it checks for WebAssembly exception
+handling and WebGL 2, and explains what is missing instead of failing to start.
+
 ### October 7–8, 2026 audit (in progress)
 
 The shipped CI baseline recognizes the supported USA Rev 2 ROM but fails extraction with
@@ -791,7 +797,8 @@ Both are submodules owned by other repos. Land those changes upstream
 - **Page:** start screen with ROM / archive upload, clear errors for unsupported ROMs, missing
   browser features, storage failures, startup failures and crashes. Save/settings backup transfer,
   `.o2r` mod upload, randomizer spoiler import, controller status and fullscreen tools are available.
-- **CI:** `build-web` job uploading the `soh-web` artifact.
+- **CI:** `build-web` job uploading the `soh-web` artifact; `deploy-web` publishes that package to
+  GitHub Pages from `main`.
 - **wasm-only bugs fixed:** see section 6.
 
 ### Not done yet

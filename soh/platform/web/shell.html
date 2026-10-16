@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ship of Harkinian</title>
+<meta name="description" content="Play Ship of Harkinian, the Ocarina of Time PC port, in your browser with your own ROM. Nothing is uploaded: conversion, saves and settings stay on your device.">
+<meta property="og:title" content="Ship of Harkinian: Web edition">
+<meta property="og:description" content="Ocarina of Time in your browser, from your own ROM. Saves stay on your device.">
+<meta property="og:type" content="website">
 <meta name="theme-color" content="#14201d">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314201d'/%3E%3Cpath d='M30 10v30H12zm5 4v26h17zM9 44h46l-9 12H20z' fill='%238ee4ab'/%3E%3C/svg%3E">
 <style>
@@ -35,6 +39,9 @@
   #message { min-height: 1.5em; font-size: 13px; margin-top: 12px; overflow-wrap: anywhere; }
   #message.error, #web-status.error { color: var(--error); }
   code, kbd { background: #0c1810; padding: 1px 5px; border-radius: 4px; }
+  a { color: var(--accent); }
+  a:focus-visible { outline: 3px solid #f2ce77; outline-offset: 2px; }
+  #about { margin-top: 18px; font-size: 12px; }
   details { border-top: 1px solid #355044; margin-top: 16px; padding-top: 8px; }
   summary { min-height: 44px; padding: 10px 0; color: var(--text); }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -125,6 +132,7 @@
       <div><strong>Your game</strong><div class="status" id="status-rom">Choose an Ocarina of Time ROM to get started</div></div>
       <label class="button disabled">Load ROM<input type="file" accept=".z64,.n64,.v64" id="rom-input" disabled></label>
     </div>
+    <noscript><p id="noscript" class="status">Turn on JavaScript to play: the game runs entirely in this page.</p></noscript>
     <div id="message" role="status" aria-live="polite">Loading the game files…</div>
     <button id="start" disabled>Start</button>
     <button id="reload-launcher" hidden>Reload launcher</button>
@@ -156,6 +164,7 @@
         <p class="status">When enabled, F5 saves a state, F6 changes its slot and F7 loads it. These states last only for the current session. Normal saves and exported backups persist.</p>
       </details>
     </details>
+    <p id="about" class="status">Ship of Harkinian is a fan project by <a href="https://github.com/HarbourMasters/Shipwright" target="_blank" rel="noopener">HarbourMasters</a>, not affiliated with Nintendo. No ROM or game data is hosted here. Works best in a current Chrome, Edge, Firefox or Safari.<span id="build-id"></span></p>
   </div>
 </div>
 <script>
@@ -615,7 +624,8 @@
   }
 
   // Shows the start screen again with an explanation; the page has to be reloaded after this.
-  function stop(text) {
+  // Without canRetry (an unsupported browser), reloading can't help, so it isn't offered.
+  function stop(text, canRetry = true) {
     if (stopped) return;
     stopped = true;
     stopAllControllerRumble();
@@ -626,9 +636,57 @@
     setControlsEnabled(false);
     startButton.disabled = true;
     startButton.hidden = true;
-    document.getElementById("reload-launcher").hidden = false;
-    showMessage(`${text} Use Reload launcher to try again.`, true);
+    document.getElementById("reload-launcher").hidden = !canRetry;
+    showMessage(canRetry ? `${text} Use Reload launcher to try again.` : text, true);
   }
+
+  // The name of the engine this page loads (soh-<commit>), or null before its script tag exists.
+  function engineName() {
+    for (const script of document.scripts || []) {
+      const name = /(?:^|\/)(soh-[\w-]+)\.js(?:[?#]|$)/.exec(script.getAttribute("src") || "")?.[1];
+      if (name) return name;
+    }
+    return null;
+  }
+
+  // Static hosts such as GitHub Pages let browsers reuse this page for minutes without asking. After
+  // an update, a reused page names engine files the host has replaced. Reload once when the host has
+  // a page for a different engine.
+  const PAGE_REFRESH_KEY = "shipwright-page-refresh";
+  async function reloadIfPageUpdated() {
+    const current = engineName();
+    if (!current) return false;
+    try {
+      const last = Number(sessionStorage.getItem(PAGE_REFRESH_KEY));
+      if (last > 0 && Date.now() - last < 60000) return false; // already tried; don't loop
+      // "reload" skips the cached copy and stores the fresh one for the reload below.
+      const response = await fetch(window.location.href, { cache: "reload" });
+      if (!response.ok) return false;
+      const latest = /<script\b[^>]*\bsrc\s*=\s*["']?(?:[^"'\s>]*\/)?(soh-[\w-]+)\.js/i.exec(await response.text())?.[1];
+      if (!latest || latest === current) return false;
+      sessionStorage.setItem(PAGE_REFRESH_KEY, String(Date.now()));
+    } catch (error) { return false; }
+    reloadPage();
+    return true;
+  }
+
+  // The engine could not be downloaded or started before the runtime was ready.
+  let engineFailure = false;
+  function engineUnavailable(text) {
+    if (stopped || engineFailure) return;
+    engineFailure = true;
+    showMessage("Checking for an updated version…");
+    reloadIfPageUpdated().then(reloaded => { if (!reloaded) stop(text); });
+  }
+
+  function isCompileError(error) {
+    return error instanceof WebAssembly.CompileError || /\bCompileError\b/.test(String(error));
+  }
+  function isOutOfMemory(error) {
+    return error?.name === "RangeError" && /memory/i.test(error.message);
+  }
+  const OUT_OF_MEMORY = "The browser couldn't give the game enough memory. Close other tabs and try again; some phones and tablets don't allow enough.";
+  const UNSUPPORTED_BROWSER = "This browser can't run the game. Use a current version of Chrome, Edge, Firefox or Safari.";
 
   function hasFile(path) {
     try { return FS.analyzePath(path).exists; } catch (e) { return false; }
@@ -884,9 +942,12 @@
         removeRunDependency("syncfs");
       });
     }],
-    setStatus: (text) => { if (!ready && text) showMessage(text); },
+    setStatus: (text) => { if (!ready && !stopped && !engineFailure && text) showMessage(text); },
     onRuntimeInitialized: () => {
       ready = true;
+      try { sessionStorage.removeItem(PAGE_REFRESH_KEY); } catch (error) {}
+      const engine = engineName();
+      if (engine) document.getElementById("build-id").textContent = ` Build ${engine.slice(4)}.`;
       setControlsEnabled(true);
       updateControllers();
       setInterval(updateControllers, 1000);
@@ -896,7 +957,11 @@
     },
     print: (text) => console.log(text),
     printErr: (text) => console.warn(text),
-    onAbort: (what) => stop(`The game stopped: ${what}.`),
+    onAbort: (what) => {
+      if (ready) stop(`The game stopped: ${what}.`);
+      else if (isCompileError(what)) stop(UNSUPPORTED_BROWSER, false);
+      else engineUnavailable(`The game engine could not start: ${what}.`);
+    },
     onGameStopped: () => {
       if (stopped) return;
       stopped = true;
@@ -1049,10 +1114,27 @@
     else returnToLauncher();
   });
   window.addEventListener("error", event => {
-    if (!ready && event.target?.tagName === "SCRIPT") {
-      stop("The game engine could not be downloaded. Check your connection.");
+    if (ready) return;
+    if (event.target?.tagName === "SCRIPT") {
+      engineUnavailable("The game engine could not be downloaded. Check your connection.");
+    } else if (/soh-[\w-]+\.js/.test(event.filename || "") && event.error) {
+      // The engine script failed while starting up, before it could report through onAbort.
+      if (isOutOfMemory(event.error)) {
+        stop(OUT_OF_MEMORY);
+      } else if (!(event.error instanceof WebAssembly.RuntimeError)) { // aborts already went through onAbort
+        engineUnavailable(`The game engine could not start (${event.error.message || event.error}).`);
+      }
     }
   }, true);
+  // Downloading the engine's bundled data, and its asynchronous startup, fail as rejected promises.
+  window.addEventListener("unhandledrejection", event => {
+    const reason = String(event.reason?.message ?? event.reason);
+    if (ready) return;
+    if (isOutOfMemory(event.reason)) stop(OUT_OF_MEMORY);
+    else if (/soh-[\w-]+\.(?:data|wasm)\b/.test(reason)) {
+      engineUnavailable("The game files could not be downloaded. Check your connection.");
+    }
+  });
   document.getElementById("game-tools").addEventListener("toggle", () => {
     if (!document.getElementById("game-tools").open && started) Module.canvas.focus();
   });
@@ -1345,6 +1427,33 @@
     if (!running || stopped || overlay.style.display !== "none") return;
     if ((/^F\d+$/.test(e.key) && e.key !== "F12") || e.key === "Tab" || (e.ctrlKey && e.key.toLowerCase() === "r")) e.preventDefault();
   }, { capture: true });
+
+  // What this browser lacks to run the engine, checked before it downloads. SIMD isn't checked here
+  // (scalar builds don't need it); a SIMD build that fails to compile reports through onAbort.
+  function missingBrowserFeatures() {
+    if (typeof WebAssembly !== "object" || typeof WebAssembly.validate !== "function") return ["WebAssembly"];
+    const validates = body => {
+      try { return WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 4, 1, 96, 0, 0, 3, 2, 1, 0, 10, 8, 1, 6, 0, ...body, 11])); }
+      catch (error) { return false; }
+    };
+    const missing = [];
+    // A function using exception handling in either encoding: try/catch_all/end or try_table/end.
+    if (!validates([6, 64, 25, 11]) && !validates([31, 64, 0, 11])) missing.push("WebAssembly exception handling");
+    try {
+      const gl = document.createElement("canvas").getContext("webgl2");
+      if (gl) gl.getExtension("WEBGL_lose_context")?.loseContext();
+      else missing.push("WebGL 2");
+    } catch (error) { missing.push("WebGL 2"); }
+    return missing;
+  }
+  const missingFeatures = missingBrowserFeatures();
+  if (missingFeatures.length) {
+    // Don't download or compile an engine this browser can't run.
+    Module.instantiateWasm = () => ({});
+    stop(missingFeatures.length === 1 && missingFeatures[0] === "WebGL 2" ?
+      "This browser has WebGL 2 turned off or unavailable, which the game needs for graphics. Turn on hardware acceleration in the browser settings, or try a current version of Chrome, Edge, Firefox or Safari." :
+      `${UNSUPPORTED_BROWSER} (Missing: ${missingFeatures.join(", ")}.)`, false);
+  }
 </script>
 {{{ SCRIPT }}}
 </body>

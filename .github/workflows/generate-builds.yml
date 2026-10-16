@@ -2,6 +2,7 @@ name: generate-builds
 on:
   push:
   pull_request:
+  workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -148,6 +149,41 @@ jobs:
       with:
         name: soh-web
         path: soh-web
+
+  # Publishes the web build from main to GitHub Pages. One-time setup: in the repository's
+  # Settings > Pages, set Build and deployment > Source to "GitHub Actions". Pages only accepts
+  # deployments from the default branch unless main is added under Settings > Environments >
+  # github-pages, so either make main the default branch or allow it there.
+  deploy-web:
+    needs: build-web
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+    - name: Download web build
+      uses: actions/download-artifact@v8
+      with:
+        name: soh-web
+        path: soh-web
+    - name: Check the package
+      run: python3 soh-web/serve.py check --directory soh-web
+    - name: Configure GitHub Pages
+      uses: actions/configure-pages@v5
+    - name: Upload Pages content
+      uses: actions/upload-pages-artifact@v4
+      with:
+        path: soh-web
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
 
   build-linux:
     needs: generate-soh-otr
