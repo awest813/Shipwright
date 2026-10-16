@@ -14,9 +14,18 @@ list(PREPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/web/modules)
 add_compile_options(-fwasm-exceptions)
 add_link_options(-fwasm-exceptions)
 
+# Standard SIMD enables LLVM's vectorizer without relaxing the root project's
+# floating-point rules. Keep a scalar build available for fidelity/performance comparisons.
+option(SOH_WEB_SIMD "Enable standard WebAssembly SIMD instructions" ON)
+if(SOH_WEB_SIMD)
+    add_compile_options(-msimd128)
+    add_link_options(-msimd128)
+endif()
+
 # Several targets (ImGui among them) include SDL headers without linking an SDL target, and
 # emscripten's placeholder SDL headers error out unless the port flag is present.
 add_compile_options(-sUSE_SDL=2)
+add_link_options("--use-port=${CMAKE_CURRENT_LIST_DIR}/web/ports/shipwright_sdl_rumble.py")
 
 # libultraship: WebGL2 is GLES 3.0, so use the GLES renderer path and ImGui's ES3 backend.
 set(USE_OPENGLES ON CACHE BOOL "" FORCE)
@@ -36,6 +45,7 @@ FetchContent_Declare(
     nlohmann_json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
     GIT_TAG v3.12.0
+    GIT_SHALLOW TRUE
     OVERRIDE_FIND_PACKAGE
 )
 FetchContent_MakeAvailable(nlohmann_json)
@@ -60,6 +70,7 @@ FetchContent_Declare(
     libzip
     GIT_REPOSITORY https://github.com/nih-at/libzip.git
     GIT_TAG v1.11.4
+    GIT_SHALLOW TRUE
     OVERRIDE_FIND_PACKAGE
 )
 FetchContent_MakeAvailable(libzip)
@@ -73,6 +84,7 @@ FetchContent_Declare(
     Opus
     GIT_REPOSITORY https://github.com/xiph/opus.git
     GIT_TAG v1.5.2
+    GIT_SHALLOW TRUE
     OVERRIDE_FIND_PACKAGE
 )
 FetchContent_MakeAvailable(Opus)
@@ -82,6 +94,7 @@ FetchContent_Declare(
     OpusFile
     GIT_REPOSITORY https://github.com/xiph/opusfile.git
     GIT_TAG v0.12
+    GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(OpusFile)
 add_library(opusfile STATIC

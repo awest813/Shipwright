@@ -47,8 +47,12 @@ std::string Extract(std::vector<uint8_t> rom, const std::string& srcDir, const s
             }
         });
 
-        // Init is the whole run; it calls Process() internally.
+        // Native Init also processes; Torch's web API separates initialization from extraction.
         companion->Init(ExportType::Binary);
+#ifdef __EMSCRIPTEN__
+        std::atomic<size_t> assetCount{ 0 };
+        companion->Process(assetCount);
+#endif
 
         // config.yml names the archive per rom; ask rather than guess, and ask before the
         // companion goes away.

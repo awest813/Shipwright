@@ -1,4 +1,5 @@
 #include <unordered_set>
+#include <string>
 
 #include <ship/Context.h>
 
@@ -709,7 +710,11 @@ void SohMenu::AddMenuRandomizer() {
             GenerateRandomizer(CVarGetInteger(CVAR_RANDOMIZER_SETTING("ManualSeedEntry"), 0) ? seedString : "");
         })
         .PreFunc([](WidgetInfo& info) {
-            info.options->disabled = (gSaveContext.gameMode != GAMEMODE_FILE_SELECT) || GameInteractor::IsSaveLoaded();
+            info.options->disabled = IsRandoGenerating() || (gSaveContext.gameMode != GAMEMODE_FILE_SELECT) ||
+                                     GameInteractor::IsSaveLoaded();
+            info.options->disabledTooltip = IsRandoGenerating()
+                                                ? "A seed is already being generated."
+                                                : "Must be on File Select to generate a randomizer seed.";
         })
         .Options(ButtonOptions()
                      .Size(ImVec2(250.f, 0.f))
@@ -725,7 +730,21 @@ void SohMenu::AddMenuRandomizer() {
         .SameLine(true);
     AddWidget(path, "Spoiler File", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
         if (!CVarGetInteger(CVAR_RANDOMIZER_SETTING("DontGenerateSpoiler"), 0)) {
+#ifdef __EMSCRIPTEN__
+            std::string seedName = CVarGetString(CVAR_GENERAL("SpoilerLog"), "");
+            const auto separator = seedName.find_last_of("/\\");
+            if (separator != std::string::npos) {
+                seedName.erase(0, separator + 1);
+            }
+            if (seedName.empty()) {
+                ImGui::TextWrapped("No seed selected yet. Generate one, or import a spoiler JSON from the web "
+                                   "toolbar's Tools.");
+            } else {
+                ImGui::TextWrapped("Selected seed: %s", seedName.c_str());
+            }
+#else
             ImGui::Text("Spoiler File: %s", CVarGetString(CVAR_GENERAL("SpoilerLog"), ""));
+#endif
         }
     });
 

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shipwright browser timing check</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 24px auto; padding: 0 20px; max-width: 760px; font: 16px/1.5 system-ui; background: #0b0f14; color: #e6edf3; }
+  button { font: inherit; padding: 10px 16px; margin: 4px 8px 4px 0; cursor: pointer; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+</style>
+<h1>Browser timing check</h1>
+<p>Measure animation callbacks for 30 seconds with no game or WebGL rendering. Compare this baseline with the game's FPS report on the same device.</p>
+<p>Keep this tab visible and close other game tabs during the sample. This measures browser callback cadence, not GPU performance or the display's refresh rate.</p>
+<button id="run">Measure browser timing</button>
+<button id="export" hidden>Export timing report</button>
+<p id="status" role="status">Ready.</p>
+<pre id="report"></pre>
+<script>
+  let sample = null, report = null, frameRequest = 0, timeout = 0;
+  const status = document.getElementById('status');
+  function finish(reason = 'completed') {
+    if (!sample) return;
+    clearTimeout(timeout); cancelAnimationFrame(frameRequest);
+    const durationMs = performance.now() - sample.startedAt;
+    const intervals = sample.intervals.slice().sort((a, b) => a - b);
+    const p = fraction => intervals.length ? intervals[Math.ceil(intervals.length * fraction) - 1] : null;
+    report = {
+      format: 'shipwright-browser-timing', version: 1, reason, startedAt: sample.startedDate,
+      durationMs, callbacks: sample.callbacks, callbacksPerSecond: sample.callbacks * 1000 / durationMs,
+      callbackTimeMs: { samples: intervals.length, p50: p(0.5), p95: p(0.95), p99: p(0.99), max: intervals.at(-1) ?? null },
+      viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, userAgent: navigator.userAgent,
+    };
+    sample = null;
+    document.getElementById('run').textContent = 'Measure browser timing';
+    document.getElementById('export').hidden = false;
+    status.textContent = reason === 'completed' ? `Complete: ${report.callbacksPerSecond.toFixed(2)} browser callbacks/s.` : `Incomplete: ${reason}.`;
+    document.getElementById('report').textContent = JSON.stringify(report, null, 2);
+  }
+  function tick(time) {
+    if (!sample) return;
+    if (sample.lastTime !== null) sample.intervals.push(time - sample.lastTime);
+    sample.lastTime = time; sample.callbacks++;
+    if (time - sample.lastStatus > 500) {
+      status.textContent = `Measuring… ${Math.min(30, Math.floor((performance.now() - sample.startedAt) / 1000))}/30 seconds.`;
+      sample.lastStatus = time;
+    }
+    frameRequest = requestAnimationFrame(tick);
+  }
+  document.getElementById('run').addEventListener('click', () => {
+    if (sample) { finish('cancelled'); return; }
+    if (document.hidden) return;
+    const now = performance.now();
+    sample = { startedAt: now, startedDate: new Date().toISOString(), callbacks: 0, intervals: [], lastTime: null, lastStatus: now };
+    report = null;
+    document.getElementById('run').textContent = 'Cancel measurement';
+    document.getElementById('export').hidden = true;
+    document.getElementById('report').textContent = '';
+    status.textContent = 'Measuring… 0/30 seconds.';
+    timeout = setTimeout(() => finish(), 30000);
+    frameRequest = requestAnimationFrame(tick);
+  });
+  document.getElementById('export').addEventListener('click', () => {
+    if (!report) return;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], {type: 'application/json'}));
+    const link = document.createElement('a'); link.href = url; link.download = 'shipwright-browser-timing.json'; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) finish('tab hidden'); });
+  window.addEventListener('pagehide', () => finish('page closed'));
+</script>
+</html>

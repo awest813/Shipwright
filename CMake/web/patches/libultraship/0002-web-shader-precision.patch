@@ -1,0 +1,15 @@
+diff --git a/src/fast/backends/gfx_opengl.cpp b/src/fast/backends/gfx_opengl.cpp
+--- a/src/fast/backends/gfx_opengl.cpp
++++ b/src/fast/backends/gfx_opengl.cpp
+@@ -288,7 +288,11 @@
+         { "texture", "texture" },
+         { "vOutColor", "vOutColor" },
+ #elif defined(USE_OPENGLES)
++#ifdef __EMSCRIPTEN__
++        { "GLSL_VERSION", "#version 300 es\nprecision highp float;" },
++#else
+         { "GLSL_VERSION", "#version 300 es\nprecision mediump float;" },
++#endif
+         { "attr", "in" },
+         { "opengles", true },
+         { "core_opengl", false },

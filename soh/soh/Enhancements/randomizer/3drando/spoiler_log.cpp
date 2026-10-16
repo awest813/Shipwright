@@ -339,12 +339,19 @@ void SpoilerLog_Write() {
         fileNameStream << std::to_string(ctx->hashIconIndexes[i]);
     }
     std::string fileName = fileNameStream.str();
-    std::ofstream jsonFile(Ship::Context::GetPathRelativeToAppDirectory(
-        (std::string("Randomizer/") + fileName + std::string(".json")).c_str()));
+    const std::string spoilerPath = Ship::Context::GetPathRelativeToAppDirectory(
+        (std::string("Randomizer/") + fileName + std::string(".json")).c_str());
+    std::ofstream jsonFile(spoilerPath);
     jsonFile << std::setw(4) << jsonString << std::endl;
     jsonFile.close();
 
+#ifdef __EMSCRIPTEN__
+    // The web app directory is /data; the process working directory is /.
+    // File select must validate the same path that received the generated spoiler.
+    CVarSetString(CVAR_GENERAL("SpoilerLog"), spoilerPath.c_str());
+#else
     CVarSetString(CVAR_GENERAL("SpoilerLog"), (std::string("./Randomizer/") + fileName + std::string(".json")).c_str());
+#endif
 }
 
 void PlacementLog_Msg(std::string_view msg) {

@@ -437,10 +437,21 @@ uint64_t GetPerfCounter();
 extern AudioMgr gAudioMgr;
 
 extern void ProcessSaveStateRequests(void);
+#ifdef __EMSCRIPTEN__
+extern void Graph_WebBeginSimulationTimings(void);
+extern void Graph_WebSetSimulationTimings(double stateMs, double inputMs, double updateMs, double commandsAndAudioMs);
+#endif
 
 static void RunFrame() {
     u32 size;
     char faultMsg[0x50];
+#ifdef __EMSCRIPTEN__
+    const double phaseStart = emscripten_get_now();
+    double afterState, afterInput, afterUpdate, afterCommands;
+    Graph_WebBeginSimulationTimings();
+    // Finish consuming the previous display list before a state load rewrites game memory.
+    ProcessSaveStateRequests();
+#endif
 
     switch (runFrameContext.state) {
         case 0:
@@ -478,10 +489,19 @@ static void RunFrame() {
             // ticksA = GetPerfCounter();
 
             Graph_StartFrame();
+#ifdef __EMSCRIPTEN__
+            afterState = emscripten_get_now();
+#endif
 
             PadMgr_ThreadEntry(&gPadMgr);
+#ifdef __EMSCRIPTEN__
+            afterInput = emscripten_get_now();
+#endif
 
             Graph_Update(&runFrameContext.gfxCtx, gGameState);
+#ifdef __EMSCRIPTEN__
+            afterUpdate = emscripten_get_now();
+#endif
             // ticksB = GetPerfCounter();
 
             if (GfxDebuggerIsDebuggingRequested()) {
@@ -489,11 +509,18 @@ static void RunFrame() {
             }
 
             Graph_ProcessGfxCommands(runFrameContext.gfxCtx.workBuffer);
+#ifdef __EMSCRIPTEN__
+            afterCommands = emscripten_get_now();
+            Graph_WebSetSimulationTimings(afterState - phaseStart, afterInput - afterState, afterUpdate - afterInput,
+                                          afterCommands - afterUpdate);
+#endif
 
             // uint64_t diff = (ticksB - ticksA) / (freq / 1000);
             // printf("Frame simulated in %ims\n", diff);
             runFrameContext.state = 1;
+#ifndef __EMSCRIPTEN__
             ProcessSaveStateRequests();
+#endif
             return;
         nextFrame:;
         }
@@ -511,25 +538,47 @@ static void RunFrame() {
 }
 
 #ifdef __EMSCRIPTEN__
-// Called by the browser once per display refresh. The game advances at 60 / R_UPDATE_RATE ticks
-// per second, so only run a frame when the next tick is due.
+extern void Graph_WebPresentFrame(float interpolation, double simulationMs);
+
+// Simulation retains the original tick rate; present one interpolated frame per browser refresh.
 static void Graph_WebFrame(void) {
     static double nextTick = 0.0;
+    static double tickTime = 0.0;
+    static double nextPresent = 0.0;
     double now = emscripten_get_now();
+    double simulationMs = -1.0;
     double interval = 1000.0 * (R_UPDATE_RATE > 0 ? R_UPDATE_RATE : 1) / 60.0;
 
     if (!WindowIsRunning()) {
+        CVarSave();
         emscripten_cancel_main_loop();
+        EM_ASM({
+            if (typeof Module.onGameStopped == 'function')
+                Module.onGameStopped();
+        });
         return;
     }
     // A tick is usually a whole number of display refreshes (50 ms = 3 at 60 Hz), and callback times
     // jitter by a fraction of a millisecond, so allow some slack rather than slipping a refresh.
-    if (now + 4.0 < nextTick) {
+    if (now + 2.0 < nextPresent) {
         return;
     }
-    // After a stall (background tab, long load) resync instead of running a burst of catch-up ticks.
-    nextTick = (now - nextTick > interval * 4) ? now + interval : nextTick + interval;
-    RunFrame();
+    const double presentInterval = 1000.0 / 60.0;
+    nextPresent = (now - nextPresent > presentInterval * 4) ? now + presentInterval : nextPresent + presentInterval;
+    if (now + 4.0 >= nextTick) {
+        // Resync after a stall instead of running a burst of catch-up ticks.
+        tickTime = (now - nextTick > interval * 4) ? now : nextTick;
+        nextTick = tickTime + interval;
+        double simulationStart = emscripten_get_now();
+        RunFrame();
+        simulationMs = emscripten_get_now() - simulationStart;
+    }
+    float interpolation = (float)((now - tickTime + presentInterval) / interval);
+    if (interpolation < 0.0f)
+        interpolation = 0.0f;
+    if (interpolation > 1.0f)
+        interpolation = 1.0f;
+    Graph_WebPresentFrame(interpolation, simulationMs);
 }
 #endif
 

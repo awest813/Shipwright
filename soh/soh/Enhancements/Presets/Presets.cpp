@@ -19,6 +19,9 @@
 #include "soh/Enhancements/randomizer/settings.h"
 #include "soh/ShipInit.hpp"
 #include "soh/config/ConfigUpdaters.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -386,27 +389,68 @@ void SavePreset(std::string& presetName) {
 }
 
 void DeletePreset(std::string& presetName) {
-    std::string presetPath = FormatPresetPath(presetName);
+    const std::string name = presetName;
+    std::string presetPath = FormatPresetPath(name);
     if (fs::exists(presetPath)) {
         fs::remove(presetPath);
+#ifdef __EMSCRIPTEN__
+        // Files only live in memory until the web page copies them to browser storage, so tell it.
+        EM_ASM({
+            if (Module.onFileWritten)
+                Module.onFileWritten();
+        });
+#endif
     }
-    presets.erase(presetName);
+    for (auto preset = presets.begin(); preset != presets.end();) {
+        if (preset->first == name || preset->second.fileName == name) {
+            preset = presets.erase(preset);
+        } else {
+            ++preset;
+        }
+    }
 }
 
 static std::string newPresetName, oldPresetName;
 static bool saveSection[PRESET_SECTION_MAX];
 
+static bool PresetNameExists(const std::string& name, const std::string& previousName) {
+    if (name.empty()) {
+        return false;
+    }
+    for (const auto& [existingName, preset] : presets) {
+        if (existingName == previousName) {
+            continue;
+        }
+        if (existingName == name || (!preset.isBuiltIn && FormatPresetPath(existingName) == FormatPresetPath(name))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void DrawEditPresetPopup() {
-    bool nameExists = presets.contains(newPresetName) && newPresetName != oldPresetName;
-    UIWidgets::InputString("Preset Name", &newPresetName,
-                           UIWidgets::InputOptions()
-                               .Color(THEME_COLOR)
-                               .Size({ 200, 40 })
-                               .ComponentAlignment(UIWidgets::ComponentAlignments::Right)
-                               .LabelPosition(UIWidgets::LabelPositions::Near)
-                               .ErrorText("Preset name already exists")
-                               .HasError(nameExists));
-    nameExists = presets.contains(newPresetName) && newPresetName != oldPresetName;
+    bool nameExists = PresetNameExists(newPresetName, oldPresetName);
+    ImVec2 popupPadding(6, 6);
+#ifdef __EMSCRIPTEN__
+    if (ImGui::GetIO().DisplaySize.x < 1000) {
+        popupPadding = ImVec2(10, 14);
+        ImGui::TextUnformatted("Preset name");
+        UIWidgets::InputString(
+            "##PresetName", &newPresetName,
+            UIWidgets::InputOptions().Color(THEME_COLOR).ErrorText("Preset name already exists").HasError(nameExists));
+    } else
+#endif
+    {
+        UIWidgets::InputString("Preset Name", &newPresetName,
+                               UIWidgets::InputOptions()
+                                   .Color(THEME_COLOR)
+                                   .Size({ 200, 40 })
+                                   .ComponentAlignment(UIWidgets::ComponentAlignments::Right)
+                                   .LabelPosition(UIWidgets::LabelPositions::Near)
+                                   .ErrorText("Preset name already exists")
+                                   .HasError(nameExists));
+    }
+    nameExists = PresetNameExists(newPresetName, oldPresetName);
     bool noneSelected = true;
     for (int i = PRESET_SECTION_SETTINGS; i < PRESET_SECTION_MAX; i++) {
         if (saveSection[i]) {
@@ -419,12 +463,12 @@ void DrawEditPresetPopup() {
                                : (noneSelected ? "No sections selected" : "Preset name already exists"));
     for (int i = PRESET_SECTION_SETTINGS; i < PRESET_SECTION_MAX; i++) {
         UIWidgets::Checkbox(spdlog::fmt_lib::format("Save {}", blockInfo[i].names[0]).c_str(), &saveSection[i],
-                            UIWidgets::CheckboxOptions().Color(THEME_COLOR).Padding({ 6.0f, 6.0f }));
+                            UIWidgets::CheckboxOptions().Color(THEME_COLOR).Padding(popupPadding));
     }
     if (UIWidgets::Button(
             "Save", UIWidgets::ButtonOptions({ { .disabled = (nameExists || noneSelected || newPresetName.empty()),
                                                  .disabledTooltip = disabledTooltip } })
-                        .Padding({ 6.0f, 6.0f })
+                        .Padding(popupPadding)
                         .Color(THEME_COLOR))) {
         presets[newPresetName] = {};
         auto config = Ship::Context::GetRawInstance()->GetConfig()->GetNestedJson();
@@ -484,14 +528,15 @@ void DrawEditPresetPopup() {
         presets[newPresetName].fileName = newPresetName;
         std::fill_n(presets[newPresetName].apply, PRESET_SECTION_MAX, true);
         SavePreset(newPresetName);
-        if (newPresetName != oldPresetName) {
+        if (!oldPresetName.empty() && newPresetName != oldPresetName &&
+            FormatPresetPath(newPresetName) != FormatPresetPath(oldPresetName)) {
             DeletePreset(oldPresetName);
         }
         newPresetName = "";
         oldPresetName = "";
         ImGui::CloseCurrentPopup();
     }
-    if (UIWidgets::Button("Cancel", UIWidgets::ButtonOptions().Padding({ 6.0f, 6.0f }).Color(THEME_COLOR))) {
+    if (UIWidgets::Button("Cancel", UIWidgets::ButtonOptions().Padding(popupPadding).Color(THEME_COLOR))) {
         oldPresetName = "";
         ImGui::CloseCurrentPopup();
     }
@@ -512,15 +557,86 @@ void PresetsCustomWidget(WidgetInfo& info) {
     } else if (oldPresetName != "") {
         ImGui::OpenPopup("editPreset");
     }
-    if (ImGui::BeginPopup("editPreset", ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize |
-                                            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-                                            ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar)) {
+    ImGuiWindowFlags popupFlags = ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize |
+                                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+                                  ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar;
+#ifdef __EMSCRIPTEN__
+    const bool compactPresets = ImGui::GetIO().DisplaySize.x < 1000;
+    if (compactPresets) {
+        popupFlags &= ~ImGuiWindowFlags_NoScrollbar;
+        const auto display = ImGui::GetIO().DisplaySize;
+        const float popupWidth = std::min(560.0f, display.x - 16);
+        ImGui::SetNextWindowSizeConstraints(ImVec2(popupWidth, 0), ImVec2(popupWidth, display.y - 16));
+    }
+#endif
+    if (ImGui::BeginPopup("editPreset", popupFlags)) {
         DrawEditPresetPopup();
     }
-    ImGui::SameLine();
+#ifdef __EMSCRIPTEN__
+    if (!compactPresets)
+#endif
+        ImGui::SameLine();
     UIWidgets::CVarCheckbox("Hide built-in presets", CVAR_GENERAL("HideBuiltInPresets"),
                             UIWidgets::CheckboxOptions().Color(THEME_COLOR));
     bool hideBuiltIn = CVarGetInteger(CVAR_GENERAL("HideBuiltInPresets"), 0);
+#ifdef __EMSCRIPTEN__
+    if (compactPresets) {
+        bool shown = false;
+        for (auto& [name, preset] : presets) {
+            if (hideBuiltIn && preset.isBuiltIn) {
+                continue;
+            }
+            shown = true;
+            ImGui::PushID(name.c_str());
+            ImGui::Separator();
+            ImGui::TextWrapped("%s", name.c_str());
+            if (ImGui::CollapsingHeader("Sections")) {
+                for (int section = PRESET_SECTION_SETTINGS; section < PRESET_SECTION_MAX; section++) {
+                    UIWidgets::Checkbox(
+                        blockInfo[section].names[0].c_str(), &preset.apply[section],
+                        UIWidgets::CheckboxOptions(
+                            { { .disabled = !preset.presetValues["blocks"].contains(blockInfo[section].names[1]),
+                                .disabledTooltip = "This preset does not contain this section" } })
+                            .Padding({ 10, 14 })
+                            .Color(THEME_COLOR));
+                }
+            }
+            if (UIWidgets::Button("Apply", UIWidgets::ButtonOptions(
+                                               { { .disabled = CVarGetInteger(CVAR_SETTING("DisableChanges"), 0) != 0,
+                                                   .disabledTooltip = "Disabled because of race lockout" } })
+                                               .Size({ ImGui::GetContentRegionAvail().x, 44 })
+                                               .Color(THEME_COLOR))) {
+                applyPreset(name);
+            }
+            if (!preset.isBuiltIn) {
+                if (UIWidgets::Button("Edit", UIWidgets::ButtonOptions()
+                                                  .Size(UIWidgets::Sizes::Inline)
+                                                  .Padding({ 10, 14 })
+                                                  .Color(THEME_COLOR))) {
+                    std::copy(preset.apply, preset.apply + PRESET_SECTION_MAX, saveSection);
+                    newPresetName = name;
+                    oldPresetName = name;
+                }
+                ImGui::SameLine();
+                if (UIWidgets::Button("Delete", UIWidgets::ButtonOptions()
+                                                    .Size(UIWidgets::Sizes::Inline)
+                                                    .Padding({ 10, 14 })
+                                                    .Color(THEME_COLOR))) {
+                    // Delete sits right beside Edit at touch size, so confirm before removing the file.
+                    SohGui::RegisterPopup("Delete preset", "Delete the preset \"" + name + "\"? This can't be undone.",
+                                          "Delete", "Cancel",
+                                          [fileName = preset.fileName]() mutable { DeletePreset(fileName); });
+                }
+            }
+            ImGui::PopID();
+        }
+        if (!shown) {
+            ImGui::TextUnformatted("No presets found.");
+        }
+        ImGui::PopFont();
+        return;
+    }
+#endif
     UIWidgets::PushStyleTabs(THEME_COLOR);
     if (ImGui::BeginTable("PresetWidgetTable", PRESET_SECTION_MAX + 4)) {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 400);

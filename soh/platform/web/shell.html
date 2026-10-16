@@ -2,51 +2,169 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ship of Harkinian</title>
+<meta name="description" content="Play Ship of Harkinian, the Ocarina of Time PC port, in your browser with your own ROM. Nothing is uploaded: conversion, saves and settings stay on your device.">
+<meta property="og:title" content="Ship of Harkinian: Web edition">
+<meta property="og:description" content="Ocarina of Time in your browser, from your own ROM. Saves stay on your device.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#14201d">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314201d'/%3E%3Cpath d='M30 10v30H12zm5 4v26h17zM9 44h46l-9 12H20z' fill='%238ee4ab'/%3E%3C/svg%3E">
 <style>
-  :root { color-scheme: dark; --bg: #0b0f14; --panel: #151b23; --text: #e6edf3; --muted: #8b949e; --accent: #3fb950; --error: #f85149; }
+  :root { color-scheme: dark; --bg: #09120f; --panel: #14201d; --text: #edf5ef; --muted: #afc2b8; --accent: #8ee4ab; --error: #ff9d98; }
+  * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; overflow: hidden; }
-  #canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; background: #000; outline: none; }
-  #overlay { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); padding: 16px; box-sizing: border-box; overflow: auto; }
-  #panel { background: var(--panel); border-radius: 12px; padding: 24px; max-width: 520px; width: 100%; box-sizing: border-box; }
-  h1 { margin: 0 0 4px; font-size: 22px; }
+  #canvas { position: fixed; inset: 0; margin: auto; width: min(100vw, calc(100vh * var(--canvas-aspect, 1.333333))); height: min(100vh, calc(100vw / var(--canvas-aspect, 1.333333))); display: block; background: #000; outline: none; }
+  #overlay { position: fixed; inset: 0; display: grid; place-items: safe center; background: radial-gradient(ellipse at top, #193a2b, var(--bg) 70%); padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); overflow: auto; z-index: 5; }
+  #panel { background: var(--panel); border: 1px solid #355044; border-radius: 20px; padding: 28px; max-width: 600px; width: 100%; box-shadow: 0 20px 80px #0005; }
+  .eyebrow { color: var(--accent); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; }
+  h1 { margin: 6px 0 4px; font-size: clamp(26px, 5vw, 34px); line-height: 1.2; }
+  h2 { font-size: 16px; margin: 18px 0 6px; }
   p { margin: 8px 0; color: var(--muted); }
-  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #222a33; }
-  .row:first-of-type { border-top: none; }
-  .status { font-size: 13px; color: var(--muted); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid #304439; }
+  .row > div { min-width: 0; }
+  .rom-row { margin-top: 20px; padding: 16px; border: 1px solid #436a52; border-radius: 12px; background: #1d3025; }
+  .status { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
   .status.ok { color: var(--accent); }
-  label.button, button { font: inherit; cursor: pointer; border: 1px solid #30363d; background: #21262d; color: var(--text); padding: 6px 12px; border-radius: 6px; white-space: nowrap; }
-  label.button:focus-within, button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }
-  button#start { width: 100%; margin-top: 16px; padding: 10px; background: #1a7f37; border-color: #2ea043; color: #fff; font-weight: 600; }
+  label.button, button, summary { font: inherit; cursor: pointer; }
+  label.button, button { border: 1px solid #486153; background: #23382c; color: var(--text); padding: 10px 14px; min-height: 44px; border-radius: 9px; white-space: nowrap; }
+  label.button:hover, button:hover { background: #304e3b; }
+  label.button:focus-within, button:focus-visible, summary:focus-visible, select:focus-visible { outline: 3px solid #f2ce77; outline-offset: 3px; }
+  button#start, button#reload-launcher { width: 100%; margin-top: 12px; min-height: 52px; background: #91e4ad; border-color: #91e4ad; color: #092116; font-weight: 750; font-size: 17px; }
+  button#start:hover, button#reload-launcher:hover { background: #b0f2c7; }
   button:disabled, label.button.disabled { opacity: .5; cursor: default; }
-  /* Visually hidden but focusable, so the labels work from the keyboard */
+  button[aria-pressed="true"] { border-color: var(--accent); background: #2d5a3e; }
+  button[aria-pressed="true"]::after { content: ": on"; }
   input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
-  #message { min-height: 1.5em; font-size: 13px; }
-  #message.error { color: var(--error); }
-  code { background: #0d1117; padding: 1px 4px; border-radius: 4px; }
+  #message { min-height: 1.5em; font-size: 13px; margin-top: 12px; overflow-wrap: anywhere; }
+  #message.error, #web-status.error { color: var(--error); }
+  code, kbd { background: #0c1810; padding: 1px 5px; border-radius: 4px; }
+  a { color: var(--accent); }
+  a:focus-visible { outline: 3px solid #f2ce77; outline-offset: 2px; }
+  #about { margin-top: 18px; font-size: 12px; }
+  details { border-top: 1px solid #355044; margin-top: 16px; padding-top: 8px; }
+  summary { min-height: 44px; padding: 10px 0; color: var(--text); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  #mod-controls[hidden], #web-tools[hidden], #touch-controls[hidden], [hidden] { display: none !important; }
+  #mod-list { flex: 1; min-width: 0; max-width: 100%; min-height: 44px; padding: 8px; color: var(--text); background: var(--bg); border: 1px solid #486153; border-radius: 9px; }
+  #web-tools { position: fixed; bottom: max(8px, env(safe-area-inset-bottom)); right: max(8px, env(safe-area-inset-right)); z-index: 4; display: flex; justify-content: flex-end; align-items: center; gap: 6px; max-width: calc(100vw - 16px); }
+  #web-tools button, #web-tools summary { background: #14201ded; }
+  #fps { padding: 4px 8px; border-radius: 8px; background: #14201ded; font-variant-numeric: tabular-nums; }
+  #web-status { position: fixed; left: max(12px, env(safe-area-inset-left)); bottom: max(64px, env(safe-area-inset-bottom)); max-width: min(520px, calc(100vw - 24px)); padding: 8px 12px; border-radius: 10px; background: #14201df2; pointer-events: none; }
+  #web-status:empty { display: none; }
+  #game-tools { margin: 0; padding: 0; border: 0; }
+  #game-tools > summary { list-style: none; border: 1px solid #486153; border-radius: 9px; padding: 10px 14px; }
+  #game-tools > summary::-webkit-details-marker { display: none; }
+  #game-tools[open] > summary { border-color: var(--accent); }
+  #game-tools-panel { position: absolute; right: 0; bottom: 54px; width: min(360px, calc(100vw - 16px)); max-height: calc(100dvh - 90px); overflow: auto; padding: 18px; border: 1px solid #486153; border-radius: 14px; background: #14201df7; box-shadow: 0 8px 40px #0008; }
+  #game-tools-panel h2:first-child { margin-top: 0; }
+  #touch-controls { position: fixed; inset: 0; pointer-events: none; z-index: 3; user-select: none; -webkit-user-select: none; }
+  /* Sized from the short screen side so thumbs reach them on phones and they stay modest on tablets. */
+  #touch-controls { --pad: clamp(44px, 12.5vmin, 60px); --stick: clamp(124px, 34vmin, 168px); }
+  #touch-stick { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); width: var(--stick); height: var(--stick); border: 2px solid #ffffff60; border-radius: 50%; background: #1118; touch-action: none; pointer-events: auto; }
+  #touch-stick-knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: #ffffff70; pointer-events: none; }
+  #touch-buttons { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(3, var(--pad)); gap: 6px; pointer-events: auto; }
+  #touch-buttons button { padding: 0; height: var(--pad); min-height: 0; background: #14201dbb; touch-action: none; }
+  #touch-buttons button.pressed { background: #3a9b63dd; }
+  #touch-buttons button:last-child { grid-column: span 3; height: 44px; }
+  /* N64 colors: blue A, green B, yellow C buttons. */
+  #touch-buttons button.c { color: #f4d35e; font-weight: 700; }
+  #touch-buttons button.face { border-radius: 50%; font-weight: 800; font-size: 18px; color: #fff; }
+  #touch-buttons button.a { background: #2f5fc4cc; border-color: #6f97ef; }
+  #touch-buttons button.b { background: #23874acc; border-color: #5fc184; }
+  #touch-buttons button.a.pressed { background: #5b86e6; }
+  #touch-buttons button.b.pressed { background: #3fb36b; }
+  body.touch-enabled #web-tools { bottom: auto; top: max(8px, env(safe-area-inset-top)); }
+  body.touch-enabled #game-tools-panel { bottom: auto; top: 54px; }
+  body.touch-enabled #web-status { bottom: auto; top: max(64px, env(safe-area-inset-top)); }
+  body.native-menu-open #web-tools { top: auto; bottom: max(8px, env(safe-area-inset-bottom)); }
+  body.native-menu-open #web-tools > :not(#settings-game):not(#web-status) { display: none; }
+  body.native-menu-open #web-status { top: auto; bottom: max(64px, env(safe-area-inset-bottom)); }
+  body.native-menu-open #canvas { inset: env(safe-area-inset-top) env(safe-area-inset-right) calc(64px + env(safe-area-inset-bottom)) env(safe-area-inset-left); width: calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right)); height: calc(100dvh - 64px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  @media (max-width: 599px) {
+    #panel { padding: 20px; border-radius: 16px; }
+    .rom-row { padding: 12px; }
+    .row { flex-wrap: wrap; }
+    .row > .button { margin-left: auto; }
+    #fullscreen { display: none; }
+  }
+  @media (max-height: 450px) { #panel { padding: 18px; } #overlay { place-items: start center; } }
 </style>
 </head>
 <body>
 <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+<nav id="web-tools" aria-label="Game controls" hidden>
+  <span id="web-status" class="status" role="status"></span>
+  <span id="fps" class="status" aria-live="off">Measuring FPS…</span>
+  <button id="fullscreen">Fullscreen</button><button id="settings-game">Settings</button>
+  <details id="game-tools"><summary>Tools</summary><div id="game-tools-panel">
+    <h2>Play your way</h2>
+    <button id="touch-toggle" aria-pressed="false">Touch controls</button>
+    <p id="controller-game-status" class="status" role="status"></p>
+    <p>Keyboard: <kbd>Space</kbd> Start · <kbd>X</kbd> A · <kbd>C</kbd> B · <kbd>WASD</kbd> move · <kbd>Z</kbd> target · arrows C buttons. <kbd>Esc</kbd> opens settings.</p>
+    <h2>Saves & randomizer</h2><div class="actions">
+      <button id="backup-game">Export saves</button>
+      <label class="button">Import seed<input id="seed-game-input" type="file" accept=".json" disabled></label>
+    </div>
+    <p class="status">Save in the game before leaving. F5/F7 save states last only for this session.</p>
+    <details><summary>Performance & diagnostics</summary><div class="actions">
+      <button id="benchmark-game">Measure FPS</button><button id="benchmark-report" hidden>Export FPS report</button><button id="render-audit-export" hidden>Export render capture</button>
+    </div><p class="status">Measures 30 seconds of gameplay and frame pacing.</p></details>
+    <h2>Launcher</h2><p class="status">To change mods or import a backup, save in the game, then return here. Session save states will end.</p>
+    <button id="return-launcher">Return to launcher</button>
+  </div></details>
+</nav>
+<div id="touch-controls" hidden aria-label="Touch game controls">
+  <div id="touch-stick" role="group" aria-label="Movement joystick"><span id="touch-stick-knob"></span></div>
+  <div id="touch-buttons">
+    <button data-pad="32" aria-label="L shoulder">L</button><button data-pad="8192" aria-label="Z target">Z</button><button data-pad="16" aria-label="R shoulder">R</button>
+    <button class="c" data-pad="2" aria-label="C left">C←</button><button class="c" data-pad="8" aria-label="C up">C↑</button><button class="c" data-pad="1" aria-label="C right">C→</button>
+    <button class="face b" data-pad="16384" aria-label="B button">B</button><button class="c" data-pad="4" aria-label="C down">C↓</button><button class="face a" data-pad="32768" aria-label="A button">A</button>
+    <button data-pad="4096" aria-label="Start button">Start</button>
+  </div>
+</div>
 <div id="overlay">
   <div id="panel">
+    <div class="eyebrow">Ocarina of Time · Web edition</div>
     <h1>Ship of Harkinian</h1>
-    <p>Web build (experimental). Load your own legally obtained Ocarina of Time ROM (<code>.z64</code>, <code>.n64</code> or <code>.v64</code>) and it is converted into the game archive right here, or load an <code>oot.o2r</code> / <code>oot-mq.o2r</code> made by this version of desktop SoH. Files stay in this browser; the ROM itself is not kept.</p>
-    <div class="row">
-      <div><div>ROM</div><div class="status" id="status-rom">Not needed if the archives below are loaded</div></div>
+    <p>Your adventure, in your browser.</p>
+    <div class="row rom-row">
+      <div><strong>Your game</strong><div class="status" id="status-rom">Choose an Ocarina of Time ROM to get started</div></div>
       <label class="button disabled">Load ROM<input type="file" accept=".z64,.n64,.v64" id="rom-input" disabled></label>
     </div>
-    <div class="row">
-      <div><div>Ocarina of Time</div><div class="status" id="status-oot.o2r">Loading…</div></div>
-      <label class="button disabled">Load oot.o2r<input type="file" accept=".o2r" data-archive="oot.o2r" disabled></label>
-    </div>
-    <div class="row">
-      <div><div>Master Quest</div><div class="status" id="status-oot-mq.o2r">Loading…</div></div>
-      <label class="button disabled">Load oot-mq.o2r<input type="file" accept=".o2r" data-archive="oot-mq.o2r" disabled></label>
-    </div>
+    <noscript><p id="noscript" class="status">Turn on JavaScript to play: the game runs entirely in this page.</p></noscript>
     <div id="message" role="status" aria-live="polite">Loading the game files…</div>
     <button id="start" disabled>Start</button>
+    <button id="reload-launcher" hidden>Reload launcher</button>
+    <p class="status">Your files and saves stay in this browser. Use your own legally obtained ROM.</p>
+    <details id="archives"><summary>Game archives & Master Quest</summary>
+      <p class="status">Already have an archive from this version of desktop SoH? Load it here instead of a ROM. Supported ROM formats: .z64, .n64 and .v64.</p>
+      <div class="row"><div><div>Ocarina of Time</div><div class="status" id="status-oot.o2r">Loading…</div></div><label class="button disabled">Load oot.o2r<input type="file" accept=".o2r" data-archive="oot.o2r" disabled></label></div>
+      <div class="row"><div><div>Master Quest</div><div class="status" id="status-oot-mq.o2r">Loading…</div></div><label class="button disabled">Load oot-mq.o2r<input type="file" accept=".o2r" data-archive="oot-mq.o2r" disabled></label></div>
+    </details>
+    <details id="extras">
+      <summary>Saves, mods & controls</summary>
+      <p class="status">Back up your progress or bring it from another browser. Import replaces matching saves and settings.</p>
+      <div class="actions">
+        <button id="backup" disabled>Export saves & settings</button>
+        <label class="button disabled">Import backup<input id="backup-input" type="file" accept=".json" disabled></label>
+        <label class="button disabled">Add mods<input id="mods-input" type="file" accept=".o2r" multiple disabled></label>
+        <label class="button disabled">Import seed<input id="seed-input" type="file" accept=".json" disabled></label>
+      </div>
+      <p id="mods-status" class="status">Mods load at startup. Use .o2r mods compatible with this version.</p>
+      <div id="mod-controls" class="actions" hidden>
+        <select id="mod-list" aria-label="Installed mod" disabled></select>
+        <button id="mod-toggle" disabled>Disable mod</button>
+      </div>
+      <p>Import a randomizer spoiler JSON, then choose a new randomizer save in file select. Generate new seeds from the in-game randomizer menu.</p>
+      <details><summary>Keyboard & controllers</summary>
+        <p>Space = Start · X = A · C = B · WASD = movement · Z = target · arrows = C buttons. Esc opens settings and keyboard/gamepad bindings. Tab switches alternate assets.</p>
+        <p>Pair a Bluetooth controller in your device settings, or connect by USB. Press a controller button with this tab focused, then configure it in Settings > Controls.</p>
+        <p id="controller-status" class="status" role="status">Press a button on your paired controller to detect it.</p>
+        <p class="status">When enabled, F5 saves a state, F6 changes its slot and F7 loads it. These states last only for the current session. Normal saves and exported backups persist.</p>
+      </details>
+    </details>
+    <p id="about" class="status">Ship of Harkinian is a fan project by <a href="https://github.com/HarbourMasters/Shipwright" target="_blank" rel="noopener">HarbourMasters</a>, not affiliated with Nintendo. No ROM or game data is hosted here. Works best in a current Chrome, Edge, Firefox or Safari.<span id="build-id"></span></p>
   </div>
 </div>
 <script>
@@ -64,33 +182,528 @@
   let stopped = false; // the game stopped (exit during startup, abort or crash)
   let storageWorks = true;
   let stagedRomPath = null; // version directory of a ROM waiting to be converted
+  let conversionFinishing = false;
   let persistSoon = 0;
+  let busy = false;
+  const frameTimes = [];
+  let lastFrameReport = 0;
+  let canvasAspect = 0;
+  let canvasAspectCooldown = 0;
+  let statusTimeout = 0;
+  let touchEnabled = false;
+  let gameMenuVisible = false;
+  let touchLatched = 0;
+  const touchPointers = new Map();
+  let stickPointer = null;
+  let stickX = 0, stickY = 0;
+  let benchmark = null, benchmarkTimeout = 0;
+  let benchmarkReport = null;
+  let lastRafTime = null;
+  let randomizerGenerating = false;
+  let renderAuditPath = null;
+  let performanceContext = null;
+  let runtimeDiagnostics = null;
+  let leavingPage = false; // an intentional reload is under way (no "leave page?" prompt)
+  let wakeLock = null;     // screen wake lock held while the game is on screen
+
+  // SDL listens on the window. Leave native HTML keyboard behavior available in
+  // the web controls, but always forward releases for keys held in the game.
+  const webControlKeys = new Set(), gameKeys = new Set();
+  function routeWebKeyboardEvent(event) {
+    const key = event.code || event.key;
+    const inWebControls = !!event.target?.closest?.("#panel, #web-tools");
+    if (event.type === "keydown") {
+      if (webControlKeys.has(key) || (inWebControls && !gameKeys.has(key))) {
+        webControlKeys.add(key);
+        event.stopImmediatePropagation();
+        // Escape leaves the Tools panel for the game (its toggle handler refocuses the canvas).
+        const tools = document.getElementById("game-tools");
+        if (key === "Escape" && tools.open && event.target?.closest?.("#web-tools")) tools.open = false;
+      } else {
+        gameKeys.add(key);
+      }
+    } else if (webControlKeys.has(key)) {
+      if (event.type === "keyup") webControlKeys.delete(key);
+      event.stopImmediatePropagation();
+    } else if (event.type === "keyup") {
+      gameKeys.delete(key);
+    } else if (inWebControls && !gameKeys.has(key)) {
+      event.stopImmediatePropagation();
+    }
+  }
+  for (const type of ["keydown", "keypress", "keyup"]) {
+    window.addEventListener(type, routeWebKeyboardEvent, true);
+  }
+  function resetKeyboardRouting() { webControlKeys.clear(); gameKeys.clear(); }
+  window.addEventListener("blur", resetKeyboardRouting);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) resetKeyboardRouting(); });
+
+  function capturePerformanceContext() {
+    performanceContext = null;
+    if (typeof Module._WebReportPerformanceContext !== "function") return null;
+    try {
+      Module._WebReportPerformanceContext();
+      return performanceContext ? JSON.parse(JSON.stringify(performanceContext)) : null;
+    } catch (error) {
+      console.warn("Performance context is unavailable", error);
+      return null;
+    }
+  }
+
+  function captureRuntimeDiagnostics() {
+    runtimeDiagnostics = null;
+    if (typeof Module._WebReportRuntimeDiagnostics !== "function") return null;
+    try {
+      Module._WebReportRuntimeDiagnostics();
+      return runtimeDiagnostics ? JSON.parse(JSON.stringify(runtimeDiagnostics)) : null;
+    } catch (error) {
+      console.warn("Runtime diagnostics are unavailable", error);
+      return null;
+    }
+  }
+
+  function trackBrowserFrame(time) {
+    if (benchmark) {
+      benchmark.browserCallbacks++;
+      if (lastRafTime !== null && lastRafTime >= benchmark.startedAt) {
+        benchmark.callbackIntervals.push(time - lastRafTime);
+      }
+    }
+    lastRafTime = time;
+    if (started && !stopped) requestAnimationFrame(trackBrowserFrame);
+  }
+
+  function finishBenchmark(reason = "completed") {
+    if (!benchmark) return;
+    clearTimeout(benchmarkTimeout);
+    const now = performance.now(), durationMs = now - benchmark.startedAt;
+    const contextAtEnd = capturePerformanceContext();
+    const sorted = benchmark.intervals.slice().sort((a, b) => a - b);
+    const percentile = fraction => sorted.length ? sorted[Math.ceil(sorted.length * fraction) - 1] : null;
+    const summarize = samples => {
+      const values = samples.slice().sort((a, b) => a - b);
+      const p = fraction => values.length ? values[Math.ceil(values.length * fraction) - 1] : null;
+      return { samples: values.length, p50: p(0.5), p95: p(0.95), p99: p(0.99), max: values.at(-1) ?? null };
+    };
+    benchmarkReport = {
+      format: "shipwright-web-performance", version: 1, reason,
+      startedAt: benchmark.startedDate, durationMs, targetFps: 60,
+      presentedFrames: benchmark.frames, averageFps: durationMs > 0 ? benchmark.frames * 1000 / durationMs : 0,
+      frameTimeMs: { p50: percentile(0.5), p95: percentile(0.95), p99: percentile(0.99), max: sorted.at(-1) ?? null },
+      timeSinceLastPresentationMs: now - benchmark.lastFrame,
+      browserFrameTimeMs: summarize(benchmark.browserIntervals),
+      browserCallbackFrames: benchmark.browserCallbacks,
+      browserCallbackFps: durationMs > 0 ? benchmark.browserCallbacks * 1000 / durationMs : 0,
+      browserCallbackTimeMs: summarize(benchmark.callbackIntervals),
+      completionAfterBrowserFrameMs: summarize(benchmark.completionDelays),
+      simulationCpuTimeMs: summarize(benchmark.simulationCpuTimes),
+      presentationCpuTimeMs: summarize(benchmark.presentationCpuTimes),
+      totalCpuTimeMs: summarize(benchmark.totalCpuTimes),
+      presentationPhaseCpuTimeMs: Object.fromEntries(Object.entries(benchmark.phaseCpuTimes)
+        .map(([name, samples]) => [name, summarize(samples)])),
+      simulationPhaseCpuTimeMs: Object.fromEntries(Object.entries(benchmark.simulationPhaseCpuTimes)
+        .map(([name, samples]) => [name, summarize(samples)])),
+      contextAtStart: benchmark.contextAtStart, contextAtEnd,
+      runtimeAtStart: benchmark.runtimeAtStart, runtimeAtEnd: captureRuntimeDiagnostics(),
+      contextChanged: benchmark.contextAtStart && contextAtEnd ?
+        JSON.stringify(benchmark.contextAtStart) !== JSON.stringify(contextAtEnd) : null,
+      overBudgetFrames: sorted.filter(ms => ms > 1000 / 60 + 2).length,
+      budgetWithJitterMs: 1000 / 60 + 2, menuFrames: benchmark.menuFrames,
+      sceneFrames: benchmark.sceneFrames,
+      viewport: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
+      canvas: { width: Module.canvas.width, height: Module.canvas.height },
+      userAgent: navigator.userAgent,
+    };
+    benchmark = null;
+    document.getElementById("benchmark-game").textContent = "Measure FPS";
+    document.getElementById("benchmark-report").hidden = false;
+    showMessage(reason === "completed" ? `Timed report: ${benchmarkReport.averageFps.toFixed(1)} FPS; ${benchmarkReport.browserCallbackFps.toFixed(1)} browser callbacks/s. Export for frame times.` :
+      `FPS measurement ended: ${reason}. This report is incomplete.`, reason !== "completed");
+  }
+
+  document.getElementById("benchmark-game").addEventListener("click", () => {
+    if (benchmark) { finishBenchmark("cancelled"); return; }
+    if (!started || stopped || document.hidden || gameMenuVisible || randomizerGenerating) return;
+    const now = performance.now();
+    benchmark = { startedAt: now, startedDate: new Date().toISOString(), lastFrame: now, frames: 0,
+      intervals: [], browserIntervals: [], completionDelays: [], lastBrowserFrame: lastRafTime,
+      browserCallbacks: 0, callbackIntervals: [],
+      simulationCpuTimes: [], presentationCpuTimes: [], totalCpuTimes: [],
+      phaseCpuTimes: { events: [], interpolation: [], graphics: [] },
+      simulationPhaseCpuTimes: { state: [], input: [], update: [], commandsAndAudio: [], depthReadback: [] },
+      contextAtStart: capturePerformanceContext(),
+      runtimeAtStart: captureRuntimeDiagnostics(),
+      menuFrames: 0, sceneFrames: {} };
+    benchmarkReport = null;
+    document.getElementById("benchmark-report").hidden = true;
+    document.getElementById("benchmark-game").textContent = "Cancel FPS measurement";
+    showMessage("Measuring presentation for 30 seconds. Keep playing with this tab visible.");
+    benchmarkTimeout = setTimeout(() => finishBenchmark(), 30000);
+    Module.canvas.focus();
+  });
+  document.getElementById("benchmark-report").addEventListener("click", () => {
+    if (benchmarkReport) download("shipwright-performance.json", JSON.stringify(benchmarkReport, null, 2), "application/json");
+    Module.canvas.focus();
+  });
+  document.getElementById("render-audit-export").addEventListener("click", () => {
+    if (renderAuditPath) download(renderAuditPath.split("/").at(-1), FS.readFile(renderAuditPath), "application/json");
+    Module.canvas.focus();
+  });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) finishBenchmark("tab hidden"); });
+  window.addEventListener("pagehide", () => finishBenchmark("page closed"));
+
+  function resetTouchInput() {
+    touchPointers.clear(); touchLatched = 0;
+    stickPointer = null; stickX = 0; stickY = 0;
+    document.getElementById("touch-stick-knob").style.transform = "";
+    for (const button of document.querySelectorAll("[data-pad]")) button.classList.remove("pressed");
+  }
+
+  function consumeTouchInput(blocked) {
+    if (blocked || gameMenuVisible || !touchEnabled || !started || stopped) { resetTouchInput(); return 0; }
+    let buttons = touchLatched;
+    for (const mask of touchPointers.values()) buttons |= mask;
+    touchLatched = 0;
+    return (buttons | (stickPointer !== null ? 0x80 : 0) | ((stickX & 255) << 16) | ((stickY & 255) << 24)) | 0;
+  }
+
+  function setTouchEnabled(enabled, focusGame = true) {
+    touchEnabled = enabled; resetTouchInput();
+    document.getElementById("touch-controls").hidden = !enabled || gameMenuVisible;
+    document.getElementById("touch-toggle").setAttribute("aria-pressed", String(enabled));
+    document.body.classList.toggle("touch-enabled", enabled);
+    if (focusGame) Module.canvas.focus();
+  }
+
+  document.getElementById("touch-toggle").addEventListener("click", () => {
+    if (typeof Module._WebTouchInputSupported !== "function") {
+      showMessage("Touch input needs the latest web engine. Reload after updating the game files.", true);
+      return;
+    }
+    setTouchEnabled(!touchEnabled);
+  });
+  for (const button of document.querySelectorAll("[data-pad]")) {
+    const mask = Number(button.dataset.pad);
+    button.addEventListener("pointerdown", event => {
+      if (!touchEnabled || gameMenuVisible || !started || stopped) return;
+      event.preventDefault(); button.setPointerCapture(event.pointerId);
+      touchPointers.set(event.pointerId, mask); touchLatched |= mask;
+      button.classList.add("pressed");
+    });
+    for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) button.addEventListener(type, event => {
+      if (!touchPointers.has(event.pointerId)) return;
+      touchPointers.delete(event.pointerId);
+      if (![...touchPointers.values()].includes(mask)) {
+        button.classList.remove("pressed");
+        if (type !== "pointerup") touchLatched &= ~mask;
+      }
+    });
+  }
+  const touchStick = document.getElementById("touch-stick");
+  function moveTouchStick(event) {
+    const rect = touchStick.getBoundingClientRect();
+    let x = (event.clientX - rect.left - rect.width / 2) / (rect.width / 2);
+    let y = (rect.top + rect.height / 2 - event.clientY) / (rect.height / 2);
+    const length = Math.hypot(x, y);
+    if (length > 1) { x /= length; y /= length; }
+    // Small center movements stay neutral; rescale the remaining travel to full stick range.
+    const scale = length < 0.12 ? 0 : (Math.min(length, 1) - 0.12) / (0.88 * Math.min(length, 1));
+    stickX = Math.round(x * scale * 85); stickY = Math.round(y * scale * 85);
+    // The knob may travel until its edge meets the ring (44 px knob, 2 px border).
+    const travel = rect.width / 2 - 24;
+    document.getElementById("touch-stick-knob").style.transform = `translate(${x * travel}px, ${-y * travel}px)`;
+  }
+  touchStick.addEventListener("pointerdown", event => {
+    if (!touchEnabled || gameMenuVisible || !started || stopped || stickPointer !== null) return;
+    event.preventDefault(); touchStick.setPointerCapture(event.pointerId);
+    stickPointer = event.pointerId; moveTouchStick(event);
+  });
+  touchStick.addEventListener("pointermove", event => { if (event.pointerId === stickPointer) moveTouchStick(event); });
+  for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) touchStick.addEventListener(type, event => {
+    if (event.pointerId !== stickPointer) return;
+    stickPointer = null; stickX = 0; stickY = 0;
+    document.getElementById("touch-stick-knob").style.transform = "";
+  });
+  window.addEventListener("blur", resetTouchInput);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) resetTouchInput(); });
+
+  function connectedGamepads() {
+    return Array.from(navigator.getGamepads()).filter(pad => pad && pad.connected);
+  }
+
+  // Browsers decorate gamepad ids: Chrome appends "(STANDARD GAMEPAD Vendor: 054c Product: 0ce6)",
+  // Firefox prefixes "054c-0ce6-". Show just the product name.
+  function controllerName(id) {
+    const name = String(id).replace(/^[0-9a-f]{4}-[0-9a-f]{4}-/i, "").replace(/\s*\([^()]*\)\s*$/, "").trim();
+    return name || "Controller";
+  }
+
+  function updateControllers() {
+    let text;
+    try {
+      if (typeof navigator.getGamepads !== "function") text = "Gamepad access is unavailable in this browser.";
+      else {
+        const names = connectedGamepads().map(pad => controllerName(pad.id));
+        text = names.length ? `Connected: ${names.join(", ")}. Configure it in Settings > Controls.` :
+          "Press a button on your paired controller to detect it.";
+      }
+    } catch (e) { text = "Gamepad access is blocked in this browser. Check its permissions."; }
+    for (const id of ["controller-status", "controller-game-status"]) {
+      const element = document.getElementById(id);
+      if (element.textContent !== text) element.textContent = text;
+    }
+  }
+  window.addEventListener("gamepadconnected", updateControllers);
+  // Browsers only report a controller once a button is pressed on it, so this means someone is playing
+  // with it: move the touch pad out of the way of the game. Tools can bring it back.
+  window.addEventListener("gamepadconnected", () => {
+    if (!touchEnabled || !started || stopped) return;
+    setTouchEnabled(false);
+    showMessage("Controller connected, so touch controls are hidden. Turn them back on in Tools.");
+  });
+  window.addEventListener("gamepaddisconnected", updateControllers);
+
+  const controllerRumbles = new Map();
+  function controllerRumbleActuator(index) {
+    try {
+      const pad = navigator.getGamepads?.()[index];
+      const actuator = pad?.connected && pad.vibrationActuator;
+      return actuator && typeof actuator.playEffect === "function" &&
+        (actuator.effects?.includes("dual-rumble") || actuator.type === "dual-rumble") ? actuator : null;
+    } catch (error) { return null; }
+  }
+  function stopControllerRumble(index) {
+    const state = controllerRumbles.get(index);
+    if (!state) return;
+    controllerRumbles.delete(index);
+    clearInterval(state.timer);
+    try {
+      if (typeof Module._Shipwright_WebStopControllerRumble === "function") Module._Shipwright_WebStopControllerRumble(index);
+    } catch (error) {} // A stopped/trapped Wasm engine must not prevent browser cleanup.
+    try {
+      const result = typeof state.actuator.reset === "function" ? state.actuator.reset() :
+        state.actuator.playEffect("dual-rumble", { duration: 0, strongMagnitude: 0, weakMagnitude: 0 });
+      Promise.resolve(result).catch(() => {});
+    } catch (error) {}
+  }
+  function stopAllControllerRumble() {
+    for (const index of controllerRumbles.keys()) stopControllerRumble(index);
+  }
+  function webControllerRumble(index, low, high) {
+    if (!Number.isInteger(index) || index < 0 || ![low, high].every(value => Number.isInteger(value) && value >= 0 && value <= 65535)) return 0;
+    if (!low && !high) { stopControllerRumble(index); return 1; }
+    if (!started || stopped || document.hidden) return 0;
+    const actuator = controllerRumbleActuator(index);
+    if (!actuator) return 0;
+    const previous = controllerRumbles.get(index);
+    if (previous?.actuator === actuator && previous.low === low && previous.high === high) return 1;
+    stopControllerRumble(index);
+    const state = { actuator, low, high, timer: null };
+    controllerRumbles.set(index, state);
+    const pulse = () => {
+      if (controllerRumbles.get(index) !== state) return;
+      if (document.hidden || stopped || controllerRumbleActuator(index) !== actuator) {
+        stopControllerRumble(index); return;
+      }
+      try {
+        // SDL's zero-duration start stays active until StopRumble. Renew bounded browser
+        // effects while active; a lost/closed page cannot leave indefinite vibration.
+        Promise.resolve(actuator.playEffect("dual-rumble", {
+          startDelay: 0, duration: 500, strongMagnitude: low / 65535, weakMagnitude: high / 65535,
+        })).catch(error => {
+          if (controllerRumbles.get(index) !== state) return;
+          stopControllerRumble(index);
+          console.warn("Controller vibration failed", error);
+        });
+      } catch (error) { stopControllerRumble(index); }
+    };
+    state.timer = setInterval(pulse, 250);
+    pulse();
+    return controllerRumbles.get(index) === state ? 1 : 0;
+  }
+  window.addEventListener("gamepaddisconnected", event => stopControllerRumble(event.gamepad.index));
+  window.addEventListener("blur", stopAllControllerRumble);
+  window.addEventListener("pagehide", stopAllControllerRumble);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) stopAllControllerRumble(); });
+
+  function backupPath(path) {
+    return /^(Save|Randomizer|presets)\//.test(path) &&
+      !/[<>:"\\|?*]/.test(path) &&
+      !Array.from(path).some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) &&
+      !path.split("/").some(part => part === ".." || part === "." || !part) ||
+      ["shipofharkinian.json", "imgui.ini", "timesplitdata.json"].includes(path);
+  }
+
+  function download(name, bytes, type) {
+    const url = URL.createObjectURL(new Blob([bytes], { type }));
+    const link = document.createElement("a");
+    link.href = url; link.download = name; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // Import refuses backups past these sizes (the file, and its decoded contents).
+  const BACKUP_FILE_LIMIT = 32 * 1024 * 1024, BACKUP_CONTENT_LIMIT = 24 * 1024 * 1024;
+
+  // Every generated seed leaves a spoiler log in Randomizer/. Saves don't need them (a randomizer save
+  // carries its own seed data), but they pile up, so when a backup would be too big to import again,
+  // leave out the oldest ones. The selected seed and an imported seed always stay.
+  function trimSpoilerLogs(entries) {
+    // Contents, and the exported JSON: base64 data plus each entry's path and punctuation.
+    const encodedSize = entry => Math.ceil(entry.bytes.length / 3) * 4 + entry.path.length + 32;
+    let contents = 0, encoded = 64;
+    for (const entry of entries) { contents += entry.bytes.length; encoded += encodedSize(entry); }
+    const fits = () => contents <= BACKUP_CONTENT_LIMIT && encoded <= BACKUP_FILE_LIMIT;
+    if (fits()) return { entries, omitted: 0 };
+    let selected = "";
+    try { selected = String(readSeedConfig().CVars?.gGeneral?.SpoilerLog || "").replace(/^(\/data\/|\.\/)/, ""); }
+    catch (error) {} // Unreadable settings: no seed counts as selected.
+    const removable = entries.filter(entry => /^Randomizer\/[^/]+\.json$/.test(entry.path) &&
+      entry.path !== selected && entry.path !== "Randomizer/imported-seed.json").sort((a, b) => a.mtime - b.mtime);
+    const omitted = new Set();
+    for (const entry of removable) {
+      if (fits()) break;
+      omitted.add(entry); contents -= entry.bytes.length; encoded -= encodedSize(entry);
+    }
+    return { entries: entries.filter(entry => !omitted.has(entry)), omitted: omitted.size, tooLarge: !fits() };
+  }
+
+  function exportBackup() {
+    if (!ready) return;
+    const entries = [];
+    function visit(dir, relative) {
+      for (const name of FS.readdir(dir)) {
+        if (name === "." || name === "..") continue;
+        const path = `${dir}/${name}`, rel = relative ? `${relative}/${name}` : name;
+        const stat = FS.stat(path);
+        if (FS.isDir(stat.mode)) {
+          if (["Save", "Randomizer", "presets"].includes(rel) || relative) visit(path, rel);
+        } else if (backupPath(rel)) {
+          entries.push({ path: rel, bytes: FS.readFile(path), mtime: +stat.mtime || 0 });
+        }
+      }
+    }
+    visit(DATA_DIR, "");
+    const backup = trimSpoilerLogs(entries);
+    const files = backup.entries.map(({ path, bytes }) => {
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+      return { path, data: btoa(binary) };
+    });
+    download("shipwright-backup.json", JSON.stringify({ format: "shipwright-web-backup", version: 1, files }), "application/json");
+    if (backup.tooLarge) {
+      showMessage("This backup is larger than import accepts (32 MB), so it can't be imported again as is.", true);
+    } else if (backup.omitted) {
+      showMessage(`Backup exported without ${backup.omitted} older randomizer spoiler log(s), so it stays small enough to import. Your saves, settings and selected seed are all included.`);
+    }
+  }
 
   function showMessage(text, isError) {
     message.textContent = text;
     message.className = isError ? "error" : "";
+    clearTimeout(statusTimeout);
+    if (running) {
+      const status = document.getElementById("web-status");
+      status.textContent = text;
+      status.className = isError ? "status error" : "status";
+      // Keep errors available to read, but let completed actions leave the play area.
+      if (text && !isError && started && !stopped) {
+        statusTimeout = setTimeout(() => { status.textContent = ""; }, 15000);
+      }
+    }
+  }
+
+  // File inputs are hidden inside their <label class="button">, so the label carries the disabled look.
+  function setFileInputEnabled(input, enabled) {
+    input.disabled = !enabled;
+    input.parentElement?.classList.toggle("disabled", !enabled);
   }
 
   function setControlsEnabled(enabled) {
-    for (const input of fileInputs) {
-      input.disabled = !enabled;
-      input.parentElement.classList.toggle("disabled", !enabled);
-    }
+    for (const input of fileInputs) setFileInputEnabled(input, enabled);
     refreshArchiveStatus();
   }
 
   // Shows the start screen again with an explanation; the page has to be reloaded after this.
-  function stop(text) {
+  // Without canRetry (an unsupported browser), reloading can't help, so it isn't offered.
+  function stop(text, canRetry = true) {
     if (stopped) return;
     stopped = true;
+    stopAllControllerRumble();
+    setTouchEnabled(false, false);
+    wakeLock?.release().catch(() => {});
+    finishBenchmark("game stopped");
     overlay.style.display = "";
     setControlsEnabled(false);
     startButton.disabled = true;
-    showMessage(`${text} Reload the page to try again.`, true);
+    startButton.hidden = true;
+    document.getElementById("reload-launcher").hidden = !canRetry;
+    showMessage(canRetry ? `${text} Use Reload launcher to try again.` : text, true);
   }
+
+  // The name of the engine this page loads (soh-<commit>), or null before its script tag exists.
+  function engineName() {
+    for (const script of document.scripts || []) {
+      const name = /(?:^|\/)(soh-[\w-]+)\.js(?:[?#]|$)/.exec(script.getAttribute("src") || "")?.[1];
+      if (name) return name;
+    }
+    return null;
+  }
+
+  // Static hosts such as GitHub Pages let browsers reuse this page for minutes without asking. After
+  // an update, a reused page names engine files the host has replaced. Reload once when the host has
+  // a page for a different engine.
+  const PAGE_REFRESH_KEY = "shipwright-page-refresh";
+  async function reloadIfPageUpdated() {
+    const current = engineName();
+    if (!current) return false;
+    try {
+      const last = Number(sessionStorage.getItem(PAGE_REFRESH_KEY));
+      if (last > 0 && Date.now() - last < 60000) return false; // already tried; don't loop
+      // "reload" skips the cached copy and stores the fresh one for the reload below.
+      const response = await fetch(window.location.href, { cache: "reload" });
+      if (!response.ok) return false;
+      const latest = /<script\b[^>]*\bsrc\s*=\s*["']?(?:[^"'\s>]*\/)?(soh-[\w-]+)\.js/i.exec(await response.text())?.[1];
+      if (!latest || latest === current) return false;
+      sessionStorage.setItem(PAGE_REFRESH_KEY, String(Date.now()));
+    } catch (error) { return false; }
+    reloadPage();
+    return true;
+  }
+
+  // The engine could not be downloaded or started before the runtime was ready.
+  let engineFailure = false;
+  function engineUnavailable(text) {
+    if (stopped || engineFailure) return;
+    engineFailure = true;
+    showMessage("Checking for an updated version…");
+    reloadIfPageUpdated().then(reloaded => { if (!reloaded) stop(text); });
+  }
+
+  function isCompileError(error) {
+    return error instanceof WebAssembly.CompileError || /\bCompileError\b/.test(String(error));
+  }
+  function isOutOfMemory(error) {
+    return error?.name === "RangeError" && /memory/i.test(error.message);
+  }
+  const OUT_OF_MEMORY = "The browser couldn't give the game enough memory. Close other tabs and try again; some phones and tablets don't allow enough.";
+  const UNSUPPORTED_BROWSER = "This browser can't run the game. Use a current version of Chrome, Edge, Firefox or Safari.";
 
   function hasFile(path) {
     try { return FS.analyzePath(path).exists; } catch (e) { return false; }
+  }
+
+  function isZipArchive(bytes) {
+    if (bytes.length < 22 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) return false;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    // Check the end-of-central-directory record, including the optional ZIP comment.
+    for (let pos = bytes.length - 22; pos >= Math.max(0, bytes.length - 65557); pos--) {
+      if (view.getUint32(pos, true) !== 0x06054b50) continue;
+      if (pos + 22 + view.getUint16(pos + 20, true) !== bytes.length) continue;
+      return view.getUint16(pos + 4, true) === 0 && view.getUint16(pos + 6, true) === 0 &&
+        view.getUint16(pos + 10, true) > 0 &&
+        view.getUint32(pos + 12, true) + view.getUint32(pos + 16, true) <= pos;
+    }
+    return false;
   }
 
   function refreshArchiveStatus() {
@@ -102,8 +715,66 @@
       el.className = present ? "status ok" : "status";
       any = any || present;
     }
-    startButton.disabled = !ready || running || stopped || (!any && !stagedRomPath);
+    if (!stagedRomPath && ready) {
+      const status = document.getElementById("status-rom");
+      status.textContent = any ? "Game ready — no need to load your ROM again" : "Choose an Ocarina of Time ROM to get started";
+      status.className = any ? "status ok" : "status";
+    }
+    startButton.disabled = !ready || busy || running || stopped || (!any && !stagedRomPath);
+    // Reading an export remains possible after the Wasm engine stops or loses GL.
+    document.getElementById("backup").disabled = !ready || busy;
+    if (ready) {
+      FS.mkdirTree(`${DATA_DIR}/mods`);
+      refreshMods();
+    }
   }
+
+  function refreshMods(selected = document.getElementById("mod-list").value) {
+    const names = FS.readdir(`${DATA_DIR}/mods`).filter(name =>
+      /^[A-Za-z0-9_. -]+\.o2r(?:\.disabled)?$/i.test(name) && !FS.isDir(FS.stat(`${DATA_DIR}/mods/${name}`).mode)).sort();
+    const list = document.getElementById("mod-list");
+    list.replaceChildren();
+    for (const name of names) {
+      const option = document.createElement("option");
+      option.value = name;
+      const disabled = /\.disabled$/i.test(name);
+      option.textContent = `${disabled ? name.slice(0, -9) : name} (${disabled ? "disabled" : "enabled"})`;
+      list.appendChild(option);
+    }
+    list.value = names.includes(selected) ? selected : names[0] || "";
+    document.getElementById("mod-controls").hidden = !names.length;
+    const enabledCount = names.filter(name => !/\.disabled$/i.test(name)).length;
+    document.getElementById("mods-status").textContent = names.length ?
+      `${enabledCount} enabled mod(s), ${names.length - enabledCount} disabled. Changes apply when you press Start.` :
+      "Mods load at startup. Use .o2r mods compatible with this version.";
+    refreshModControls();
+  }
+
+  function refreshModControls() {
+    const list = document.getElementById("mod-list");
+    const disabled = !ready || busy || running || stopped || !list.value;
+    list.disabled = disabled;
+    const button = document.getElementById("mod-toggle");
+    button.disabled = disabled;
+    button.textContent = /\.disabled$/i.test(list.value) ? "Enable mod" : "Disable mod";
+  }
+
+  document.getElementById("mod-list").addEventListener("change", refreshModControls);
+  document.getElementById("mod-toggle").addEventListener("click", async () => {
+    if (!ready || busy || running || stopped) return;
+    const name = document.getElementById("mod-list").value;
+    if (!/^[A-Za-z0-9_. -]+\.o2r(?:\.disabled)?$/i.test(name)) return;
+    const wasDisabled = /\.disabled$/i.test(name);
+    const nextName = wasDisabled ? name.slice(0, -9) : `${name}.disabled`;
+    busy = true; setControlsEnabled(false);
+    try {
+      if (hasFile(`${DATA_DIR}/mods/${nextName}`)) throw new Error("a mod with that name already exists");
+      FS.rename(`${DATA_DIR}/mods/${name}`, `${DATA_DIR}/mods/${nextName}`);
+      refreshMods(nextName);
+      if (await persist()) showMessage(`${wasDisabled ? "Enabled" : "Disabled"} ${wasDisabled ? nextName : name}. Press Start to apply.`);
+    } catch (e) { showMessage(`Could not change mod: ${e.message}`, true); }
+    finally { busy = false; setControlsEnabled(!running && !stopped); }
+  });
 
   // N64 dumps come in three byte orders; Torch's version table hashes big-endian (.z64) dumps.
   function toBigEndian(rom) {
@@ -130,13 +801,14 @@
   }
 
   async function fetchOk(url) {
-    const response = await fetch(url);
+    const response = await fetch(url, { cache: "no-cache" });
     if (!response.ok) throw new Error(`could not download ${url} (${response.status})`);
     return response;
   }
 
   // Unpacks a bundle made by pack_assets.py: gzip of (u32 path length, path, u32 size, data)*.
   async function installAssetBundle(version) {
+    if (!/^[a-z0-9_-]+$/.test(version)) throw new Error("invalid ROM asset version");
     let data = new Uint8Array(await (await fetchOk(`assets/${version}.bundle.gz`)).arrayBuffer());
     // Some servers send .gz files with Content-Encoding: gzip, and then the browser already unpacked it.
     if (data[0] === 0x1f && data[1] === 0x8b) {
@@ -146,13 +818,21 @@
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     const decoder = new TextDecoder();
     const base = `/app/assets/${version}`;
+    const entries = [];
     for (let pos = 0; pos < data.length;) {
+      if (pos + 4 > data.length) throw new Error("truncated asset bundle");
       const pathLength = view.getUint32(pos, true); pos += 4;
+      if (!pathLength || pos + pathLength + 4 > data.length) throw new Error("invalid asset bundle path");
       const path = decoder.decode(data.subarray(pos, pos + pathLength)); pos += pathLength;
+      if (path.startsWith("/") || path.includes("\\") || path.split("/").some(part => !part || part === "." || part === "..")) throw new Error("invalid asset bundle path");
       const size = view.getUint32(pos, true); pos += 4;
+      if (size > data.length - pos) throw new Error("truncated asset bundle entry");
       const full = `${base}/${path}`;
+      entries.push({ full, bytes: data.subarray(pos, pos + size) }); pos += size;
+    }
+    for (const { full, bytes } of entries) {
       FS.mkdirTree(full.substring(0, full.lastIndexOf("/")));
-      FS.writeFile(full, data.subarray(pos, pos + size)); pos += size;
+      FS.writeFile(full, bytes);
     }
   }
 
@@ -179,23 +859,75 @@
   // Resolves once everything written so far is stored.
   let syncing = null, syncAgain = false;
   function persist() {
-    if (syncing) { syncAgain = true; return syncing; }
-    syncing = new Promise((resolve) => {
-      FS.syncfs(false, (err) => {
+    syncAgain = true;
+    if (syncing) return syncing;
+    syncing = (async () => {
+      let success = true;
+      while (syncAgain) {
+        syncAgain = false;
+        const err = await new Promise(resolve => FS.syncfs(false, resolve));
         if (err) {
           console.error("Saving to browser storage failed", err);
-          if (storageWorks && !running) showMessage("Your browser didn't let this page store files, so they will be lost when the page closes.", true);
+          if (storageWorks) showMessage("Browser storage failed. Export your saves before closing this tab; recent changes may not survive a reload.", true);
           storageWorks = false;
+          success = false;
         }
-        syncing = null;
-        resolve(!err);
-        if (syncAgain) { syncAgain = false; persist(); }
-      });
-    });
+      }
+      syncing = null;
+      return success;
+    })();
     return syncing;
   }
 
+  // Reloads the page on purpose, without the "leave this page?" prompt that guards a running game.
+  function reloadPage() {
+    leavingPage = true;
+    window.location.reload();
+  }
+
+  function conversionResumeKey() {
+    return `shipwright-converted-start:${window.location.pathname}`;
+  }
+
+  // Linear Wasm memory cannot shrink. A saved conversion can restart with the smaller gameplay heap.
+  async function finishConvertedStartup() {
+    let saved = false;
+    try { saved = await persist(); }
+    catch (error) {
+      console.error("Saving the converted archive failed", error);
+      storageWorks = false;
+    }
+    conversionFinishing = false;
+    if (!started || stopped) return;
+    if (saved && storageWorks) {
+      try {
+        sessionStorage.setItem(conversionResumeKey(), String(Date.now()));
+        reloadPage();
+        return;
+      } catch (error) {
+        // Session storage may be unavailable even when IndexedDB works; keep this game playable.
+        try { sessionStorage.removeItem(conversionResumeKey()); } catch (ignored) {}
+      }
+    }
+    showGameControls();
+    if (!saved || !storageWorks) {
+      showMessage("Browser storage failed. Export your saves before closing this tab; recent changes may not survive a reload.", true);
+    }
+  }
+
+  function resumeConvertedStartup() {
+    try {
+      const stamp = Number(sessionStorage.getItem(conversionResumeKey()));
+      sessionStorage.removeItem(conversionResumeKey());
+      const elapsed = Date.now() - stamp;
+      if (stamp > 0 && elapsed >= 0 && elapsed < 120000 && storageWorks && !startButton.disabled) startGame();
+    } catch (error) {}
+  }
+
   var Module = {
+    consumeWebInput: consumeTouchInput,
+    webControllerRumble,
+    webControllerSupportsRumble: index => !!controllerRumbleActuator(index),
     canvas: document.getElementById("canvas"),
     noInitialRun: true,
     preRun: [() => {
@@ -210,25 +942,358 @@
         removeRunDependency("syncfs");
       });
     }],
-    setStatus: (text) => { if (!ready && text) showMessage(text); },
+    setStatus: (text) => { if (!ready && !stopped && !engineFailure && text) showMessage(text); },
     onRuntimeInitialized: () => {
       ready = true;
+      try { sessionStorage.removeItem(PAGE_REFRESH_KEY); } catch (error) {}
+      const engine = engineName();
+      if (engine) document.getElementById("build-id").textContent = ` Build ${engine.slice(4)}.`;
       setControlsEnabled(true);
+      updateControllers();
+      setInterval(updateControllers, 1000);
       showMessage(storageWorks ? "" : "Your browser didn't let this page use storage (private window?), so nothing will be kept after it closes.", !storageWorks);
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+      resumeConvertedStartup();
     },
     print: (text) => console.log(text),
     printErr: (text) => console.warn(text),
-    onAbort: (what) => stop(`The game stopped: ${what}.`),
-    onGameStarted: () => { started = true; },
-    // Saves and other files the game writes go to browser storage right away.
-    onFileWritten: () => { clearTimeout(persistSoon); persistSoon = setTimeout(persist, 250); },
+    onAbort: (what) => {
+      if (ready) stop(`The game stopped: ${what}.`);
+      else if (isCompileError(what)) stop(UNSUPPORTED_BROWSER, false);
+      else engineUnavailable(`The game engine could not start: ${what}.`);
+    },
+    onGameStopped: () => {
+      if (stopped) return;
+      stopped = true;
+      stopAllControllerRumble();
+      setTouchEnabled(false, false);
+      wakeLock?.release().catch(() => {});
+      finishBenchmark("game closed");
+      overlay.style.display = "";
+      setControlsEnabled(false);
+      startButton.hidden = true;
+      document.getElementById("reload-launcher").hidden = false;
+      document.getElementById("fps").textContent = "Game closed";
+      return returnToLauncher();
+    },
+    onGameStarted: () => {
+      started = true;
+      document.getElementById("settings-game").disabled = typeof Module._WebToggleMenu !== "function";
+      document.getElementById("touch-toggle").disabled = typeof Module._WebTouchInputSupported !== "function";
+      requestAnimationFrame(trackBrowserFrame);
+      if (shouldRestoreImportedSeed() && typeof Module._WebLoadRandomizerSeed === "function") {
+        Module._WebLoadRandomizerSeed();
+      }
+    },
+    onRandomizerGenerationStarted: () => {
+      randomizerGenerating = true;
+      finishBenchmark("randomizer generation");
+      setFileInputEnabled(document.getElementById("seed-game-input"), false);
+      document.getElementById("benchmark-game").disabled = true;
+      document.getElementById("return-launcher").disabled = true;
+      showMessage("Generating a randomizer seed. Keep this tab open; the game pauses while generation runs.");
+    },
+    onRandomizerGenerationFinished: (success) => {
+      randomizerGenerating = false;
+      document.getElementById("return-launcher").disabled = false;
+      setFileInputEnabled(document.getElementById("seed-game-input"), started && !stopped && !busy);
+      document.getElementById("benchmark-game").disabled = !started || stopped;
+      frameTimes.length = 0; lastFrameReport = 0;
+      document.getElementById("fps").textContent = "Measuring FPS…";
+      showMessage(success ? "Seed generated. Choose a new randomizer file in file select." :
+        "Seed generation failed. Review your randomizer settings and try again.", !success);
+      persist();
+    },
+    onRenderAuditCaptured: path => {
+      if (!/^\/data\/RenderAudit\/[A-Za-z0-9_-]{1,80}\.json$/.test(path)) {
+        showMessage("Invalid render audit capture path.", true); return;
+      }
+      try {
+        const report = JSON.parse(new TextDecoder().decode(FS.readFile(path)));
+        if (report.format !== "shipwright-render-capture" || ![1, 2, 3].includes(report.version)) throw Error("Invalid capture report");
+        finishBenchmark("render audit capture");
+        renderAuditPath = path;
+        document.getElementById("render-audit-export").hidden = false;
+        showMessage(report.reason === "captured" ? "Render audit captured. Export it for desktop comparison." :
+          `Render audit failed: ${report.reason}. Export the report for details.`, report.reason !== "captured");
+      } catch (error) { showMessage(`Render audit could not be read: ${error.message}`, true); }
+    },
+    onWebPerformanceContext: context => { performanceContext = context; },
+    onWebRuntimeDiagnostics: diagnostics => { runtimeDiagnostics = diagnostics; },
+    onFramePresented: (menuVisible = false, scene = null, simulationMs = -1, presentationCpuMs = null, phases = null, simulationPhases = null) => {
+      if (gameMenuVisible !== menuVisible) {
+        gameMenuVisible = menuVisible;
+        document.body.classList.toggle("native-menu-open", menuVisible);
+        document.getElementById("settings-game").textContent = menuVisible ? "Back to game" : "Settings";
+        if (menuVisible) document.getElementById("game-tools").open = false;
+        resetTouchInput();
+        document.getElementById("touch-controls").hidden = !touchEnabled || menuVisible;
+        // Let SDL resize after closing the full-viewport menu before sampling
+        // the game canvas again. Menu dimensions must not become the game aspect.
+        if (!menuVisible) canvasAspectCooldown = 3;
+        // SDL listens for window resize events, rather than CSS-only changes.
+        requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+      }
+      const aspect = Module.canvas.width / Module.canvas.height;
+      if (!menuVisible && canvasAspectCooldown === 0 && aspect > 0 && aspect !== canvasAspect) {
+        Module.canvas.style.setProperty("--canvas-aspect", aspect);
+        canvasAspect = aspect;
+      }
+      if (!menuVisible && canvasAspectCooldown > 0) canvasAspectCooldown--;
+      const now = performance.now();
+      if (benchmark) {
+        benchmark.intervals.push(now - benchmark.lastFrame);
+        benchmark.lastFrame = now; benchmark.frames++;
+        const hasSimulation = Number.isFinite(simulationMs) && simulationMs >= 0;
+        if (hasSimulation) benchmark.simulationCpuTimes.push(simulationMs);
+        if (Number.isFinite(presentationCpuMs) && presentationCpuMs >= 0) {
+          benchmark.presentationCpuTimes.push(presentationCpuMs);
+          benchmark.totalCpuTimes.push(presentationCpuMs + (hasSimulation ? simulationMs : 0));
+        }
+        for (const [name, samples] of Object.entries(benchmark.phaseCpuTimes)) {
+          if (Number.isFinite(phases?.[name]) && phases[name] >= 0) samples.push(phases[name]);
+        }
+        if (hasSimulation) {
+          for (const [name, samples] of Object.entries(benchmark.simulationPhaseCpuTimes)) {
+            if (Number.isFinite(simulationPhases?.[name]) && simulationPhases[name] >= 0) samples.push(simulationPhases[name]);
+          }
+        }
+        if (lastRafTime !== null) {
+          if (benchmark.lastBrowserFrame !== null && lastRafTime > benchmark.lastBrowserFrame) {
+            benchmark.browserIntervals.push(lastRafTime - benchmark.lastBrowserFrame);
+          }
+          benchmark.lastBrowserFrame = lastRafTime;
+          benchmark.completionDelays.push(now - lastRafTime);
+        }
+        if (menuVisible) benchmark.menuFrames++;
+        const sceneId = Number.isInteger(scene) ? String(scene) : "unknown";
+        benchmark.sceneFrames[sceneId] = (benchmark.sceneFrames[sceneId] || 0) + 1;
+      }
+      frameTimes.push(now);
+      while (frameTimes.length > 1 && frameTimes[0] < now - 2000) frameTimes.shift();
+      if (now - lastFrameReport > 1000 && frameTimes.length > 1) {
+        const fps = (frameTimes.length - 1) * 1000 / (now - frameTimes[0]);
+        document.getElementById("fps").textContent = `${fps.toFixed(1)} FPS`;
+        Module.webPerformance = { fps, frames: frameTimes.length, windowMs: now - frameTimes[0] };
+        lastFrameReport = now;
+      }
+    },
+    // Saves and settings the game writes go to browser storage shortly after the first unflushed write,
+    // even if more keep coming (a settings slider being dragged saves every frame).
+    onFileWritten: () => {
+      if (!persistSoon) persistSoon = setTimeout(() => { persistSoon = 0; persist(); }, 250);
+    },
     // The game wrote oot.o2r / oot-mq.o2r from the staged ROM; the ROM and asset descriptions can go.
     onArchiveExtracted: () => {
       clearStagedRom();
-      persist();
+      conversionFinishing = true;
+      showMessage("Finishing ROM conversion and preparing gameplay…");
+      return finishConvertedStartup();
     },
   };
+
+  async function returnToLauncher() {
+    if (!ready || busy || randomizerGenerating) return;
+    const button = document.getElementById("return-launcher");
+    busy = true; button.disabled = true;
+    stopAllControllerRumble(); resetTouchInput();
+    showMessage("Saving browser files before returning to the launcher…");
+    try {
+      if (!storageWorks || !await persist()) {
+        showMessage("Could not save to browser storage. Export your saves before leaving.", true);
+        return;
+      }
+      reloadPage();
+    } catch (error) {
+      showMessage(`Could not return to the launcher: ${error.message}. Export your saves before leaving.`, true);
+    } finally { busy = false; button.disabled = false; }
+  }
+  document.getElementById("return-launcher").addEventListener("click", returnToLauncher);
+  document.getElementById("reload-launcher").addEventListener("click", () => {
+    if (!ready) reloadPage();
+    else returnToLauncher();
+  });
+  window.addEventListener("error", event => {
+    if (ready) return;
+    if (event.target?.tagName === "SCRIPT") {
+      engineUnavailable("The game engine could not be downloaded. Check your connection.");
+    } else if (/soh-[\w-]+\.js/.test(event.filename || "") && event.error) {
+      // The engine script failed while starting up, before it could report through onAbort.
+      if (isOutOfMemory(event.error)) {
+        stop(OUT_OF_MEMORY);
+      } else if (!(event.error instanceof WebAssembly.RuntimeError)) { // aborts already went through onAbort
+        engineUnavailable(`The game engine could not start (${event.error.message || event.error}).`);
+      }
+    }
+  }, true);
+  // Downloading the engine's bundled data, and its asynchronous startup, fail as rejected promises.
+  window.addEventListener("unhandledrejection", event => {
+    const reason = String(event.reason?.message ?? event.reason);
+    if (ready) return;
+    if (isOutOfMemory(event.reason)) stop(OUT_OF_MEMORY);
+    else if (/soh-[\w-]+\.(?:data|wasm)\b/.test(reason)) {
+      engineUnavailable("The game files could not be downloaded. Check your connection.");
+    }
+  });
+  document.getElementById("game-tools").addEventListener("toggle", () => {
+    if (!document.getElementById("game-tools").open && started) Module.canvas.focus();
+  });
+  document.getElementById("backup").addEventListener("click", exportBackup);
+  document.getElementById("settings-game").addEventListener("click", () => {
+    if (typeof Module._WebToggleMenu === "function") Module._WebToggleMenu();
+    else showMessage("Press Esc to open settings. Touch settings needs the latest web engine.", true);
+    Module.canvas.focus();
+  });
+  document.getElementById("backup-game").addEventListener("click", () => {
+    exportBackup();
+    Module.canvas.focus();
+  });
+  document.getElementById("fullscreen").addEventListener("click", async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+      Module.canvas.focus();
+    } catch (e) { showMessage("Fullscreen is unavailable in this browser. You can still play in the tab.", true); }
+  });
+  // iPhone Safari has no element fullscreen; don't offer a button that can only fail there.
+  if (document.fullscreenEnabled === false) document.getElementById("fullscreen").hidden = true;
+  document.addEventListener("fullscreenchange", () => {
+    document.getElementById("fullscreen").textContent = document.fullscreenElement ? "Exit fullscreen" : "Fullscreen";
+  });
+
+  document.getElementById("backup-input").addEventListener("change", async (event) => {
+    const file = event.target.files[0]; event.target.value = "";
+    if (!file || !ready || running || busy) return;
+    busy = true; setControlsEnabled(false);
+    let filesChanged = false;
+    try {
+      if (file.size > BACKUP_FILE_LIMIT) throw new Error("backup exceeds 32 MB");
+      const backup = JSON.parse(await file.text());
+      if (!backup || backup.format !== "shipwright-web-backup" || backup.version !== 1 || !Array.isArray(backup.files)) throw new Error("unsupported backup format");
+      const paths = new Set(); let total = 0;
+      const files = backup.files.map(entry => {
+        if (typeof entry.path !== "string" || !backupPath(entry.path) || paths.has(entry.path) || typeof entry.data !== "string") throw new Error("invalid backup file path");
+        paths.add(entry.path);
+        const binary = atob(entry.data); total += binary.length;
+        if (total > BACKUP_CONTENT_LIMIT) throw new Error("backup contents exceed 24 MB");
+        return { path: `${DATA_DIR}/${entry.path}`, bytes: Uint8Array.from(binary, c => c.charCodeAt(0)) };
+      });
+      // Validate the entire package before changing any saved files.
+      for (const entry of files) {
+        const relative = entry.path.slice(DATA_DIR.length + 1);
+        if (relative === "shipofharkinian.json") {
+          try { parseSettings(new TextDecoder().decode(entry.bytes)); }
+          catch (error) { throw new Error("the backup contains unreadable settings"); }
+        }
+        if (hasFile(entry.path) && FS.isDir(FS.stat(entry.path).mode)) {
+          throw new Error(`backup file conflicts with an existing directory: ${relative}`);
+        }
+        const parts = relative.split("/");
+        for (let i = 1; i < parts.length; ++i) {
+          const parent = parts.slice(0, i).join("/");
+          if (paths.has(parent) || (hasFile(`${DATA_DIR}/${parent}`) && !FS.isDir(FS.stat(`${DATA_DIR}/${parent}`).mode))) {
+            throw new Error(`backup directory conflicts with a file: ${parent}`);
+          }
+        }
+      }
+      for (const entry of files) {
+        filesChanged = true;
+        FS.mkdirTree(entry.path.substring(0, entry.path.lastIndexOf("/")));
+        FS.writeFile(entry.path, entry.bytes);
+      }
+      if (await persist()) showMessage(`Imported ${files.length} save/settings files.`);
+    } catch (e) {
+      showMessage(`Could not import backup: ${e.message}.${filesChanged ? "" : " Current saves and settings were not changed."}`, true);
+    }
+    finally { busy = false; setControlsEnabled(!running && !stopped); }
+  });
+
+  document.getElementById("mods-input").addEventListener("change", async (event) => {
+    const files = Array.from(event.target.files); event.target.value = "";
+    if (!files.length || !ready || running || busy || stopped) return;
+    busy = true; setControlsEnabled(false);
+    try {
+      const mods = [];
+      for (const file of files) {
+        if (!/^[A-Za-z0-9_. -]+\.o2r$/i.test(file.name)) throw new Error("mod names must end in .o2r and contain only letters, numbers, spaces, dots, dashes or underscores");
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        if (!isZipArchive(bytes)) throw new Error(`${file.name} is not a complete .o2r ZIP archive`);
+        mods.push({ name: file.name, bytes });
+      }
+      FS.mkdirTree(`${DATA_DIR}/mods`);
+      for (const mod of mods) {
+        const disabledPath = `${DATA_DIR}/mods/${mod.name}.disabled`;
+        const path = hasFile(disabledPath) && !hasFile(`${DATA_DIR}/mods/${mod.name}`) ? disabledPath : `${DATA_DIR}/mods/${mod.name}`;
+        FS.writeFile(path, mod.bytes);
+      }
+      if (await persist()) showMessage(`Installed or updated ${mods.length} mod archive(s). Choose enabled mods before Start.`);
+    } catch (e) { showMessage(`Could not install mods: ${e.message}`, true); }
+    finally { busy = false; setControlsEnabled(!running && !stopped); }
+  });
+
+  function parseSettings(text) {
+    const config = JSON.parse(text);
+    for (const value of [config, config && config.CVars, config && config.CVars && config.CVars.gGeneral]) {
+      if (value !== undefined && (!value || typeof value !== "object" || Array.isArray(value))) {
+        throw new Error("the saved settings are not a valid config object");
+      }
+    }
+    return config;
+  }
+
+  function readSeedConfig() {
+    const path = `${DATA_DIR}/shipofharkinian.json`;
+    return parseSettings(hasFile(path) ? new TextDecoder().decode(FS.readFile(path)) : "{}");
+  }
+
+  function shouldRestoreImportedSeed() {
+    if (!hasFile(`${DATA_DIR}/Randomizer/imported-seed.json`)) return false;
+    try {
+      const selected = readSeedConfig().CVars?.gGeneral?.SpoilerLog;
+      // File select restores a selected generated spoiler itself. An older imported file
+      // must not replace it on every boot. Keep the fallback for older import-only backups.
+      return !selected || selected === `${DATA_DIR}/Randomizer/imported-seed.json` || !hasFile(selected);
+    } catch (error) {
+      console.warn("Could not inspect the selected randomizer seed", error);
+      return false;
+    }
+  }
+
+  for (const id of ["seed-input", "seed-game-input"]) {
+    document.getElementById(id).addEventListener("change", async (event) => {
+      const file = event.target.files[0]; event.target.value = "";
+      if (!file || !ready || stopped || busy || randomizerGenerating) return;
+      busy = true; setControlsEnabled(false);
+      try {
+        if (file.size > 16 * 1024 * 1024) throw new Error("seed exceeds 16 MB");
+        const text = await file.text(), seed = JSON.parse(text);
+        if (!seed || typeof seed !== "object" || !("version" in seed) || !("finalSeed" in seed)) throw new Error("select a randomizer spoiler JSON containing version and finalSeed");
+        let config;
+        if (!started) {
+          config = readSeedConfig();
+          config.CVars ??= {};
+          config.CVars.gGeneral ??= {};
+          Object.assign(config.CVars.gGeneral, {
+            SpoilerLog: `${DATA_DIR}/Randomizer/imported-seed.json`,
+            RandomizerDroppedFile: "", RandomizerNewFileDropped: 0,
+          });
+        }
+        FS.mkdirTree(`${DATA_DIR}/Randomizer`);
+        FS.writeFile(`${DATA_DIR}/Randomizer/imported-seed.json`, new TextEncoder().encode(text));
+        if (config) FS.writeFile(`${DATA_DIR}/shipofharkinian.json`, new TextEncoder().encode(JSON.stringify(config)));
+        if (!await persist()) return;
+        if (started) {
+          if (typeof Module._WebLoadRandomizerSeed !== "function" || !Module._WebLoadRandomizerSeed()) throw new Error("the game could not accept this seed (wait for any current seed generation to finish)");
+          showMessage("Seed imported. Return to file select and choose a new randomizer save.");
+        } else showMessage("Seed stored. Start the game and choose a new randomizer save.");
+      } catch (e) { showMessage(`Could not import seed: ${e.message}`, true); }
+      finally {
+        busy = false; setControlsEnabled(!running && !stopped);
+        setFileInputEnabled(document.getElementById("seed-game-input"), started && !stopped && !randomizerGenerating);
+        if (started && !stopped) Module.canvas.focus();
+      }
+    });
+  }
 
   // Crashes inside the game (wasm traps, uncaught C++ exceptions) surface here rather than through onAbort.
   window.addEventListener("error", (e) => {
@@ -241,19 +1306,20 @@
     input.addEventListener("change", async () => {
       const file = input.files[0];
       input.value = "";
-      if (!file || !ready) return;
+      if (!file || !ready || running || busy) return;
+      busy = true; setControlsEnabled(false);
       const name = input.dataset.archive;
       showMessage(`Storing ${name}…`);
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
         // A .o2r is a zip archive
-        if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error("this is not an .o2r archive");
+        if (!isZipArchive(bytes)) throw new Error("this is not a complete .o2r ZIP archive");
         FS.writeFile(`${DATA_DIR}/${name}`, bytes);
         refreshArchiveStatus();
         if (await persist()) showMessage(`${name} stored in this browser.`);
       } catch (e) {
         showMessage(`Could not load ${file.name}: ${e.message}`, true);
-      }
+      } finally { busy = false; setControlsEnabled(!running && !stopped); }
     });
   }
 
@@ -261,7 +1327,8 @@
     const input = event.target;
     const file = input.files[0];
     input.value = "";
-    if (!file || !ready) return;
+    if (!file || !ready || running || busy) return;
+    busy = true; setControlsEnabled(false);
     const status = document.getElementById("status-rom");
     try {
       if (!window.crypto || !crypto.subtle) throw new Error("the page has to be opened over HTTPS (or from localhost) to read ROMs");
@@ -282,15 +1349,28 @@
       showMessage("");
     } catch (e) {
       clearStagedRom();
-      status.textContent = "Not needed if the archives below are loaded";
+      status.textContent = "Choose an Ocarina of Time ROM to get started";
       status.className = "status";
       refreshArchiveStatus();
       showMessage(`Could not use ${file.name}: ${e.message}`, true);
-    }
+    } finally { busy = false; setControlsEnabled(!running && !stopped); }
   });
 
-  startButton.addEventListener("click", () => {
-    if (running || !ready || stopped) return;
+  function showGameControls() {
+    overlay.style.display = "none";
+    document.getElementById("web-tools").hidden = false;
+    document.getElementById("web-status").textContent = "";
+    setFileInputEnabled(document.getElementById("seed-game-input"), true);
+    let hasGamepad = false;
+    try { hasGamepad = typeof navigator.getGamepads === "function" && connectedGamepads().length > 0; } catch (e) {}
+    keepScreenAwake();
+    if (typeof Module._WebTouchInputSupported === "function" && !hasGamepad &&
+        window.matchMedia && window.matchMedia("(pointer: coarse)").matches) setTouchEnabled(true);
+    Module.canvas.focus();
+  }
+
+  function startGame() {
+    if (running || !ready || stopped || busy || startButton.disabled) return;
     running = true;
     setControlsEnabled(false);
     // Startup (and converting a ROM) blocks the page, so show what's happening first.
@@ -299,21 +1379,47 @@
       try {
         Module.callMain([]);
       } catch (e) {
-        stop(`The game crashed while starting (${e.message || e}).`);
+        console.error("Game startup failed", e);
+        stop("The game couldn't start. Export your saves before reloading if browser storage is unavailable.");
+        return;
       }
-      setInterval(persist, 10000);
       if (!started) {
         // main() exited during startup; it has already explained why in a dialog.
         stop("The game couldn't start.");
       }
-      if (stopped) return;
-      overlay.style.display = "none";
-      Module.canvas.focus();
+      if (!stopped) setInterval(persist, 10000);
+      if (stopped || conversionFinishing) return;
+      showGameControls();
     }, 50));
-  });
+  }
+  startButton.addEventListener("click", startGame);
 
   document.addEventListener("visibilitychange", () => { if (document.hidden && running) persist(); });
   window.addEventListener("pagehide", () => { if (running) persist(); });
+  // Closing the tab mid-game loses progress since the last in-game save, so ask first. (Saves and
+  // settings are already in browser storage.)
+  window.addEventListener("beforeunload", (event) => {
+    if (!started || stopped || leavingPage) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
+
+  // Controller-only play isn't user activity to the OS, so keep the screen from dimming while the game
+  // is on screen. Browsers drop the lock whenever the tab is hidden; take it again on return.
+  async function keepScreenAwake() {
+    if (!started || stopped || document.hidden || wakeLock || !navigator.wakeLock) return;
+    try {
+      const lock = await navigator.wakeLock.request("screen");
+      if (stopped) { lock.release().catch(() => {}); return; } // the game ended while we waited
+      wakeLock = lock;
+      lock.addEventListener("release", () => { if (wakeLock === lock) wakeLock = null; });
+    } catch (error) { wakeLock = null; } // Denied (battery saver, permissions policy): play on without it.
+  }
+  document.addEventListener("visibilitychange", keepScreenAwake);
+  Module.canvas.addEventListener("webglcontextlost", (event) => {
+    event.preventDefault();
+    stop("The browser lost the graphics context. Export your saves before reloading if storage is unavailable.");
+  });
 
   // While the game is on screen, keep the browser from acting on keys it uses (F5 reload, F11
   // fullscreen, Tab focus, Ctrl+R). F12 stays available for the developer tools.
@@ -321,6 +1427,33 @@
     if (!running || stopped || overlay.style.display !== "none") return;
     if ((/^F\d+$/.test(e.key) && e.key !== "F12") || e.key === "Tab" || (e.ctrlKey && e.key.toLowerCase() === "r")) e.preventDefault();
   }, { capture: true });
+
+  // What this browser lacks to run the engine, checked before it downloads. SIMD isn't checked here
+  // (scalar builds don't need it); a SIMD build that fails to compile reports through onAbort.
+  function missingBrowserFeatures() {
+    if (typeof WebAssembly !== "object" || typeof WebAssembly.validate !== "function") return ["WebAssembly"];
+    const validates = body => {
+      try { return WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 4, 1, 96, 0, 0, 3, 2, 1, 0, 10, 8, 1, 6, 0, ...body, 11])); }
+      catch (error) { return false; }
+    };
+    const missing = [];
+    // A function using exception handling in either encoding: try/catch_all/end or try_table/end.
+    if (!validates([6, 64, 25, 11]) && !validates([31, 64, 0, 11])) missing.push("WebAssembly exception handling");
+    try {
+      const gl = document.createElement("canvas").getContext("webgl2");
+      if (gl) gl.getExtension("WEBGL_lose_context")?.loseContext();
+      else missing.push("WebGL 2");
+    } catch (error) { missing.push("WebGL 2"); }
+    return missing;
+  }
+  const missingFeatures = missingBrowserFeatures();
+  if (missingFeatures.length) {
+    // Don't download or compile an engine this browser can't run.
+    Module.instantiateWasm = () => ({});
+    stop(missingFeatures.length === 1 && missingFeatures[0] === "WebGL 2" ?
+      "This browser has WebGL 2 turned off or unavailable, which the game needs for graphics. Turn on hardware acceleration in the browser settings, or try a current version of Chrome, Edge, Firefox or Safari." :
+      `${UNSUPPORTED_BROWSER} (Missing: ${missingFeatures.join(", ")}.)`, false);
+  }
 </script>
 {{{ SCRIPT }}}
 </body>

@@ -19,6 +19,19 @@ void SohMenu::AddMenuNetwork() {
     AddMenuEntry("Network", CVAR_SETTING("Menu.NetworkSidebarSection"));
     WidgetPath path;
 
+#ifdef __EMSCRIPTEN__
+    // Native socket services have no browser implementation. Avoid offering
+    // connection controls that silently fail in the web build.
+    path = { "Network", "Availability", SECTION_COLUMN_1 };
+    AddSidebarEntry("Network", path.sidebarName, 1);
+    AddWidget(path,
+              "Network integrations are unavailable in the web edition. Use desktop Ship of Harkinian for Sail, "
+              "Crowd Control and other native network services. Local randomizer generation and seed import are "
+              "available in the Randomizer menu and web Tools menu.",
+              WIDGET_TEXT);
+    return;
+#endif
+
     // Sail
     path = { "Network", "Sail", SECTION_COLUMN_1 };
     AddSidebarEntry("Network", path.sidebarName, 3);

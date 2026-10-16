@@ -1,0 +1,29 @@
+diff --git a/src/fast/backends/gfx_opengl.cpp b/src/fast/backends/gfx_opengl.cpp
+--- a/src/fast/backends/gfx_opengl.cpp
++++ b/src/fast/backends/gfx_opengl.cpp
+@@ -4,6 +4,10 @@
+ #include <stdint.h>
+ #include <stdbool.h>
+ #include <stdio.h>
++#ifdef __EMSCRIPTEN__
++#include <emscripten.h>
++#endif
++
+ 
+ #include <map>
+ #include <unordered_map>
+@@ -751,6 +755,14 @@ void GfxRenderingAPIOGL::StartFrame() {
+ }
+ 
+ void GfxRenderingAPIOGL::EndFrame() {
++#ifdef __EMSCRIPTEN__
++    // RAF reaches an implicit WebGL frame boundary. Keep the explicit flush for
++    // timer-driven loops: SDL's VSync setting can change Emscripten's timing mode.
++    int timingMode = EM_TIMING_SETTIMEOUT;
++    emscripten_get_main_loop_timing(&timingMode, nullptr);
++    if (timingMode == EM_TIMING_RAF)
++        return;
++#endif
+     glFlush();
+ }
+ 

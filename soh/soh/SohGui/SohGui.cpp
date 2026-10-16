@@ -8,6 +8,7 @@
 #include <imgui.h>
 
 #include "SohGui.hpp"
+#include "soh/RenderAudit.h"
 
 #ifdef __APPLE__
 #include <fast/backends/gfx_metal.h>
@@ -311,6 +312,7 @@ void Destroy() {
 
 void RegisterPopup(std::string title, std::string message, std::string button1, std::string button2,
                    std::function<void()> button1callback, std::function<void()> button2callback) {
+    RenderAuditRecordPopup(title, message);
     mModalWindow->RegisterPopup(title, message, button1, button2, button1callback, button2callback);
 }
 

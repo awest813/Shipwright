@@ -1,7 +1,9 @@
 ﻿#include "OTRGlobals.h"
 #include "OTRAudio.h"
+#include "RenderAudit.h"
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -69,6 +71,7 @@
 #endif
 
 #ifdef __EMSCRIPTEN__
+#include "../platform/web/RuntimeDiagnostics.h"
 #include <SDL2/SDL_messagebox.h>
 #include <emscripten.h>
 #endif
@@ -434,8 +437,10 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
         std::filesystem::remove(kWebRomPath, ec);
         if (!extracted) {
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Ship of Harkinian",
-                                     "This ROM could not be turned into a game archive.\n"
-                                     "Check that it is a supported, unmodified dump.",
+                                     "ROM asset extraction failed.\n"
+                                     "Reload to retry, or load an oot.o2r archive generated\n"
+                                     "by this version of desktop SoH.\n"
+                                     "The browser console contains the extraction details.",
                                      nullptr);
             exit(1);
         }
@@ -1071,6 +1076,9 @@ bool OTRGlobals::HasOriginal() {
 }
 
 uint32_t OTRGlobals::GetInterpolationFPS() {
+#ifdef __EMSCRIPTEN__
+    return 60;
+#else
     if (CVarGetInteger(CVAR_SETTING("MatchRefreshRate"), 0)) {
         return Ship::Context::GetRawInstance()->GetWindow()->GetCurrentRefreshRate();
     } else if (CVarGetInteger(CVAR_VSYNC_ENABLED, 1) ||
@@ -1079,6 +1087,7 @@ uint32_t OTRGlobals::GetInterpolationFPS() {
                                   CVarGetInteger(CVAR_SETTING("InterpolationFPS"), 20));
     }
     return CVarGetInteger(CVAR_SETTING("InterpolationFPS"), 20);
+#endif
 }
 
 extern "C" void OTRMessage_Init();
@@ -1840,17 +1849,169 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
         std::unordered_map<Mtx*, MtxF> mtx_replacements =
             (time == denom) ? std::unordered_map<Mtx*, MtxF>() : FrameInterpolation_Interpolate((float)time / denom);
         intp->mInterpolationT = (float)time / denom;
-        wnd->DrawAndRunGraphicsCommands(Commands, mtx_replacements);
+        if (wnd->DrawAndRunGraphicsCommands(Commands, mtx_replacements)) {
+            RenderAuditCapture(wnd->GetInterpreterWeak().lock(), (float)time / denom);
+        }
         intp->mInterpolationIndex++;
     }
     ImGui::PopStyleColor();
 }
 
+#ifdef __EMSCRIPTEN__
+extern "C" EMSCRIPTEN_KEEPALIVE int WebTouchInputSupported(void) {
+    return 1;
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE void WebToggleMenu(void) {
+    OTRGlobals::Instance->context->GetWindow()->GetGui()->GetMenu()->ToggleVisibility();
+}
+
+// The display list and interpolation records remain alive until the next simulation tick.
+// Keeping just the current list avoids copying the game's large graphics pools.
+static Gfx* webCommands = nullptr;
+static double webSimulationPhaseMs[4] = { -1.0, -1.0, -1.0, -1.0 };
+static double webDepthReadbackMs = 0.0;
+
+extern "C" void Graph_WebBeginSimulationTimings(void) {
+    std::fill_n(webSimulationPhaseMs, 4, -1.0);
+    webDepthReadbackMs = 0.0;
+}
+
+extern "C" void Graph_WebSetSimulationTimings(double stateMs, double inputMs, double updateMs,
+                                              double commandsAndAudioMs) {
+    webSimulationPhaseMs[0] = stateMs;
+    webSimulationPhaseMs[1] = inputMs;
+    webSimulationPhaseMs[2] = updateMs;
+    webSimulationPhaseMs[3] = commandsAndAudioMs;
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE int WebReportRuntimeDiagnostics(void) {
+    const auto diagnostics = Web::CaptureRuntimeDiagnostics();
+    // Pass byte counts as doubles so a 4 GiB Wasm memory cannot wrap to zero.
+    EM_ASM(
+        {
+            if (Module.onWebRuntimeDiagnostics)
+                Module.onWebRuntimeDiagnostics({
+                    wasmMemoryBytes : $0,
+                    allocatorUsedBytes : $1,
+                    allocatorFreeBytes : $2,
+                    mainLoopMode : $3,
+                    mainLoopTimingValue : $4
+                });
+        },
+        static_cast<double>(diagnostics.wasmMemoryBytes), static_cast<double>(diagnostics.allocatorUsedBytes),
+        static_cast<double>(diagnostics.allocatorFreeBytes), diagnostics.mainLoopMode, diagnostics.mainLoopTimingValue);
+    return 1;
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE int WebReportPerformanceContext(void) {
+    if (OTRGlobals::Instance == nullptr || !OTRGlobals::Instance->context)
+        return 0;
+    auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(OTRGlobals::Instance->context->GetWindow());
+    if (!wnd)
+        return 0;
+    auto interpreter = wnd->GetInterpreterWeak().lock();
+    if (!interpreter || !interpreter->mRapi)
+        return 0;
+    const std::string renderer = interpreter->mRapi->GetName();
+#ifdef __wasm_simd128__
+    constexpr int simdEnabled = 1;
+#else
+    constexpr int simdEnabled = 0;
+#endif
+    EM_ASM(
+        {
+            if (Module.onWebPerformanceContext)
+                Module.onWebPerformanceContext({
+                    buildVersion : UTF8ToString($0),
+                    gitCommit : UTF8ToString($1),
+                    simdEnabled : !!$2,
+                    renderer : UTF8ToString($3),
+                    settings : {
+                        n64Resolution : !!$4,
+                        msaaSamples : $5,
+                        interpolationFps : $6,
+                        textureFilter : $7,
+                        alternateAssets : !!$8
+                    },
+                    renderingDimensions : { width : $9, height : $10 }
+                });
+        },
+        gBuildVersion, gGitCommitHash, simdEnabled, renderer.c_str(), CVarGetInteger(CVAR_SETTING("LowResMode"), 0),
+        interpreter->mMsaaLevel, OTRGlobals::Instance->GetInterpolationFPS(), CVarGetInteger(CVAR_TEXTURE_FILTER, 0),
+        CVarGetInteger(CVAR_SETTING("AltAssets"), 1), static_cast<int>(interpreter->mCurDimensions.width),
+        static_cast<int>(interpreter->mCurDimensions.height));
+    return 1;
+}
+
+extern "C" void Graph_WebPresentFrame(float interpolation, double simulationMs) {
+    if (webCommands == nullptr)
+        return;
+    auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(OTRGlobals::Instance->context->GetWindow());
+    if (wnd == nullptr)
+        return;
+    const double presentationStart = emscripten_get_now();
+    wnd->HandleEvents();
+    const double eventsMs = emscripten_get_now() - presentationStart;
+    wnd->SetTargetFps(60);
+    auto interpreter = wnd->GetInterpreterWeak().lock();
+    if (!interpreter)
+        return;
+    const int divisor = std::max<int>(R_UPDATE_RATE, 1);
+    // Match desktop's evenly spaced presentations and the animated texture segment.
+    // Wall-clock jitter should not change the pose within one presentation step.
+    const bool continuousAudit = CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Enabled"), 0) &&
+                                 CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.ContinuousPresentation"), 0);
+    if (!continuousAudit) {
+        const int presentationStep = std::clamp<int>(static_cast<int>(std::round(interpolation * divisor)), 1, divisor);
+        interpolation = static_cast<float>(presentationStep) / divisor;
+    }
+    if (GfxDebuggerIsDebugging())
+        interpolation = 1.0f;
+    if (RenderAuditWantsFrame())
+        interpolation = RenderAuditTargetInterpolation();
+    // Animated texture segments are generated at GetInterpolationFPS(); select the matching
+    // segment even when a browser refresh was dropped rather than counting callbacks.
+    interpreter->mInterpolationIndex = std::clamp<int>((int)std::round(interpolation * divisor) - 1, 0, divisor - 1);
+    interpreter->mInterpolationT = interpolation;
+    const double interpolationStart = emscripten_get_now();
+    auto replacements =
+        interpolation >= 1.0f ? std::unordered_map<Mtx*, MtxF>() : FrameInterpolation_Interpolate(interpolation);
+    const double interpolationMs = emscripten_get_now() - interpolationStart;
+    auto theme =
+        static_cast<UIWidgets::Colors>(CVarGetInteger(CVAR_SETTING("Menu.Theme"), UIWidgets::Colors::LightBlue));
+    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, UIWidgets::ColorValues.at(theme));
+    const double graphicsStart = emscripten_get_now();
+    bool presented = wnd->DrawAndRunGraphicsCommands(webCommands, replacements);
+    const double graphicsMs = emscripten_get_now() - graphicsStart;
+    ImGui::PopStyleColor();
+    if (presented) {
+        RenderAuditCapture(interpreter, interpolation);
+        const bool menuVisible = wnd->GetGui()->GetMenuOrMenubarVisible();
+        const int scene = gPlayState != nullptr ? gPlayState->sceneNum : -1;
+        // CPU elapsed time includes event handling, interpolation and graphics submission,
+        // including any synchronous GL waits. It is not a GPU timer.
+        const double presentationCpuMs = emscripten_get_now() - presentationStart;
+        EM_ASM(
+            {
+                if (Module.onFramePresented)
+                    Module.onFramePresented(
+                        !!$0, $1, $2, $3, { events : $4, interpolation : $5, graphics : $6 },
+                        $2 >= 0 ? { state : $7, input : $8, update : $9, commandsAndAudio : $10, depthReadback : $11 }
+                                : null);
+            },
+            menuVisible, scene, simulationMs, presentationCpuMs, eventsMs, interpolationMs, graphicsMs,
+            webSimulationPhaseMs[0], webSimulationPhaseMs[1], webSimulationPhaseMs[2], webSimulationPhaseMs[3],
+            webDepthReadbackMs);
+    }
+}
+#endif
+
 // C->C++ Bridge
 extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
 #ifdef __EMSCRIPTEN__
-    // Each browser frame shows only the last draw, so present one frame per game tick for now.
-    int target_fps = 20;
+    webCommands = commands;
+    OTRAudio_ProcessFrame();
 #else
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
@@ -1859,7 +2020,6 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
 
     audio.cv_to_thread.notify_one();
     int target_fps = OTRGlobals::Instance->GetInterpolationFPS();
-#endif
     static int last_fps;
     static int last_update_rate;
     static int time;
@@ -1904,9 +2064,6 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
     last_fps = fps;
     last_update_rate = R_UPDATE_RATE;
 
-#ifdef __EMSCRIPTEN__
-    OTRAudio_ProcessFrame();
-#else
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
         while (audio.processing) {
@@ -1944,7 +2101,14 @@ extern "C" uint16_t OTRGetPixelDepth(float x, float y) {
         return 0;
     }
 
+#ifdef __EMSCRIPTEN__
+    const double start = emscripten_get_now();
+    const uint16_t depth = wnd->GetPixelDepth(x, y);
+    webDepthReadbackMs += emscripten_get_now() - start;
+    return depth;
+#else
     return wnd->GetPixelDepth(x, y);
+#endif
 }
 
 extern "C" Sprite* GetSeedTexture(uint8_t index) {

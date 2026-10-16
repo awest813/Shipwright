@@ -162,6 +162,35 @@ index 361a1f7..a8d3480 100644
  #if defined(__ANDROID__)
      const char* externaldir = SDL_AndroidGetExternalStoragePath();
      if (externaldir != NULL) {
+diff --git a/src/ship/config/Config.cpp b/src/ship/config/Config.cpp
+index b7a9eee..551eeaa 100644
+--- a/src/ship/config/Config.cpp
++++ b/src/ship/config/Config.cpp
+@@ -8,6 +8,9 @@
+ #include <spdlog/spdlog.h>
+ #include "ship/utils/StringHelper.h"
+ #include "ship/Context.h"
++#ifdef __EMSCRIPTEN__
++#include <emscripten.h>
++#endif
+ 
+ namespace fs = std::filesystem;
+ 
+@@ -215,6 +218,14 @@ void Config::Save() {
+     std::ofstream file(mPath);
+     mNestedJson = mFlattenedJson.unflatten();
+     file << mNestedJson.dump(4);
++#ifdef __EMSCRIPTEN__
++    // Files only live in memory until the web page copies them to browser storage, so tell it.
++    file.close();
++    EM_ASM({
++        if (Module.onFileWritten)
++            Module.onFileWritten();
++    });
++#endif
+ }
+ 
+ template <typename T> std::vector<T> Config::GetArray(const std::string& key) {
 diff --git a/src/ship/resource/ResourceManager.cpp b/src/ship/resource/ResourceManager.cpp
 index c62ee72..691caf9 100644
 --- a/src/ship/resource/ResourceManager.cpp

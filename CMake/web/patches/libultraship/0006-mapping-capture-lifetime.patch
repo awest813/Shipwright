@@ -1,0 +1,83 @@
+--- a/include/ship/controller/controldevice/controller/Controller.h
++++ b/include/ship/controller/controldevice/controller/Controller.h
+@@ -43,6 +43,9 @@
+ 
+     /** @brief Destroys the Controller and releases all mapping resources. */
+     ~Controller();
++
++    /** @brief Ends raw mapping capture without changing saved mappings. */
++    void CancelMappingCapture();
+ 
+     /**
+      * @brief Discards all in-memory mappings and reloads them from Config.
+--- a/src/ship/controller/controldevice/controller/Controller.cpp
++++ b/src/ship/controller/controldevice/controller/Controller.cpp
+@@ -122,6 +122,14 @@
+     GetLED()->ReloadAllMappingsFromConfig();
+ }
+ 
++void Controller::CancelMappingCapture() {
++    for (const auto& [bitmask, button] : mButtons) {
++        button->CancelMappingCapture();
++    }
++    mLeftStick->CancelMappingCapture();
++    mRightStick->CancelMappingCapture();
++}
++
+ bool Controller::ProcessKeyboardEvent(KbEventType eventType, KbScancode scancode) {
+     bool result = false;
+     for (auto [bitmask, button] : GetAllButtons()) {
+--- a/include/ship/controller/controldevice/controller/ControllerButton.h
++++ b/include/ship/controller/controldevice/controller/ControllerButton.h
+@@ -29,6 +29,9 @@
+      */
+     ControllerButton(uint8_t portIndex, CONTROLLERBUTTONS_T bitmask);
+     ~ControllerButton();
++
++    /** @brief Ends raw mapping capture without changing saved mappings. */
++    void CancelMappingCapture();
+ 
+     /**
+      * @brief Returns the mapping with the given unique ID, or nullptr if not found.
+--- a/src/ship/controller/controldevice/controller/ControllerButton.cpp
++++ b/src/ship/controller/controldevice/controller/ControllerButton.cpp
+@@ -189,6 +189,12 @@
+     return true;
+ }
+ 
++void ControllerButton::CancelMappingCapture() {
++    mUseEventInputToCreateNewMapping = false;
++    mKeyboardScancodeForNewMapping = LUS_KB_UNKNOWN;
++    mMouseButtonForNewMapping = LUS_MOUSE_BTN_UNKNOWN;
++}
++
+ bool ControllerButton::ProcessKeyboardEvent(KbEventType eventType, KbScancode scancode) {
+     if (mUseEventInputToCreateNewMapping) {
+         if (eventType == LUS_KB_EVENT_KEY_DOWN) {
+--- a/include/ship/controller/controldevice/controller/ControllerStick.h
++++ b/include/ship/controller/controldevice/controller/ControllerStick.h
+@@ -36,6 +36,9 @@
+     ControllerStick(uint8_t portIndex, StickIndex stickIndex);
+     ~ControllerStick();
+ 
++    /** @brief Ends raw mapping capture without changing saved mappings. */
++    void CancelMappingCapture();
++
+     /** @brief Clears all in-memory mappings and reloads them from Config. */
+     void ReloadAllMappingsFromConfig();
+ 
+--- a/src/ship/controller/controldevice/controller/ControllerStick.cpp
++++ b/src/ship/controller/controldevice/controller/ControllerStick.cpp
+@@ -336,6 +336,12 @@
+     Process(x, y);
+ }
+ 
++void ControllerStick::CancelMappingCapture() {
++    mUseEventInputToCreateNewMapping = false;
++    mKeyboardScancodeForNewMapping = LUS_KB_UNKNOWN;
++    mMouseButtonForNewMapping = LUS_MOUSE_BTN_UNKNOWN;
++}
++
+ bool ControllerStick::ProcessKeyboardEvent(KbEventType eventType, KbScancode scancode) {
+     if (mUseEventInputToCreateNewMapping) {
+         if (eventType == LUS_KB_EVENT_KEY_DOWN) {

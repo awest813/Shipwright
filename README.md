@@ -33,6 +33,12 @@ You can verify you have dumped a supported copy of the game by using the compati
 
 Congratulations, you are now sailing with the Ship of Harkinian! Have fun!
 
+### Play in your browser (experimental)
+The web edition runs Ship of Harkinian in a current desktop browser: load your own ROM and press Start.
+Nothing is uploaded, and saves stay in that browser. This repository publishes it at
+**https://awest813.github.io/Shipwright/**. See the [web edition guide](soh/platform/web/README.md)
+for browser requirements, what works so far and how to host your own copy.
+
 # Configuration
 
 ### Default keyboard configuration

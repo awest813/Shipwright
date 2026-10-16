@@ -211,10 +211,14 @@ uint32_t Menu::DrawSearchResults(std::string& menuSearchText) {
     int searchCount = 0;
     std::transform(menuSearchText.begin(), menuSearchText.end(), menuSearchText.begin(), ::tolower);
     menuSearchText.erase(std::remove(menuSearchText.begin(), menuSearchText.end(), ' '), menuSearchText.end());
-    ImGui::SetNextWindowSizeConstraints({ ImGui::GetContentRegionAvail().x / 2, 0 },
-                                        { ImGui::GetContentRegionAvail().x / 2, ImGui::GetContentRegionAvail().y });
-    if (ImGui::BeginChild("Search Results Col 1", { ImGui::GetContentRegionAvail().x / 2, 0 },
-                          ImGuiChildFlags_AutoResizeY, ImGuiWindowFlags_NoTitleBar)) {
+    float searchWidth = ImGui::GetContentRegionAvail().x / 2;
+#ifdef __EMSCRIPTEN__
+    if (ImGui::GetMainViewport()->Size.x < 1000)
+        searchWidth = ImGui::GetContentRegionAvail().x;
+#endif
+    ImGui::SetNextWindowSizeConstraints({ searchWidth, 0 }, { searchWidth, ImGui::GetContentRegionAvail().y });
+    if (ImGui::BeginChild("Search Results Col 1", { searchWidth, 0 }, ImGuiChildFlags_AutoResizeY,
+                          ImGuiWindowFlags_NoTitleBar)) {
         for (auto& menuLabel : menuOrder) {
             auto& menuEntry = menuEntries.at(menuLabel);
             for (auto& sidebarLabel : menuEntry.sidebarOrder) {
@@ -279,8 +283,8 @@ uint32_t Menu::DrawSearchResults(std::string& menuSearchText) {
                 searchCount++;
             }
         }
-        ImGui::EndChild();
     }
+    ImGui::EndChild();
     return searchCount;
 }
 
@@ -323,7 +327,14 @@ void Menu::MenuDrawItem(WidgetInfo& widget, UIWidgets::Colors menuThemeIndex) {
     }
 
     if (widget.sameLine) {
+#ifdef __EMSCRIPTEN__
+        // Desktop rows also overflow at tablet and narrow laptop widths.
+        if (ImGui::GetMainViewport()->WorkSize.x >= 1000) {
+            ImGui::SameLine();
+        }
+#else
         ImGui::SameLine();
+#endif
     }
 
     try {
@@ -668,6 +679,94 @@ void Menu::DrawElement() {
     ImGuiStyle& style = ImGui::GetStyle();
     windowHeight = window->WorkRect.GetHeight();
     windowWidth = window->WorkRect.GetWidth();
+
+#ifdef __EMSCRIPTEN__
+    if (windowWidth < 1000) {
+        // Narrow browsers need the desktop sidebar's width for usable settings columns.
+        // Keep controls large enough to tap, including embedded settings widgets.
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 12.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(style.ItemSpacing.x, 8.0f));
+        std::string headerIndex = CVarGetString(headerCvar, "Settings");
+        if (!menuEntries.contains(headerIndex)) {
+            headerIndex = menuOrder.front();
+        }
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::BeginCombo("##MenuCategory", headerIndex.c_str(), ImGuiComboFlags_HeightLarge)) {
+            for (const auto& label : menuOrder) {
+                if (ImGui::Selectable(label.c_str(), headerIndex == label, 0, ImVec2(0, ImGui::GetFrameHeight()))) {
+                    headerIndex = label;
+                    menuSearch.Clear();
+                    CVarSetString(headerCvar, label.c_str());
+                    CVarSave();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        auto& mainEntry = menuEntries.at(headerIndex);
+        std::string sectionIndex = CVarGetString(mainEntry.sidebarCvar, "");
+        if (!mainEntry.sidebars.contains(sectionIndex)) {
+            sectionIndex = mainEntry.sidebarOrder.front();
+        }
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::BeginCombo("##MenuSection", sectionIndex.c_str(), ImGuiComboFlags_HeightLarge)) {
+            for (const auto& label : mainEntry.sidebarOrder) {
+                if (ImGui::Selectable(label.c_str(), sectionIndex == label, 0, ImVec2(0, ImGui::GetFrameHeight()))) {
+                    sectionIndex = label;
+                    menuSearch.Clear();
+                    CVarSetString(mainEntry.sidebarCvar, label.c_str());
+                    CVarSave();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        menuSearch.Draw("Search##CompactMenu",
+                        ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Search").x - style.ItemInnerSpacing.x);
+        if (ImGui::Button("Close")) {
+            ToggleVisibility();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset")) {
+            std::reinterpret_pointer_cast<Ship::ConsoleWindow>(
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetGuiWindow("Console"))
+                ->Dispatch("reset");
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Quit")) {
+            SohGui::mModalWindow->RegisterPopup(
+                "Quit SoH", "Are you sure you want to quit SoH?", "Quit", "Cancel",
+                []() { Ship::Context::GetRawInstance()->GetWindow()->Close(); }, nullptr);
+        }
+        ImGui::Separator();
+        ImGui::BeginChild("CompactMenuSettings", { 0, 0 });
+        std::string query = menuSearch.InputBuf;
+        query.erase(std::remove(query.begin(), query.end(), ' '), query.end());
+        if (!query.empty()) {
+            if (DrawSearchResults(query) == 0) {
+                ImGui::TextUnformatted("No results found");
+            }
+        } else {
+            auto& updates = MenuInit::GetUpdateFuncs();
+            if (updates.contains(mainEntry.label) && updates.at(mainEntry.label).contains(sectionIndex)) {
+                for (auto& update : updates.at(mainEntry.label).at(sectionIndex)) {
+                    update();
+                }
+            }
+            for (auto& column : mainEntry.sidebars.at(sectionIndex).columnWidgets) {
+                for (auto& widget : column) {
+                    MenuDrawItem(widget, menuThemeIndex);
+                }
+            }
+        }
+        ImGui::EndChild();
+        ImGui::PopStyleVar(2);
+        if (!popout) {
+            ImGui::PopStyleVar();
+        }
+        freshOpen = false;
+        ImGui::End();
+        return;
+    }
+#endif
 
     ImGui::PushFont(OTRGlobals::Instance->fontStandardLargest);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 8.0f));

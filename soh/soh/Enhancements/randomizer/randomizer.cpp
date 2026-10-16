@@ -3,6 +3,7 @@
 #endif
 #include <atomic>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <tuple>
 
@@ -76,6 +77,15 @@ bool Rando_HandleSpoilerDrop(char* filePath) {
     } catch ([[maybe_unused]] std::exception& e) {}
     return false;
 }
+
+#ifdef __EMSCRIPTEN__
+extern "C" EMSCRIPTEN_KEEPALIVE int WebLoadRandomizerSeed(void) {
+    if (randoGenerating.load())
+        return 0;
+    char path[] = "/data/Randomizer/imported-seed.json";
+    return Rando_HandleSpoilerDrop(path) ? 1 : 0;
+}
+#endif
 
 Randomizer::Randomizer() {
     Rando::StaticData::InitItemTable();
@@ -971,6 +981,14 @@ void GenerateRandomizerImgui(std::string seed = "") {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnGenerationCompletion>();
 
     randoGenerating = false;
+#ifdef __EMSCRIPTEN__
+    EM_ASM(
+        {
+            if (Module.onRandomizerGenerationFinished)
+                Module.onRandomizerGenerationFinished(!!$0);
+        },
+        ctx->IsSeedGenerated());
+#endif
 }
 
 bool IsRandoGenerating() {
@@ -978,9 +996,19 @@ bool IsRandoGenerating() {
 }
 
 #ifdef __EMSCRIPTEN__
-static void GenerateRandomizerDeferred(void* seed) {
-    std::unique_ptr<std::string> ownedSeed(static_cast<std::string*>(seed));
-    GenerateRandomizerImgui(*ownedSeed);
+// Seed of a generation queued by GenerateRandomizer but not started yet.
+static std::optional<std::string> pendingRandoSeed;
+
+static void RunPendingRandoGeneration() {
+    if (pendingRandoSeed) {
+        std::string seed = std::move(*pendingRandoSeed);
+        pendingRandoSeed.reset();
+        GenerateRandomizerImgui(seed);
+    }
+}
+
+static void GenerateRandomizerDeferred(void*) {
+    RunPendingRandoGeneration();
 }
 #endif
 
@@ -993,7 +1021,13 @@ bool GenerateRandomizer(std::string seed /*= ""*/) {
 #ifdef __EMSCRIPTEN__
     // No threads on the web build. Generate on the main thread a few game frames from now, so the
     // file select screen gets to show that generation started before the page blocks.
-    emscripten_async_call(GenerateRandomizerDeferred, new std::string(seed), 150);
+    EM_ASM({
+        if (Module.onRandomizerGenerationStarted)
+            Module.onRandomizerGenerationStarted();
+    });
+    // WaitForRandoGeneration runs it right away if something needs the seed before then.
+    pendingRandoSeed = std::move(seed);
+    emscripten_async_call(GenerateRandomizerDeferred, nullptr, 150);
 #else
     randoThread = std::thread(&GenerateRandomizerImgui, seed);
 #endif
@@ -1004,6 +1038,9 @@ static bool locationsTabOpen = false;
 static bool tricksTabOpen = false;
 
 void WaitForRandoGeneration() {
+#ifdef __EMSCRIPTEN__
+    RunPendingRandoGeneration();
+#endif
     if (randoThread.joinable()) {
         randoThread.join();
     }

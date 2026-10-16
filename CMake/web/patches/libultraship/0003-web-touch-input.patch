@@ -1,0 +1,45 @@
+diff --git a/src/libultraship/controller/controldeck/ControlDeck.cpp b/src/libultraship/controller/controldeck/ControlDeck.cpp
+--- a/src/libultraship/controller/controldeck/ControlDeck.cpp
++++ b/src/libultraship/controller/controldeck/ControlDeck.cpp
+@@ -6,6 +6,9 @@
+ #include "ship/utils/StringHelper.h"
+ #include <imgui.h>
+ #include "ship/controller/controldevice/controller/mapping/mouse/WheelHandler.h"
++#ifdef __EMSCRIPTEN__
++#include <emscripten.h>
++#endif
+ 
+ namespace LUS {
+ ControlDeck::ControlDeck(std::vector<CONTROLLERBUTTONS_T> additionalBitmasks,
+@@ -65,6 +68,11 @@ void ControlDeck::WriteToOSContPad(OSContPad* pad) {
+     Ship::WheelHandler::GetInstance()->Update();
+ 
+     if (AllGameInputBlocked()) {
++#ifdef __EMSCRIPTEN__
++        EM_ASM({
++            if (Module.consumeWebInput) Module.consumeWebInput(true);
++        });
++#endif
+         return;
+     }
+ 
+@@ -77,5 +85,19 @@ void ControlDeck::WriteToOSContPad(OSContPad* pad) {
+             controller->ReadToPad(&pad[i]);
+         }
+     }
++#ifdef __EMSCRIPTEN__
++    // Touch input joins the normal controller path; menus must not leave queued game input.
++    const bool blocked = Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetMenuOrMenubarVisible();
++    const uint32_t input = EM_ASM_INT({
++        return Module.consumeWebInput ? Module.consumeWebInput(!!$0) : 0;
++    }, blocked);
++    // Low 16 bits: N64 buttons. Reserved bit 0x80 marks an active touch stick.
++    // High bytes: signed X/Y stick values, in the N64 range [-85, 85].
++    pad[0].button |= input & 0xFF7F;
++    if (input & 0x80) {
++        pad[0].stick_x = static_cast<int8_t>((input >> 16) & 0xFF);
++        pad[0].stick_y = static_cast<int8_t>((input >> 24) & 0xFF);
++    }
++#endif
+ }
+ } // namespace LUS

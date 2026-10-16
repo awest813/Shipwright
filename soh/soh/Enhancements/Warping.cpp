@@ -62,7 +62,9 @@ void Warp(WarpPoint& warpPoint) {
         gSaveContext.fileNum = 0xFF;
         gSaveContext.sceneLayer = 0;
         gSaveContext.cutsceneIndex = 0;
-        gSaveContext.linkAge = 0;
+        gSaveContext.linkAge = CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Enabled"), 0)
+                                   ? CVarGetInteger(CVAR_DEVELOPER_TOOLS("RenderAudit.Age"), 0)
+                                   : 0;
         gSaveContext.nightFlag = 0;
         gSaveContext.skyboxTime = gSaveContext.dayTime = 0x8000;
 

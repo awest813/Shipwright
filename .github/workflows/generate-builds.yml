@@ -2,6 +2,7 @@ name: generate-builds
 on:
   push:
   pull_request:
+  workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -94,35 +95,95 @@ jobs:
       uses: actions/checkout@v7
       with:
         submodules: true
+    - name: Check web shell behavior
+      run: |
+        node --test scripts/web-shell.test.cjs
+        python3 scripts/web.test.py
+        python3 scripts/render-audit.test.py
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y ninja-build
+        sudo apt-get install -y ninja-build ccache
     - name: Setup Emscripten
       uses: mymindstorm/setup-emsdk@v14
       with:
         version: 6.0.11
         actions-cache-folder: emsdk-cache
+    - name: Check native quit bridge and compiled launcher
+      run: python3 scripts/web-bridge.test.py
+    - name: Configure web compiler cache
+      uses: hendrikmuhs/ccache-action@v1.2.23
+      with:
+        max-size: "2G"
+        evict-old-files: job
+        save: ${{ github.event_name == 'push' }}
+        key: ${{ runner.os }}-web-emcc-6.0.11-${{ github.ref }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-web-emcc-6.0.11-${{ github.ref }}
+          ${{ runner.os }}-web-emcc-6.0.11
     - name: Download soh.o2r
       uses: actions/download-artifact@v8
       with:
         name: soh.o2r
         path: build-tools
     - name: Build SoH for the web
+      env:
+        EM_COMPILER_WRAPPER: ccache
+        CCACHE_BASEDIR: ${{ github.workspace }}
       run: |
         embuilder build sdl2 sdl2_net zlib bzip2 ogg vorbis
-        emcmake cmake --no-warn-unused-cli -H. -Bbuild-web -GNinja -DCMAKE_BUILD_TYPE:STRING=Release -DSOH_PREBUILT_O2R=$PWD/build-tools/soh.o2r
-        cmake --build build-web -j4
-        mkdir soh-web
-        cp build-web/soh/soh.html soh-web/index.html
-        cp build-web/soh/soh.js build-web/soh/soh.wasm build-web/soh/soh.data soh-web/
-        cp -r build-web/soh/assets soh-web/
-        cp soh/platform/web/README.md soh-web/readme.md
+          emcc scripts/tests/web-controller-smoke.c -O1 -msimd128 -sUSE_SDL=2 --use-port=./CMake/web/ports/shipwright_sdl_rumble.py -sENVIRONMENT=node --pre-js scripts/tests/web-controller-smoke.pre.js -o build-tools/web-controller-smoke.js
+        node build-tools/web-controller-smoke.js
+        em++ scripts/web-runtime-diagnostics.test.cpp -Isoh/platform/web -std=c++17 -O2 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=16MB -sMAXIMUM_MEMORY=128MB -sENVIRONMENT=node -sEXIT_RUNTIME=1 -o build-tools/web-runtime-diagnostics.test.js
+        node build-tools/web-runtime-diagnostics.test.js
+        python3 scripts/web.py build --prebuilt build-tools/soh.o2r --cmake-arg=-DSOH_WEB_ARCHIVE_MEMORY_TEST=ON --output build-web-package
+        node build-web/web-archive-memory-test.js
+        python3 scripts/wasm-size-audit.py build-web/soh/soh-*.wasm --symbols build-web/soh/soh-*.html.symbols --max-body-bytes 1048576 --out build-tools/wasm-size-audit.json
+        em++ scripts/web-depth.test.cpp -ICMake/web/include -std=c++17 -O2 -sUSE_WEBGL2=1 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=0 --shell-file scripts/web-depth.test.html -o build-web/depth-test.html
+        cp build-tools/wasm-size-audit.json build-web/soh/
+        cp build-web/depth-test.html build-web/depth-test.js build-web/depth-test.wasm build-web/soh/
+        cp soh/platform/web/browser-timing.html build-web/soh/
+        python3 scripts/web.py package --source build-web/soh --output soh-web
     - name: Upload build
       uses: actions/upload-artifact@v7
       with:
         name: soh-web
         path: soh-web
+
+  # Publishes the web build from main to GitHub Pages. One-time setup: in the repository's
+  # Settings > Pages, set Build and deployment > Source to "GitHub Actions". Pages only accepts
+  # deployments from the default branch unless main is added under Settings > Environments >
+  # github-pages, so either make main the default branch or allow it there.
+  deploy-web:
+    needs: build-web
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+    - name: Download web build
+      uses: actions/download-artifact@v8
+      with:
+        name: soh-web
+        path: soh-web
+    - name: Check the package
+      run: python3 soh-web/serve.py check --directory soh-web
+    - name: Configure GitHub Pages
+      uses: actions/configure-pages@v5
+    - name: Upload Pages content
+      uses: actions/upload-pages-artifact@v4
+      with:
+        path: soh-web
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
 
   build-linux:
     needs: generate-soh-otr
