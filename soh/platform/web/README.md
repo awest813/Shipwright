@@ -61,16 +61,11 @@ decompressing. Keep the original bundle files intact when copying a deployment.
 
 ### GitHub Pages
 
-Pushes to `main` publish the checked **soh-web** package to GitHub Pages (the `deploy-web` job in
-`.github/workflows/generate-builds.yml`). One-time setup:
-
-1. In the repository's **Settings > Pages**, set **Build and deployment > Source** to **GitHub Actions**.
-2. Pages accepts deployments only from the default branch. Make `main` the default branch
-   (**Settings > General**), or add `main` under **Settings > Environments > github-pages >
-   Deployment branches and tags**.
-
-The site appears at `https://<owner>.github.io/<repository>/`. To publish again without a new
-commit, run **generate-builds** on `main` from the Actions tab.
+Pushes to the repository's default branch publish the checked **soh-web** package to GitHub Pages
+(the `deploy-web` job in `.github/workflows/generate-builds.yml`). One-time setup: in the repository's
+**Settings > Pages**, set **Build and deployment > Source** to **GitHub Actions**. The site appears
+at `https://<owner>.github.io/<repository>/`. To publish again without a new commit, run
+**generate-builds** on the default branch from the Actions tab.
 
 Pages already meets the requirements above: HTTPS, `application/wasm` for `.wasm`, no rewrites, and
 no special headers (the single-threaded build doesn't need cross-origin isolation). Pages lets

@@ -20,7 +20,7 @@ whole folder to a static HTTPS site. Contributors can build and package with
 `python scripts/web.py build --prebuilt /path/to/soh.o2r`. See the linked build guide for SDK
 requirements, subfolder hosting, MIME types, updates and save transfer between origins.
 
-The `deploy-web` CI job publishes the checked package to GitHub Pages from `main`.
+The `deploy-web` CI job publishes the checked package to GitHub Pages from the default branch.
 Pages lets browsers reuse files for 10 minutes, so after an update a reused launcher can name
 engine files that no longer exist. The launcher then fetches the current page, and reloads once if
 it names a different engine. Before downloading the engine it checks for WebAssembly exception
@@ -798,7 +798,7 @@ Both are submodules owned by other repos. Land those changes upstream
   browser features, storage failures, startup failures and crashes. Save/settings backup transfer,
   `.o2r` mod upload, randomizer spoiler import, controller status and fullscreen tools are available.
 - **CI:** `build-web` job uploading the `soh-web` artifact; `deploy-web` publishes that package to
-  GitHub Pages from `main`.
+  GitHub Pages from the default branch.
 - **wasm-only bugs fixed:** see section 6.
 
 ### Not done yet
