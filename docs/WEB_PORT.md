@@ -8,7 +8,8 @@ in [soh/platform/web/README.md](../soh/platform/web/README.md).
 
 ### Player UI and distribution audit
 
-The launcher now separates the primary ROM/Start flow from archives, saves, mods and controls.
+The launcher puts the ROM drop zone and Play button first, with saves, mods, randomizer, controls
+and game files in tabs below; files can be dropped anywhere on it.
 Gameplay has a compact Settings/Tools toolbar, a clear Back to game action, and a full-width,
 scrollable browser menu. Returning to the launcher waits for pending storage writes; startup
 failures retain save export. Native window/network controls have browser-specific explanations.

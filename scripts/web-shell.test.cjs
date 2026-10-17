@@ -12,7 +12,7 @@ function harness(options = {}) {
       style: { setProperty(name, value) { this[name] = value; } }, classList: { toggle() {}, add() {}, remove() {} }, listeners: {}, disabled: false, dataset: {}, width: 640, height: 480,
       addEventListener(name, fn) { this.listeners[name] = fn; }, focus() {}, click() {},
       children: [], value: '', replaceChildren() { this.children = []; }, appendChild(child) { this.children.push(child); },
-      setAttribute(name, value) { this[name] = value; }, setPointerCapture() {},
+      setAttribute(name, value) { this[name] = value; }, removeAttribute(name) { delete this[name]; }, setPointerCapture() {},
       getBoundingClientRect: () => ({ left: 0, top: 0, width: 120, height: 120 }),
     });
     return elements.get(id);
@@ -285,6 +285,82 @@ test('the start screen shows which engine build is running', () => {
   h.context.setInterval = () => 0;
   h.evaluate('Module.onRuntimeInitialized()');
   assert.equal(h.elements.get('build-id').textContent, ' Build 54d7909.');
+});
+
+test('launcher tabs show one panel, follow arrow keys and remember the last one opened', () => {
+  const h = keyboardHarness(), stored = new Map(); let focused = null;
+  h.context.localStorage = { getItem: key => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value) };
+  h.elements.get('tab-mods').listeners.click();
+  const visible = () => ['saves', 'mods', 'randomizer', 'controls', 'files'].filter(tab => !h.elements.get(`tab-panel-${tab}`).hidden);
+  assert.deepEqual(visible(), ['mods']);
+  assert.equal(h.elements.get('tab-mods')['aria-selected'], 'true');
+  assert.equal(h.elements.get('tab-saves')['aria-selected'], 'false');
+  assert.equal(stored.get('shipwright-launcher-tab'), 'mods');
+  h.elements.get('tab-randomizer').focus = () => { focused = 'randomizer'; };
+  const event = { type: 'keydown', code: 'ArrowRight', key: 'ArrowRight', prevented: false, stopImmediatePropagation() {}, preventDefault() { this.prevented = true; },
+    target: { id: 'tab-mods', closest: () => ({}), getAttribute: name => name === 'role' ? 'tab' : null } };
+  for (const listener of h.windowListeners.get('keydown')) listener(event);
+  assert.deepEqual(visible(), ['randomizer']);
+  assert.equal(focused, 'randomizer'); assert.equal(event.prevented, true);
+  // A fresh visit opens the remembered tab; an unknown stored value keeps the default.
+  const again = harness();
+  again.context.localStorage = { getItem: () => 'controls', setItem() {} };
+  again.evaluate('selectTab(localStorage.getItem(TAB_KEY))');
+  assert.equal(again.elements.get('tab-panel-controls').hidden, false);
+  again.evaluate('selectTab("bogus")');
+  assert.equal(again.elements.get('tab-panel-controls').hidden, false);
+});
+
+test('engine download progress fills the loader and hides once the runtime is ready', () => {
+  const h = harness();
+  h.context.setInterval = () => 0;
+  h.evaluate('Module.setStatus("Downloading data... (50/200)")');
+  assert.equal(h.elements.get('message').textContent, 'Downloading the game… 25%');
+  assert.equal(h.elements.get('loader-bar').style.width, '25%');
+  assert.equal(h.elements.get('loader').hidden, false);
+  h.evaluate('Module.setStatus("Preparing... (2/3)")');
+  assert.equal(h.elements.get('message').textContent, 'Preparing the game…');
+  h.evaluate('Module.onRuntimeInitialized()');
+  assert.equal(h.elements.get('loader').hidden, true);
+});
+
+test('the play button says when pressing it converts a ROM first', () => {
+  const h = harness();
+  h.evaluate('ready = true; stagedRomPath = "pal_10"; refreshArchiveStatus()');
+  assert.equal(h.elements.get('start').textContent, 'Convert ROM & play');
+  h.files.set('/data/oot.o2r', new Uint8Array([1]));
+  h.evaluate('stagedRomPath = null; refreshArchiveStatus()');
+  assert.equal(h.elements.get('start').textContent, 'Play');
+  assert.equal(h.elements.get('start').disabled, false);
+  h.context.requestAnimationFrame = () => {};
+  h.evaluate('stagedRomPath = "pal_10"; startGame()');
+  assert.equal(h.elements.get('start').textContent, 'Converting your ROM…');
+  assert.equal(h.elements.get('loader').hidden, false);
+});
+
+test('dropped files go to the ROM, archive or mod installer, and never open in the browser', async () => {
+  const h = harness(), calls = [];
+  h.evaluate('ready = true');
+  for (const name of ['loadRom', 'storeArchive', 'installMods']) {
+    h.context[`record_${name}`] = (...args) => { calls.push([name, ...args.map(arg => Array.isArray(arg) ? Array.from(arg, file => file.name) : arg?.name ?? arg)]); };
+    h.evaluate(`${name} = async (...args) => record_${name}(...args)`);
+  }
+  const drop = async names => {
+    const event = { prevented: false, preventDefault() { this.prevented = true; }, dataTransfer: { types: ['Files'], files: names.map(name => ({ name })) } };
+    for (const listener of h.documentListeners.get('drop')) await listener(event);
+    return event;
+  };
+  assert.equal((await drop(['Zelda.Z64', 'OOT-MQ.o2r', 'hd-textures.o2r'])).prevented, true);
+  assert.deepEqual(calls, [['loadRom', 'Zelda.Z64'], ['storeArchive', 'oot-mq.o2r', 'OOT-MQ.o2r'], ['installMods', ['hd-textures.o2r']]]);
+  assert.equal(h.elements.get('tab-panel-mods').hidden, false);
+  calls.length = 0;
+  await drop(['backup.json']);
+  assert.equal(calls.length, 0);
+  assert.match(h.elements.get('message').textContent, /Drop an Ocarina of Time ROM/);
+  h.evaluate('running = true');
+  assert.equal((await drop(['Zelda.z64'])).prevented, true);
+  assert.equal(calls.length, 0);
+  assert.match(h.elements.get('message').textContent, /Return to the launcher/);
 });
 
 test('a startup exception offers readable recovery and export without scheduling failed-engine writes', () => {

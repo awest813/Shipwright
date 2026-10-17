@@ -10,7 +10,8 @@ of the same version.
 ## Play online
 
 When the repository publishes to GitHub Pages (see [GitHub Pages](#github-pages)), open the site,
-choose **Load ROM**, then **Start**. Nothing is uploaded: the ROM is converted in the browser, and
+drop your ROM onto the page (or click **Your game** to browse for it), then press **Convert ROM & play**.
+Nothing is uploaded: the ROM is converted in the browser, and
 the converted game, saves and settings stay in that browser.
 
 Use a current desktop version of Chrome, Edge, Firefox or Safari. The game needs WebGL 2 and
@@ -28,14 +29,16 @@ Install Python 3.10+ if needed, open a terminal in the extracted folder, and run
 python serve.py serve
 ```
 
-Open **http://127.0.0.1:8080/index.html**, choose **Load ROM**, then **Start**. On systems where
+Open **http://127.0.0.1:8080/index.html**, load your ROM, then press **Convert ROM & play**. On systems where
 Python is named `python3`, use that name instead. If port 8080 is occupied, add `--port 8081`.
 The helper checks that the download includes its matching engine and all ROM conversion bundles.
 Older artifacts without `serve.py` can be served with `python -m http.server 8080` instead.
 
 The launcher remembers the converted game in this browser. Subsequent visits say **Game ready**;
-press **Start** to play. Game archives and Master Quest have their own expandable section.
-Saves, mods and controls are in the second expandable section. During play, **Settings** opens
+press **Play**. Below it, tabs hold **Saves** (backup export and import), **Mods**, **Randomizer**
+(seed import), **Controls** and **Game files** (archives from desktop SoH, including Master Quest);
+the launcher reopens the last tab used. ROMs, `oot.o2r` / `oot-mq.o2r` and `.o2r` mods can also be
+dropped anywhere on the launcher. During play, **Settings** opens
 the game menu and **Tools** contains save export, seed import, touch controls and diagnostics.
 **Tools > Return to launcher** waits for browser files to finish saving before reloading. Save
 normally in the game first; this does not create an in-game save or preserve session save states.
@@ -139,10 +142,12 @@ does not work.
 
 ## Using it
 
-1. On the start screen, load your ROM (`.z64`, `.n64` or `.v64`), or an `oot.o2r` / `oot-mq.o2r`.
+1. On the start screen, drop or browse for your ROM (`.z64`, `.n64` or `.v64`), or load an
+   `oot.o2r` / `oot-mq.o2r` from **Game files**.
    A ROM is identified by its hash, and only that version's asset descriptions (about 450 KB) are
    downloaded.
-2. Click **Start**. A ROM is converted first, which blocks the page for a while. The resulting
+2. Press **Convert ROM & play** (**Play** once a game is stored). A ROM is converted first, which
+   blocks the page for a while; the bar along the top of the card keeps moving meanwhile. The resulting
    archive is stored in the browser (IndexedDB), together with saves and settings, so this is only
    needed once. The ROM itself is not kept.
 
@@ -150,9 +155,9 @@ Saves and settings reach browser storage within a quarter of a second of being w
 else also follows every 10 seconds and whenever the tab is hidden. In a private window the browser
 may refuse storage altogether; the page says so, and nothing is kept after it closes.
 
-Open **Saves, mods & controls** before startup to export/import saves and settings or install
-compatible `.o2r` mods. Installed mods have an enable/disable selector on that start screen;
-disabling keeps the archive, and changes apply at the next Start. Updating a disabled mod keeps
+Use the **Saves** tab before startup to export/import saves and settings, and the **Mods** tab to
+install compatible `.o2r` mods. Installed mods have an enable/disable selector there;
+disabling keeps the archive, and changes apply the next time you press Play. Updating a disabled mod keeps
 it disabled. Backups exclude ROMs, game archives, and mods. Each generated seed leaves a spoiler log in
 `Randomizer/`; if those would push a backup past what import accepts (32 MB), export leaves out the
 oldest ones and says how many. Saves, settings, presets, the selected seed and an imported seed are
