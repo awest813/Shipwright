@@ -476,6 +476,12 @@
         .map(([name, samples]) => [name, summarize(samples)])),
       contextAtStart: benchmark.contextAtStart, contextAtEnd,
       runtimeAtStart: benchmark.runtimeAtStart, runtimeAtEnd: captureRuntimeDiagnostics(),
+      audio: (() => {
+        const end = audioStatus();
+        return { ...end, underruns: end.underruns - benchmark.audioAtStart.underruns,
+          droppedFrames: end.droppedFrames - benchmark.audioAtStart.droppedFrames,
+          bufferedMs: summarize(benchmark.audioBufferedMs) };
+      })(),
       contextChanged: benchmark.contextAtStart && contextAtEnd ?
         JSON.stringify(benchmark.contextAtStart) !== JSON.stringify(contextAtEnd) : null,
       overBudgetFrames: sorted.filter(ms => ms > 1000 / 60 + 2).length,
@@ -504,6 +510,7 @@
       simulationPhaseCpuTimes: { state: [], input: [], update: [], commandsAndAudio: [], depthReadback: [] },
       contextAtStart: capturePerformanceContext(),
       runtimeAtStart: captureRuntimeDiagnostics(),
+      audioAtStart: audioStatus(), audioBufferedMs: [],
       menuFrames: 0, sceneFrames: {} };
     benchmarkReport = null;
     document.getElementById("benchmark-report").hidden = true;
@@ -1251,6 +1258,8 @@
           benchmark.lastBrowserFrame = lastRafTime;
           benchmark.completionDelays.push(now - lastRafTime);
         }
+        const audioFrames = audioBuffered();
+        if (audioFrames >= 0) benchmark.audioBufferedMs.push(audioFrames * 1000 / AUDIO_RATE);
         if (menuVisible) benchmark.menuFrames++;
         const sceneId = Number.isInteger(scene) ? String(scene) : "unknown";
         benchmark.sceneFrames[sceneId] = (benchmark.sceneFrames[sceneId] || 0) + 1;
@@ -1603,6 +1612,140 @@
     Module.canvas.focus();
   }
 
+  // Game audio. SDL's web backend plays through a ScriptProcessorNode, whose callbacks run on this page's
+  // main thread between game frames: any frame longer than one callback (about 20 ms) drops out, however
+  // much audio is queued. The game's mixed audio goes to an AudioWorklet instead (OTRGlobals.cpp,
+  // AudioPlayer_Play), which plays from its own buffer on the browser's audio thread, so a slow frame
+  // only drains that buffer. The context runs at the game's 32 kHz, so the browser does the resampling.
+  // Without AudioWorklet, SDL keeps playing through this same context.
+  const AUDIO_RATE = 32000;          // OTRGlobals.cpp InitAudio
+  const AUDIO_MAX_BUFFERED = 6000;   // frames; above this a game frame is dropped, as SDLAudioPlayer does
+  const AUDIO_PROCESSOR = `
+    // Plays interleaved 16-bit stereo chunks posted by the page, in order.
+    class ShipwrightAudioOutput extends AudioWorkletProcessor {
+      constructor() {
+        super();
+        this.capacity = 1 << 16;                  // frames, about 2 s
+        this.left = new Float32Array(this.capacity);
+        this.right = new Float32Array(this.capacity);
+        this.read = 0; this.size = 0;
+        this.playing = false;
+        this.prime = 1536;                        // frames to collect before playing: about one game tick
+        this.fadeIn = 0;
+        this.received = 0; this.played = 0; this.underruns = 0; this.quanta = 0;
+        this.port.onmessage = event => this.push(event.data);
+      }
+      push(samples) {
+        const frames = samples.length >> 1;
+        this.received += frames;
+        for (let i = 0; i < frames && this.size < this.capacity; i++, this.size++) {
+          const at = (this.read + this.size) & (this.capacity - 1);
+          this.left[at] = samples[2 * i] / 32768;
+          this.right[at] = samples[2 * i + 1] / 32768;
+        }
+      }
+      process(inputs, outputs) {
+        const left = outputs[0][0], right = outputs[0][1] || outputs[0][0], length = left.length;
+        if (!this.playing && this.size >= this.prime) { this.playing = true; this.fadeIn = 64; }
+        let count = 0;
+        if (this.playing) {
+          count = Math.min(length, this.size);
+          for (let i = 0; i < count; i++) {
+            let gain = 1;
+            if (this.fadeIn > 0) gain = 1 - this.fadeIn-- / 64; // no click when sound resumes
+            left[i] = this.left[this.read] * gain; right[i] = this.right[this.read] * gain;
+            this.read = (this.read + 1) & (this.capacity - 1);
+          }
+          this.size -= count; this.played += count;
+          if (count < length) {
+            // Ran dry (the page stalled for longer than the buffer): fade out, then wait for a tick again.
+            for (let i = Math.max(0, count - 32); i < count; i++) { const gain = (count - i) / 32; left[i] *= gain; right[i] *= gain; }
+            this.underruns++; this.playing = false;
+          }
+        }
+        left.fill(0, count); if (right !== left) right.fill(0, count);
+        if (++this.quanta % 8 === 0) {
+          this.port.postMessage({ buffered: this.size, received: this.received, played: this.played,
+            underruns: this.underruns, playing: this.playing, time: currentTime });
+        }
+        return true;
+      }
+    }
+    registerProcessor("shipwright-audio-output", ShipwrightAudioOutput);
+  `;
+  const gameAudio = { context: null, node: null, loading: null, sent: 0, dropped: 0, report: null };
+
+  // Creates the audio context during the Start click, where autoplay rules always allow it. Returns a
+  // promise for the worklet, or null when there is nothing to wait for.
+  function startAudio() {
+    if (gameAudio.context) { resumeAudio(); return null; }
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    let context;
+    try { context = new AudioContextClass({ sampleRate: AUDIO_RATE, latencyHint: "interactive" }); }
+    catch (error) {
+      try { context = new AudioContextClass(); } catch (ignored) { return null; }
+    }
+    gameAudio.context = context;
+    // SDL's web backend uses this context rather than creating its own after startup, outside the click.
+    Module.SDL2 = Module.SDL2 || {};
+    Module.SDL2.audioContext = context;
+    context.onstatechange = audioStateChanged;
+    resumeAudio();
+    if (context.sampleRate !== AUDIO_RATE || !context.audioWorklet || typeof AudioWorkletNode !== "function") return null;
+    const url = URL.createObjectURL(new Blob([AUDIO_PROCESSOR], { type: "text/javascript" }));
+    gameAudio.loading = context.audioWorklet.addModule(url).then(() => {
+      const node = new AudioWorkletNode(context, "shipwright-audio-output", { numberOfInputs: 0, outputChannelCount: [2] });
+      node.port.onmessage = event => { gameAudio.report = { ...event.data, at: context.currentTime }; };
+      node.connect(context.destination);
+      gameAudio.node = node;
+    }).catch(error => console.warn("Audio worklet unavailable; game audio uses SDL instead", error))
+      .finally(() => URL.revokeObjectURL(url));
+    return gameAudio.loading;
+  }
+
+  function resumeAudio() {
+    const context = gameAudio.context;
+    if (context && context.state !== "running" && context.state !== "closed") context.resume().catch(() => {});
+  }
+  // A start without a click (the restart after converting a ROM) leaves the context suspended until the
+  // player interacts with the page.
+  function audioStateChanged() {
+    if (!started || stopped) return;
+    if (gameAudio.context.state === "running") {
+      if (/^Click or press a key/.test(document.getElementById("web-status").textContent)) showMessage("");
+    } else if (gameAudio.context.state === "suspended" && !document.hidden) {
+      showMessage("Click or press a key to turn on sound.");
+    }
+  }
+  for (const type of ["pointerdown", "keydown", "touchend"]) window.addEventListener(type, resumeAudio, { capture: true, passive: true });
+
+  // Frames waiting to play: the worklet's last report, less what it has played since, plus what was
+  // sent after it. -1 tells the game to use SDL instead.
+  function audioBuffered() {
+    const { node, report, context } = gameAudio;
+    if (!node) return -1;
+    if (!report) return gameAudio.sent;
+    const played = report.playing ? Math.max(0, context.currentTime - report.time) * AUDIO_RATE : 0;
+    return Math.round(Math.max(0, report.buffered - played) + gameAudio.sent - report.received);
+  }
+  Module.webAudioBuffered = audioBuffered;
+  Module.webAudioQueue = (heap, pointer, bytes) => {
+    if (!gameAudio.node) return -1;
+    const frames = bytes >> 2; // 16-bit stereo
+    if (audioBuffered() > AUDIO_MAX_BUFFERED) { gameAudio.dropped += frames; return 0; }
+    const samples = new Int16Array(heap, pointer, frames * 2).slice();
+    gameAudio.node.port.postMessage(samples, [samples.buffer]);
+    gameAudio.sent += frames;
+    return frames;
+  };
+
+  function audioStatus() {
+    const { context, node, report } = gameAudio;
+    return { output: node ? "audio-worklet" : context ? "sdl" : "none", state: context?.state ?? null,
+      sampleRate: context?.sampleRate ?? null, underruns: report?.underruns ?? 0, droppedFrames: gameAudio.dropped };
+  }
+
   function startGame() {
     if (running || !ready || stopped || busy || startButton.disabled) return;
     running = true;
@@ -1612,6 +1755,12 @@
     startButton.classList.add("busy");
     // Startup (and converting a ROM) blocks the page, so show what's happening first.
     showMessage(stagedRomPath ? "Converting your ROM. This can take a minute; keep this tab open…" : "Starting…");
+    // The audio worklet loads in a moment; the game can start without it after a second (SDL plays).
+    const audioLoading = startAudio();
+    if (audioLoading) Promise.race([audioLoading, new Promise(resolve => setTimeout(resolve, 1000))]).then(launch);
+    else launch();
+  }
+  function launch() {
     requestAnimationFrame(() => setTimeout(() => {
       try {
         Module.callMain([]);

@@ -151,6 +151,12 @@ does not work.
    archive is stored in the browser (IndexedDB), together with saves and settings, so this is only
    needed once. The ROM itself is not kept.
 
+Sound starts when you press Play. After a ROM conversion the game restarts by itself, and some
+browsers then hold sound back until you click or press a key; the game says so. Game audio plays
+through an AudioWorklet on the browser's audio thread, so a slow frame doesn't interrupt it. Long
+pauses such as loading a new area can still leave a short gap. Browsers without AudioWorklet fall
+back to SDL's audio output. Choosing **None** under Settings > Audio still turns sound off.
+
 Saves and settings reach browser storage within a quarter of a second of being written. Anything
 else also follows every 10 seconds and whenever the tab is hidden. In a private window the browser
 may refuse storage altogether; the page says so, and nothing is kept after it closes.
@@ -184,6 +190,9 @@ Matching updated engines also report `simulationCpuTimeMs`, `presentationCpuTime
 `totalCpuTimeMs`. Simulation samples count actual game ticks; presentation samples include
 event handling, interpolation and graphics submission. CPU elapsed time includes synchronous
 GL waits and does not measure GPU execution time. Older engines leave these sample counts zero.
+`audio` records the output in use (`audio-worklet`, `sdl` or `none`), its sample rate and state, the
+dropouts (`underruns`) and frames dropped for exceeding the buffer limit during the sample, and
+`bufferedMs`, the audio waiting to play at each presented frame.
 Updated reports split presentation time into events, interpolation and graphics submission in
 `presentationPhaseCpuTimeMs`. `contextAtStart` and `contextAtEnd` record the engine revision,
 SIMD status, renderer, rendering settings and internal dimensions; `contextChanged` flags a

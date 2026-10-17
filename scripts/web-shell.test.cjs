@@ -363,6 +363,148 @@ test('dropped files go to the ROM, archive or mod installer, and never open in t
   assert.match(h.elements.get('message').textContent, /Return to the launcher/);
 });
 
+function audioProcessor() {
+  const posts = [];
+  let processor = null;
+  const scope = vm.createContext({
+    Float32Array, Math, currentTime: 0,
+    AudioWorkletProcessor: class { constructor() { this.port = { postMessage: message => posts.push(message) }; } },
+    registerProcessor: (name, Processor) => { assert.equal(name, 'shipwright-audio-output'); processor = new Processor(); },
+  });
+  vm.runInContext(harness().evaluate('AUDIO_PROCESSOR'), scope);
+  const quantum = () => {
+    const outputs = [[new Float32Array(128).fill(9), new Float32Array(128).fill(9)]];
+    processor.process([], outputs);
+    return outputs[0];
+  };
+  const chunk = (frames, value) => { const samples = new Int16Array(frames * 2); samples.fill(value); return samples; };
+  return { processor, posts, quantum, chunk, scope };
+}
+
+test('the audio worklet waits for a game tick of audio, fades in and plays samples in order', () => {
+  const a = audioProcessor();
+  a.processor.port.onmessage({ data: a.chunk(1000, 16384) });
+  assert.deepEqual(Array.from(a.quantum()[0].subarray(0, 4)), [0, 0, 0, 0]); // not primed: silence, no underrun
+  assert.equal(a.processor.underruns, 0);
+  a.processor.port.onmessage({ data: a.chunk(600, 16384) });
+  const [left, right] = a.quantum();
+  assert.equal(left[0], 0); // fade-in starts from silence
+  assert.ok(left[32] > 0 && left[32] < 0.5);
+  assert.equal(left[100], 0.5); assert.equal(right[100], 0.5);
+  assert.equal(a.processor.played, 128);
+  assert.equal(a.processor.size, 1600 - 128);
+});
+
+test('when the audio worklet runs dry it fades out, counts it and resumes once a tick arrives', () => {
+  const a = audioProcessor();
+  a.processor.port.onmessage({ data: a.chunk(1536 + 40, 32767) });
+  for (let i = 0; i < 12; i++) a.quantum();
+  const [left] = a.quantum(); // 1576 - 12 * 128 = 40 frames left for this quantum
+  assert.equal(a.processor.underruns, 1);
+  assert.equal(a.processor.playing, false);
+  assert.ok(left[39] < 0.1 && left[0] > 0.9, 'fades the last frames out');
+  assert.equal(left[40], 0); assert.equal(left[127], 0);
+  a.processor.port.onmessage({ data: a.chunk(1000, 100) });
+  a.quantum();
+  assert.equal(a.processor.playing, false, 'part of a tick is not enough to resume');
+  a.processor.port.onmessage({ data: a.chunk(600, 100) });
+  const [resumed] = a.quantum();
+  assert.equal(a.processor.playing, true);
+  assert.equal(resumed[0], 0, 'fades back in');
+  assert.equal(a.processor.underruns, 1);
+});
+
+test('the audio worklet reports its buffer every 8 quanta and never overfills its ring', () => {
+  const a = audioProcessor();
+  a.processor.port.onmessage({ data: a.chunk(70000, 1) });
+  assert.equal(a.processor.size, 1 << 16);
+  assert.equal(a.processor.received, 70000);
+  for (let i = 0; i < 16; i++) a.quantum();
+  assert.equal(a.posts.length, 2);
+  assert.deepEqual({ ...a.posts[1] }, { buffered: (1 << 16) - 16 * 128, received: 70000, played: 16 * 128, underruns: 0, playing: true, time: 0 });
+});
+
+function audioHarness({ sampleRate = 32000, worklet = true, state = 'running' } = {}) {
+  const h = harness(), created = [], posted = [];
+  let resolveModule;
+  class FakeContext {
+    constructor(options) { created.push(options); this.sampleRate = options?.sampleRate ?? 48000; if (sampleRate !== 32000) this.sampleRate = sampleRate; this.state = state; this.currentTime = 0; this.destination = {}; this.resumes = 0;
+      if (worklet) this.audioWorklet = { addModule: url => new Promise(resolve => { resolveModule = resolve; }) }; }
+    resume() { this.resumes++; return Promise.resolve(); }
+  }
+  h.context.window.AudioContext = FakeContext;
+  h.context.AudioWorkletNode = class { constructor(context, name, options) { this.name = name; this.options = options; this.port = { postMessage: (data, transfer) => posted.push({ data, transfer }) }; } connect(to) { this.connectedTo = to; } };
+  const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve)); };
+  return { ...h, created, posted, resolveModule: () => resolveModule(), settle };
+}
+
+test('Start opens 32 kHz audio in the click, shares it with SDL and loads the worklet before the game', async () => {
+  const h = audioHarness();
+  h.context.requestAnimationFrame = callback => callback();
+  h.context.setInterval = () => 0;
+  h.evaluate('ready = true; startButton.disabled = false');
+  h.evaluate('Module.callMain = () => { globalThis.mainCalls = (globalThis.mainCalls || 0) + 1; started = true; }');
+  h.evaluate('startGame()');
+  assert.deepEqual({ ...h.created[0] }, { sampleRate: 32000, latencyHint: 'interactive' });
+  assert.equal(h.evaluate('Module.SDL2.audioContext === gameAudio.context'), true);
+  assert.equal(h.evaluate('globalThis.mainCalls'), undefined, 'the game waits for the worklet');
+  assert.equal(h.evaluate('Module.webAudioQueue(new ArrayBuffer(8), 0, 8)'), -1, 'no worklet yet: SDL plays');
+  h.resolveModule();
+  await h.settle(); await new Promise(resolve => setTimeout(resolve, 80));
+  assert.equal(h.evaluate('globalThis.mainCalls'), 1);
+  assert.equal(h.evaluate('gameAudio.node.name'), 'shipwright-audio-output');
+  assert.equal(h.evaluate('gameAudio.node.connectedTo === gameAudio.context.destination'), true);
+  assert.equal(h.evaluate('audioStatus().output'), 'audio-worklet');
+});
+
+test('game audio is copied to the worklet, its buffer is estimated between reports and overflow is dropped', () => {
+  const h = audioHarness();
+  h.evaluate('startAudio()');
+  h.evaluate('gameAudio.node = new AudioWorkletNode(gameAudio.context, "shipwright-audio-output", {})');
+  const heap = new ArrayBuffer(64), samples = new Int16Array(heap);
+  samples.set([1, -1, 2, -2], 4);
+  h.context.heap = heap;
+  assert.equal(h.evaluate('Module.webAudioQueue(heap, 8, 8)'), 2);
+  assert.deepEqual(Array.from(h.posted[0].data), [1, -1, 2, -2]);
+  assert.notEqual(h.posted[0].data.buffer, heap, 'a copy is transferred, never the Wasm heap');
+  assert.equal(h.evaluate('audioBuffered()'), 2);
+  // Report: 3000 buffered when the worklet had 2 frames; 0.05 s of playback since then.
+  h.evaluate('gameAudio.sent = 4002; gameAudio.report = { buffered: 3000, received: 2, playing: true, time: 1, underruns: 0 }; gameAudio.context.currentTime = 1.05');
+  assert.equal(h.evaluate('audioBuffered()'), 3000 - 1600 + 4000);
+  h.evaluate('gameAudio.report.playing = false');
+  assert.equal(h.evaluate('audioBuffered()'), 7000, 'nothing plays while the worklet waits to resume');
+  assert.equal(h.evaluate('Module.webAudioQueue(heap, 0, 16)'), 0);
+  assert.equal(h.evaluate('gameAudio.dropped'), 4);
+  assert.equal(h.posted.length, 1);
+});
+
+test('without AudioWorklet or 32 kHz support, SDL plays through the shared context and Start does not wait', () => {
+  for (const options of [{ worklet: false }, { sampleRate: 48000 }]) {
+    const h = audioHarness(options);
+    h.context.requestAnimationFrame = callback => callback();
+    h.context.setTimeout = callback => callback();
+    h.context.setInterval = () => 0;
+    h.evaluate('ready = true; startButton.disabled = false; Module.callMain = () => { started = true; }; startGame()');
+    assert.equal(h.evaluate('started'), true);
+    assert.equal(h.evaluate('Module.SDL2.audioContext === gameAudio.context'), true);
+    assert.equal(h.evaluate('Module.webAudioBuffered()'), -1);
+    assert.equal(h.evaluate('audioStatus().output'), 'sdl');
+  }
+});
+
+test('a suspended audio context resumes on the next input and says how to turn sound on', () => {
+  const h = audioHarness({ state: 'suspended', worklet: false });
+  h.evaluate('ready = true; started = true; running = true; startAudio()');
+  const context = h.evaluate('gameAudio.context');
+  assert.equal(context.resumes, 1, 'tried right away');
+  context.onstatechange();
+  assert.match(h.elements.get('web-status').textContent, /Click or press a key to turn on sound/);
+  for (const listener of h.windowListeners.get('pointerdown')) listener({});
+  assert.equal(context.resumes, 2);
+  context.state = 'running'; context.onstatechange();
+  assert.equal(h.elements.get('web-status').textContent, '');
+});
+
 test('a startup exception offers readable recovery and export without scheduling failed-engine writes', () => {
   const h = harness(); let writesScheduled = 0;
   h.context.requestAnimationFrame = callback => callback();

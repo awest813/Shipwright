@@ -795,6 +795,11 @@ Both are submodules owned by other repos. Land those changes upstream
   instead, reusing `RunExtract`): the page normalizes the byte order, looks up the SHA-1 in
   `rom-versions.json` (generated from `soh/assets/yml/config.yml`), fetches that version's ~450 KB
   bundle (`pack_assets.py`), and the game's web startup path runs the Torch extraction.
+- **Audio:** the game's mixed 32 kHz audio plays through an AudioWorklet (`shell.html`,
+  `AUDIO_PROCESSOR`; `AudioPlayer_Play` in `OTRGlobals.cpp`) instead of SDL's main-thread
+  ScriptProcessorNode, in a context created during the Start click at 32 kHz, which SDL shares. The
+  buffer target is 75 ms instead of 52 ms. SDL remains the fallback without AudioWorklet support. See
+  section 6.
 - **Page:** start screen with ROM / archive upload, clear errors for unsupported ROMs, missing
   browser features, storage failures, startup failures and crashes. Save/settings backup transfer,
   `.o2r` mod upload, randomizer spoiler import, controller status and fullscreen tools are available.
@@ -860,3 +865,12 @@ Two kinds of WebAssembly-specific problem came up that the static audit did not 
   the tab on first call. Building those files with `-Oz` brings them down to a few dozen locals,
   and the whole module compiles in under 300 ms (`soh/CMakeLists.txt`, Emscripten branch). A new
   table initializer of that size needs the same treatment.
+- **SDL's web audio drops out on slow frames.** SDL2's Emscripten backend
+  (`SDL_emscriptenaudio.c`) plays through a ScriptProcessorNode, whose callbacks run on the page's
+  main thread between game frames. It also resamples to the context's native rate on that thread.
+  Measured in Chromium with a 440 Hz tone fed the way the game feeds audio (20 s per run; silent gaps
+  of 2 ms or more at the output): with no stalls, SDL's path had 7 gaps and the worklet none; with
+  frequent 20-45 ms stalls, 2 and none; with 50-100 ms stalls, 9 gaps (144 ms of silence) and 3
+  (68 ms). Stalls of 100-250 ms (scene loads) gap with both, since they outlast any buffer kept at
+  a playable latency. Waiting for two ticks before resuming after a dropout did not help overall,
+  so the worklet resumes as soon as one tick has arrived.

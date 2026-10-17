@@ -905,7 +905,13 @@ void OTRGlobals::Initialize() {
                                               CVarGetInteger(CVAR_SETTING("AutoCaptureMouse"), 1));
     context->GetWindow()->SetForceCursorVisibility(CVarGetInteger(CVAR_SETTING("CursorVisibility"), 0));
 
+#ifdef __EMSCRIPTEN__
+    // Browser frames stall more often than native ones (shader compiles, garbage collection), and the
+    // audio buffer is what plays through a stall. 75 ms instead of 52 ms; see AudioPlayer_Play.
+    context->InitAudio({ .SampleRate = 32000, .SampleLength = 1024, .DesiredBuffered = 2400 });
+#else
     context->InitAudio({ .SampleRate = 32000, .SampleLength = 1024, .DesiredBuffered = 1680 });
+#endif
 
     // The menu is set up before audio is initialized, so its list of available audio backends has to be
     // populated here rather than in Menu::InitElement (where the window backends are handled).
@@ -2472,7 +2478,29 @@ extern "C" int16_t OTRGetRectDimensionFromRightEdge(float v) {
     return ((int)ceilf(OTRGetDimensionFromRightEdge(v)));
 }
 
+#ifdef __EMSCRIPTEN__
+// In the browser, mixed audio goes to the page's AudioWorklet output (shell.html, webAudioQueue), which
+// plays on the browser's audio thread. SDL's web backend would play it from main-thread callbacks that
+// drop out whenever a frame runs long. Both return -1 when the worklet isn't running, and SDL is used.
+EM_JS(int, WebAudioQueue, (const uint8_t* buf, uint32_t len),
+      { return Module.webAudioQueue ? Module.webAudioQueue(HEAPU8.buffer, buf, len) : -1; });
+EM_JS(int, WebAudioBuffered, (void), { return Module.webAudioBuffered ? Module.webAudioBuffered() : -1; });
+
+// Choosing "None" as the audio API in the settings still means no sound.
+static bool WebAudioOutputSelected() {
+    return Ship::Context::GetRawInstance()->GetAudio()->GetCurrentAudioBackend() == Ship::AudioBackend::SDL;
+}
+#endif
+
 int AudioPlayer_Buffered(void) {
+#ifdef __EMSCRIPTEN__
+    if (WebAudioOutputSelected()) {
+        int buffered = WebAudioBuffered();
+        if (buffered >= 0) {
+            return buffered;
+        }
+    }
+#endif
     return AudioPlayerBuffered();
 }
 
@@ -2481,6 +2509,11 @@ extern "C" int AudioPlayer_GetDesiredBuffered(void) {
 }
 
 extern "C" void AudioPlayer_Play(const uint8_t* buf, uint32_t len) {
+#ifdef __EMSCRIPTEN__
+    if (WebAudioOutputSelected() && WebAudioQueue(buf, len) >= 0) {
+        return;
+    }
+#endif
     AudioPlayerPlayFrame(buf, len);
 }
 

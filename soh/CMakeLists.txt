@@ -618,7 +618,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
             -sGLOBAL_BASE=1mb
             -sEXIT_RUNTIME=0
             -sFORCE_FILESYSTEM=1
-            -sEXPORTED_RUNTIME_METHODS=FS,IDBFS,callMain,addRunDependency,removeRunDependency
+            -sEXPORTED_RUNTIME_METHODS=FS,IDBFS,callMain,addRunDependency,removeRunDependency,HEAPU8
             -lidbfs.js
             "SHELL:--shell-file ${CMAKE_CURRENT_SOURCE_DIR}/platform/web/shell.html"
             "SHELL:--preload-file ${CMAKE_BINARY_DIR}/soh/soh.o2r@/app/soh.o2r"
