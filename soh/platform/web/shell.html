@@ -1127,7 +1127,8 @@
       if (ready || stopped || engineFailure || !text) return;
       const download = /^Downloading\b.*\((\d+)\/(\d+)\)/.exec(text);
       if (download && Number(download[2]) > 0) {
-        const fraction = Number(download[1]) / Number(download[2]);
+        // Hosts that compress the download report its compressed size as the total.
+        const fraction = Math.min(Number(download[1]) / Number(download[2]), 1);
         setLoader(fraction);
         showMessage(`Downloading the game… ${Math.floor(fraction * 100)}%`);
       } else {
@@ -1607,6 +1608,7 @@
     let hasGamepad = false;
     try { hasGamepad = typeof navigator.getGamepads === "function" && connectedGamepads().length > 0; } catch (e) {}
     keepScreenAwake();
+    if (gameAudio.context) audioStateChanged(); // a context that starts suspended fires no statechange
     if (typeof Module._WebTouchInputSupported === "function" && !hasGamepad &&
         window.matchMedia && window.matchMedia("(pointer: coarse)").matches) setTouchEnabled(true);
     Module.canvas.focus();
@@ -1711,6 +1713,9 @@
   // A start without a click (the restart after converting a ROM) leaves the context suspended until the
   // player interacts with the page.
   function audioStateChanged() {
+    // SDL closes the shared context when it closes its device (switching the audio API, or a surround
+    // setting reopening it). The worklet goes with it, so SDL plays on its own from then on.
+    if (gameAudio.context.state === "closed") { gameAudio.node = null; gameAudio.report = null; return; }
     if (!started || stopped) return;
     if (gameAudio.context.state === "running") {
       if (/^Click or press a key/.test(document.getElementById("web-status").textContent)) showMessage("");
@@ -1724,16 +1729,21 @@
   // sent after it. -1 tells the game to use SDL instead.
   function audioBuffered() {
     const { node, report, context } = gameAudio;
-    if (!node) return -1;
+    if (!node || context.state === "closed") return -1;
+    if (context.state !== "running") return 0;
     if (!report) return gameAudio.sent;
     const played = report.playing ? Math.max(0, context.currentTime - report.time) * AUDIO_RATE : 0;
     return Math.round(Math.max(0, report.buffered - played) + gameAudio.sent - report.received);
   }
   Module.webAudioBuffered = audioBuffered;
   Module.webAudioQueue = (heap, pointer, bytes) => {
-    if (!gameAudio.node) return -1;
+    const buffered = audioBuffered();
+    if (buffered < 0) return -1;
     const frames = bytes >> 2; // 16-bit stereo
-    if (audioBuffered() > AUDIO_MAX_BUFFERED) { gameAudio.dropped += frames; return 0; }
+    // While the context is suspended (sound not allowed yet, or interrupted) nothing plays; queuing
+    // would only make the game's audio lag behind once it resumes.
+    if (gameAudio.context.state !== "running") return 0;
+    if (buffered > AUDIO_MAX_BUFFERED) { gameAudio.dropped += frames; return 0; }
     const samples = new Int16Array(heap, pointer, frames * 2).slice();
     gameAudio.node.port.postMessage(samples, [samples.buffer]);
     gameAudio.sent += frames;

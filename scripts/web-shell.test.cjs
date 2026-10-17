@@ -505,6 +505,40 @@ test('a suspended audio context resumes on the next input and says how to turn s
   assert.equal(h.elements.get('web-status').textContent, '');
 });
 
+test('a closed or suspended audio context never swallows game audio or builds a backlog', () => {
+  const h = audioHarness();
+  h.evaluate('startAudio(); gameAudio.node = new AudioWorkletNode(gameAudio.context, "shipwright-audio-output", {})');
+  h.context.heap = new ArrayBuffer(64);
+  const context = h.evaluate('gameAudio.context');
+  // Suspended: nothing plays, so nothing is queued to play late; the game stays on the worklet.
+  context.state = 'suspended';
+  assert.equal(h.evaluate('Module.webAudioBuffered()'), 0);
+  assert.equal(h.evaluate('Module.webAudioQueue(heap, 0, 16)'), 0);
+  assert.equal(h.posted.length, 0);
+  assert.equal(h.evaluate('gameAudio.dropped'), 0);
+  context.state = 'running';
+  assert.equal(h.evaluate('Module.webAudioQueue(heap, 0, 16)'), 4);
+  // SDL closed the shared context (audio API switched, or a surround setting reopened the device).
+  context.state = 'closed'; context.onstatechange();
+  assert.equal(h.evaluate('Module.webAudioQueue(heap, 0, 16)'), -1, 'SDL must take over');
+  assert.equal(h.evaluate('Module.webAudioBuffered()'), -1);
+  assert.equal(h.evaluate('audioStatus().output'), 'sdl');
+});
+
+test('a game that starts with sound held back says how to turn it on', () => {
+  const h = audioHarness({ state: 'suspended', worklet: false });
+  h.context.setInterval = () => 0;
+  h.evaluate('ready = true; startAudio(); started = running = true; showGameControls()');
+  assert.match(h.elements.get('web-status').textContent, /Click or press a key to turn on sound/);
+});
+
+test('download progress never reads past 100%', () => {
+  const h = harness();
+  h.evaluate('Module.setStatus("Downloading data... (9000/6000)")');
+  assert.equal(h.elements.get('message').textContent, 'Downloading the game… 100%');
+  assert.equal(h.elements.get('loader-bar').style.width, '100%');
+});
+
 test('a startup exception offers readable recovery and export without scheduling failed-engine writes', () => {
   const h = harness(); let writesScheduled = 0;
   h.context.requestAnimationFrame = callback => callback();
