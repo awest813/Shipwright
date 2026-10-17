@@ -138,6 +138,9 @@ jobs:
         node build-tools/web-runtime-diagnostics.test.js
         python3 scripts/web.py build --prebuilt build-tools/soh.o2r --cmake-arg=-DSOH_WEB_ARCHIVE_MEMORY_TEST=ON --output build-web-package
         node build-web/web-archive-memory-test.js
+        # spdlog headers come from the web build's dependencies
+        em++ scripts/tests/web-speech.test.cpp soh/soh/Enhancements/speechsynthesizer/WebSpeechSynthesizer.cpp soh/soh/Enhancements/speechsynthesizer/SpeechSynthesizer.cpp -Isoh -Ibuild-web/_deps/spdlog-src/include -std=c++20 -O2 -sENVIRONMENT=node -sEXIT_RUNTIME=1 --pre-js scripts/tests/web-speech.test.pre.js -o build-tools/web-speech.test.js
+        node build-tools/web-speech.test.js
         python3 scripts/wasm-size-audit.py build-web/soh/soh-*.wasm --symbols build-web/soh/soh-*.html.symbols --max-body-bytes 1048576 --out build-tools/wasm-size-audit.json
         em++ scripts/web-depth.test.cpp -ICMake/web/include -std=c++17 -O2 -sUSE_WEBGL2=1 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=0 --shell-file scripts/web-depth.test.html -o build-web/depth-test.html
         cp build-tools/wasm-size-audit.json build-web/soh/

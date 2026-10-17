@@ -30,6 +30,8 @@ class SpeechSynthesizer {
 #include "SAPISpeechSynthesizer.h"
 #elif defined(__APPLE__)
 #include "DarwinSpeechSynthesizer.h"
+#elif defined(__EMSCRIPTEN__)
+#include "WebSpeechSynthesizer.h"
 #elif ESPEAK
 #include "ESpeakSpeechSynthesizer.h"
 #endif

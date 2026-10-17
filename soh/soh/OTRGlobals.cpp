@@ -1617,6 +1617,8 @@ extern "C" void InitOTR(int argc, char* argv[]) {
     SpeechSynthesizer::Instance = new DarwinSpeechSynthesizer();
 #elif defined(_WIN32)
     SpeechSynthesizer::Instance = new SAPISpeechSynthesizer();
+#elif defined(__EMSCRIPTEN__)
+    SpeechSynthesizer::Instance = new WebSpeechSynthesizer();
 #elif ESPEAK
     SpeechSynthesizer::Instance = new ESpeakSpeechSynthesizer();
 #else
@@ -1816,7 +1818,7 @@ extern "C" void Graph_StartFrame() {
 
             break;
         }
-#if defined(_WIN32) || defined(__APPLE__) || defined(ESPEAK)
+#if defined(_WIN32) || defined(__APPLE__) || defined(ESPEAK) || defined(__EMSCRIPTEN__)
         case KbScancode::LUS_KB_F9: {
             // Toggle TTS
             CVarSetInteger(CVAR_SETTING("A11yTTS"), !CVarGetInteger(CVAR_SETTING("A11yTTS"), 0));

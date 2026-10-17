@@ -799,7 +799,8 @@ Both are submodules owned by other repos. Land those changes upstream
   `AUDIO_PROCESSOR`; `AudioPlayer_Play` in `OTRGlobals.cpp`) instead of SDL's main-thread
   ScriptProcessorNode, in a context created during the Start click at 32 kHz, which SDL shares. The
   buffer target is 75 ms instead of 52 ms. SDL remains the fallback without AudioWorklet support. See
-  section 6.
+  section 6. Text to speech uses the Web Speech API (`WebSpeechSynthesizer`), with the Accessibility
+  option and the F9 toggle available in the browser.
 - **Page:** start screen with ROM / archive upload, clear errors for unsupported ROMs, missing
   browser features, storage failures, startup failures and crashes. Save/settings backup transfer,
   `.o2r` mod upload, randomizer spoiler import, controller status and fullscreen tools are available.
@@ -812,7 +813,7 @@ Both are submodules owned by other repos. Land those changes upstream
   save, reload, continue); initial vanilla and randomizer gameplay is verified.
 - Sustained 60 FPS benchmarks and matched desktop rendering/gameplay comparisons.
 - Full-engine validation of `GetPixelDepth` (depth-to-RGBA pass) and an MSAA path that WebGL2 can resolve.
-- Runtime coverage of mods and enhancement combinations; a Web Speech text-to-speech backend.
+- Runtime coverage of mods and enhancement combinations.
 - Wider runtime and hardware validation of mobile/touch controls and the compact settings menu.
 - A pthreads variant (COOP/COEP) for audio/render overlap and WasmFS + OPFS.
 - WebSocket transport for Anchor; Crowd Control and Sail stay desktop-only.

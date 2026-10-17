@@ -157,6 +157,10 @@ through an AudioWorklet on the browser's audio thread, so a slow frame doesn't i
 pauses such as loading a new area can still leave a short gap. Browsers without AudioWorklet fall
 back to SDL's audio output. Choosing **None** under Settings > Audio still turns sound off.
 
+**Text to speech** (Settings > General > Accessibility, or F9 in the game) reads dialogue and menus
+with the browser's built-in voices, in the game's language when the browser has a voice for it.
+Browsers only speak after you have interacted with the page.
+
 Saves and settings reach browser storage within a quarter of a second of being written. Anything
 else also follows every 10 seconds and whenever the tab is hidden. In a private window the browser
 may refuse storage altogether; the page says so, and nothing is kept after it closes.

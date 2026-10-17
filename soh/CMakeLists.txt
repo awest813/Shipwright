@@ -159,6 +159,10 @@ else()
     list(FILTER soh__ EXCLUDE REGEX "soh/Enhancements/speechsynthesizer/(Darwin|SAPI)")
 endif()
 
+if (NOT EMSCRIPTEN)
+    list(FILTER soh__ EXCLUDE REGEX "soh/Enhancements/speechsynthesizer/WebSpeech")
+endif()
+
 find_library(ESPEAK espeak-ng)
 if (NOT ESPEAK)
     list(FILTER soh__ EXCLUDE REGEX "soh/Enhancements/speechsynthesizer/ESpeak")
