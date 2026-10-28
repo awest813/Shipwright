@@ -233,7 +233,12 @@ Bluetooth/USB input and vibration still need checks on actual devices; browser d
 does not prove those functions.
 
 **Touch controls** toggles an on-screen movement joystick and N64 buttons, sized from the
-screen's short side. They also appear automatically on browsers reporting a coarse pointer,
+screen's short side. Z and L sit above the joystick for the left thumb, so you can hold Z while
+the right thumb presses B or A; R, Start, the C buttons and A/B follow the N64 layout on the right.
+Touching anywhere in the lower left moves Link: inside the ring it works as a fixed stick, and
+elsewhere the stick comes to your thumb. A finger can slide from one button to the next without
+lifting. If holding Z is awkward, set Z Targeting to Switch in the game's Options (file select
+screen), so a tap locks on and another tap lets go. They also appear automatically on browsers reporting a coarse pointer,
 unless a controller is already connected; pressing a button on a controller during play hides
 them again (turn them back on in **Tools**). Use **Settings** to open the in-game menu;
 touch controls hide while that menu is open. At narrow widths, category and section selectors

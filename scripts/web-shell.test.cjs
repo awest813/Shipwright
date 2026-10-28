@@ -1150,7 +1150,7 @@ test('touch taps survive one poll, simultaneous buttons hold and cancellation re
 
 test('touch stick clamps diagonals, packs signed axes and resets on release or disable', () => {
   const h = harness(); h.evaluate('started = true; setTouchEnabled(true)');
-  const stick = h.elements.get('touch-stick');
+  const stick = h.elements.get('touch-stick-zone');
   stick.listeners.pointerdown({ pointerId: 7, clientX: 180, clientY: -60, preventDefault() {} });
   const value = h.evaluate('Module.consumeWebInput(false)');
   assert.equal(value & 0x80, 0x80);
@@ -1163,6 +1163,45 @@ test('touch stick clamps diagonals, packs signed axes and resets on release or d
   stick.listeners.pointerdown({ pointerId: 8, clientX: 60, clientY: 60, preventDefault() {} });
   assert.equal(h.evaluate('Module.consumeWebInput(false)'), 0x80);
   h.evaluate('setTouchEnabled(false)');
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 0);
+});
+
+test('the touch stick comes to a thumb that lands outside its ring and stays inside its zone', () => {
+  const h = harness(); h.evaluate('started = true; setTouchEnabled(true)');
+  const zone = h.elements.get('touch-stick-zone'), stick = h.elements.get('touch-stick');
+  zone.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 300 });
+  stick.getBoundingClientRect = () => ({ left: 20, top: 160, width: 120, height: 120 }); // home: center (80, 220)
+  zone.listeners.pointerdown({ pointerId: 1, clientX: 250, clientY: 100, preventDefault() {} });
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 0x80, 'neutral where the thumb lands');
+  assert.equal(stick.style.transform, 'translate(170px, -120px)');
+  zone.listeners.pointermove({ pointerId: 1, clientX: 310, clientY: 100 });
+  assert.equal((h.evaluate('Module.consumeWebInput(false)') >> 16) & 255, 85, 'full right from the new center');
+  zone.listeners.pointerup({ pointerId: 1 });
+  assert.equal(stick.style.transform, '', 'back home');
+  // Near the zone's edge the stick stays whole inside it.
+  zone.listeners.pointerdown({ pointerId: 2, clientX: 395, clientY: 5, preventDefault() {} });
+  assert.equal(stick.style.transform, 'translate(260px, -160px)');
+  zone.listeners.pointerup({ pointerId: 2 });
+  // Inside the ring it is a fixed stick: no jump, and the offset counts at once.
+  zone.listeners.pointerdown({ pointerId: 3, clientX: 80, clientY: 160, preventDefault() {} });
+  assert.equal(stick.style.transform, '');
+  assert.equal((h.evaluate('Module.consumeWebInput(false)') >>> 24) & 255, 85);
+});
+
+test('a finger slides between touch buttons and keeps the last one held off them', () => {
+  const h = harness(); h.evaluate('started = true; setTouchEnabled(true)');
+  const a = h.elements.get('pad-32768'), b = h.elements.get('pad-16384');
+  for (const button of [a, b]) button.closest = () => button;
+  h.elements.get('touch-controls').contains = () => true;
+  let under = b;
+  h.context.document.elementFromPoint = () => under;
+  b.listeners.pointerdown({ pointerId: 4, preventDefault() {} });
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 16384);
+  under = a; b.listeners.pointermove({ pointerId: 4, clientX: 1, clientY: 1 });
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 32768, 'B released, A held');
+  under = null; b.listeners.pointermove({ pointerId: 4, clientX: 2, clientY: 2 });
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 32768);
+  b.listeners.pointerup({ pointerId: 4 });
   assert.equal(h.evaluate('Module.consumeWebInput(false)'), 0);
 });
 
