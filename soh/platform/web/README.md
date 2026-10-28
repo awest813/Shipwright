@@ -155,7 +155,9 @@ Sound starts when you press Play. After a ROM conversion the game restarts by it
 browsers then hold sound back until you click or press a key; the game says so. Game audio plays
 through an AudioWorklet on the browser's audio thread, so a slow frame doesn't interrupt it. Long
 pauses such as loading a new area can still leave a short gap. Browsers without AudioWorklet fall
-back to SDL's audio output. Choosing **None** under Settings > Audio still turns sound off.
+back to SDL's audio output. Choosing **None** under Settings > Audio still turns sound off, and choosing
+SDL again brings it back. If the browser holds sound back again later (Safari during a call, or after
+the tab was in the background), the game asks for a click or key press.
 
 **Text to speech** (Settings > General > Accessibility, or F9 in the game) reads dialogue and menus
 with the browser's built-in voices, in the game's language when the browser has a voice for it.

@@ -1667,8 +1667,9 @@
         }
         left.fill(0, count); if (right !== left) right.fill(0, count);
         if (++this.quanta % 8 === 0) {
+          // currentTime is when this quantum starts; the buffer is reported as of its end.
           this.port.postMessage({ buffered: this.size, received: this.received, played: this.played,
-            underruns: this.underruns, playing: this.playing, time: currentTime });
+            underruns: this.underruns, playing: this.playing, time: currentTime + length / sampleRate });
         }
         return true;
       }
@@ -1690,8 +1691,12 @@
     }
     gameAudio.context = context;
     // SDL's web backend uses this context rather than creating its own after startup, outside the click.
+    // SDL also closes the context whenever it closes its device (choosing None as the audio API, or
+    // reopening for a surround setting) and makes a new one when it reopens: one the page never resumes,
+    // at the browser's rate, without the worklet. So SDL always gets this context and can't close it.
+    context.close = () => Promise.resolve();
     Module.SDL2 = Module.SDL2 || {};
-    Module.SDL2.audioContext = context;
+    Object.defineProperty(Module.SDL2, "audioContext", { get: () => context, set() {}, configurable: true });
     context.onstatechange = audioStateChanged;
     resumeAudio();
     if (context.sampleRate !== AUDIO_RATE || !context.audioWorklet || typeof AudioWorkletNode !== "function") return null;
@@ -1708,22 +1713,26 @@
 
   function resumeAudio() {
     const context = gameAudio.context;
-    if (context && context.state !== "running" && context.state !== "closed") context.resume().catch(() => {});
+    if (context && context.state !== "running" && context.state !== "closed") return context.resume().catch(() => {});
+    return Promise.resolve();
   }
   // A start without a click (the restart after converting a ROM) leaves the context suspended until the
-  // player interacts with the page.
+  // player interacts with the page. Safari also suspends it ("interrupted") for calls and other apps.
   function audioStateChanged() {
-    // SDL closes the shared context when it closes its device (switching the audio API, or a surround
-    // setting reopening it). The worklet goes with it, so SDL plays on its own from then on.
+    // Nothing should close the context (see startAudio), but if something does, SDL takes over.
     if (gameAudio.context.state === "closed") { gameAudio.node = null; gameAudio.report = null; return; }
     if (!started || stopped) return;
     if (gameAudio.context.state === "running") {
       if (/^Click or press a key/.test(document.getElementById("web-status").textContent)) showMessage("");
-    } else if (gameAudio.context.state === "suspended" && !document.hidden) {
+    } else if (!document.hidden) {
       showMessage("Click or press a key to turn on sound.");
     }
   }
   for (const type of ["pointerdown", "keydown", "touchend"]) window.addEventListener(type, resumeAudio, { capture: true, passive: true });
+  // A context suspended while the tab was hidden fires no statechange when the tab comes back.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && gameAudio.context) resumeAudio().then(audioStateChanged);
+  });
 
   // Frames waiting to play: the worklet's last report, less what it has played since, plus what was
   // sent after it. -1 tells the game to use SDL instead.
