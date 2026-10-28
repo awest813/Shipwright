@@ -432,6 +432,7 @@ function audioHarness({ sampleRate = 32000, worklet = true, state = 'running' } 
       if (worklet) this.audioWorklet = { addModule: url => new Promise(resolve => { resolveModule = resolve; }) }; }
     resume() { this.resumes++; return Promise.resolve(); }
     close() { this.state = 'closed'; return Promise.resolve(); }
+    suspend() { this.state = 'suspended'; return Promise.resolve(); }
   }
   h.context.window.AudioContext = FakeContext;
   h.context.AudioWorkletNode = class { constructor(context, name, options) { this.name = name; this.options = options; this.port = { postMessage: (data, transfer) => posted.push({ data, transfer }) }; } connect(to) { this.connectedTo = to; } };
@@ -559,6 +560,19 @@ test('sound held back while the tab was hidden or by another app says how to tur
   assert.equal(h.elements.get('web-status').textContent, '');
   context.state = 'interrupted'; context.onstatechange(); // Safari, during a call
   assert.match(h.elements.get('web-status').textContent, /Click or press a key to turn on sound/);
+});
+
+test('a stopped game suspends its audio and input never resumes it', () => {
+  const h = audioHarness();
+  h.evaluate('ready = true; started = running = true; startAudio()');
+  const context = h.evaluate('gameAudio.context');
+  const resumes = context.resumes;
+  h.evaluate('stop("The game stopped.")');
+  assert.equal(context.state, 'suspended');
+  context.onstatechange();
+  assert.doesNotMatch(h.elements.get('message').textContent, /turn on sound/);
+  for (const listener of h.windowListeners.get('keydown')) listener({});
+  assert.equal(context.resumes, resumes);
 });
 
 test('a game that starts with sound held back says how to turn it on', () => {

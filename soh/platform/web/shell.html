@@ -809,6 +809,8 @@
     stopAllControllerRumble();
     setTouchEnabled(false, false);
     wakeLock?.release().catch(() => {});
+    // Nothing plays again, and SDL's audio callback would keep calling into the stopped engine.
+    if (gameAudio.context && gameAudio.context.state !== "closed") gameAudio.context.suspend().catch(() => {});
     finishBenchmark("game stopped");
     overlay.style.display = "";
     setControlsEnabled(false);
@@ -1713,7 +1715,7 @@
 
   function resumeAudio() {
     const context = gameAudio.context;
-    if (context && context.state !== "running" && context.state !== "closed") return context.resume().catch(() => {});
+    if (context && !stopped && context.state !== "running" && context.state !== "closed") return context.resume().catch(() => {});
     return Promise.resolve();
   }
   // A start without a click (the restart after converting a ROM) leaves the context suspended until the
