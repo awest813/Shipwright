@@ -801,8 +801,8 @@ Both are submodules owned by other repos. Land those changes upstream
   buffer target is 75 ms instead of 52 ms. SDL remains the fallback without AudioWorklet support. SDL
   can't close the shared context (it otherwise does whenever it closes its device), so choosing None
   and then SDL again returns to the worklet. The worklet plays the game's stereo mix; the surround
-  settings only reach SDL's output. See section 6. Text to speech uses the Web Speech API (`WebSpeechSynthesizer`), with the Accessibility
-  option and the F9 toggle available in the browser.
+  settings only reach SDL's output. See section 6. Text to speech uses the Web Speech API
+  (`WebSpeechSynthesizer`), with the Accessibility option and the F9 toggle available in the browser.
 - **Page:** start screen with ROM / archive upload, clear errors for unsupported ROMs, missing
   browser features, storage failures, startup failures and crashes. Save/settings backup transfer,
   `.o2r` mod upload, randomizer spoiler import, controller status and fullscreen tools are available.

@@ -143,7 +143,9 @@
   /* Sized from the short screen side so thumbs reach them on phones and they stay modest on tablets. */
   #touch-controls { --pad: clamp(44px, 12.5vmin, 60px); --stick: clamp(124px, 34vmin, 168px); }
   #touch-controls { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
-  #touch-controls button { padding: 0; min-height: 0; height: var(--pad); background: #0e1729bb; touch-action: none; pointer-events: auto; }
+  #touch-controls button { padding: 0; min-height: 0; height: var(--pad); background: #0e1729bb; }
+  /* A tap that misses a button is swallowed: neither a click on the game nor a grab of the stick. */
+  #touch-left, #touch-buttons { touch-action: none; pointer-events: auto; }
   #touch-controls button.pressed { background: #b8732cdd; }
   /* Any touch in the lower left moves Link: inside the ring as a fixed stick, elsewhere the stick
      comes to the thumb. */

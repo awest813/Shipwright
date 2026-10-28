@@ -158,7 +158,7 @@ pauses such as loading a new area can still leave a short gap. Browsers without 
 back to SDL's audio output. Choosing **None** under Settings > Audio still turns sound off, and choosing
 SDL again brings it back. If the browser holds sound back again later (Safari during a call, or after
 the tab was in the background), the game asks for a click or key press. On iPhone and iPad, game sound
-follows the silent switch, as native games do; switch it off if the game is silent.
+follows the silent switch, as native games do: if the game is silent, check that silent mode is off.
 
 **Text to speech** (Settings > General > Accessibility, or F9 in the game) reads dialogue and menus
 with the browser's built-in voices, in the game's language when the browser has a voice for it.
@@ -233,15 +233,16 @@ Bluetooth/USB input and vibration still need checks on actual devices; browser d
 does not prove those functions.
 
 **Touch controls** toggles an on-screen movement joystick and N64 buttons, sized from the
-screen's short side. Z and L sit above the joystick for the left thumb, so you can hold Z while
-the right thumb presses B or A; R, Start, the C buttons and A/B follow the N64 layout on the right.
-Touching anywhere in the lower left moves Link: inside the ring it works as a fixed stick, and
-elsewhere the stick comes to your thumb. A finger can slide from one button to the next without
-lifting. If holding Z is awkward, set Z Targeting to Switch in the game's Options (file select
-screen), so a tap locks on and another tap lets go. They also appear automatically on browsers reporting a coarse pointer,
+screen's short side. They also appear automatically on browsers reporting a coarse pointer,
 unless a controller is already connected; pressing a button on a controller during play hides
-them again (turn them back on in **Tools**). Use **Settings** to open the in-game menu;
-touch controls hide while that menu is open. At narrow widths, category and section selectors
+them again (turn them back on in **Tools**). Z and L sit above the joystick for the left thumb,
+so you can hold Z while the right thumb presses B or A; R, Start, the C buttons and A/B follow
+the N64 layout on the right. Touching anywhere in the lower left moves Link: inside the ring it
+works as a fixed stick, and elsewhere the stick comes to your thumb. A finger can slide from one
+button to the next without lifting. If holding Z is awkward, set Z Targeting to Switch in the
+game's Options (file select screen), so a tap locks on and another tap lets go. A tap that misses
+a button does nothing, rather than clicking the game or grabbing the stick. Use **Settings** to
+open the in-game menu; touch controls hide while that menu is open. At narrow widths, category and section selectors
 leave settings the full available width and height. Closing the menu restores the game's aspect
 ratio. These controls require matching updated shell and
 engine files; their device compatibility is still being tested.
