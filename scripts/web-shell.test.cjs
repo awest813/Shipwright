@@ -367,7 +367,7 @@ function audioProcessor() {
   const posts = [];
   let processor = null;
   const scope = vm.createContext({
-    Float32Array, Math, currentTime: 0,
+    Float32Array, Math, currentTime: 0, sampleRate: 32000,
     AudioWorkletProcessor: class { constructor() { this.port = { postMessage: message => posts.push(message) }; } },
     registerProcessor: (name, Processor) => { assert.equal(name, 'shipwright-audio-output'); processor = new Processor(); },
   });
@@ -421,7 +421,7 @@ test('the audio worklet reports its buffer every 8 quanta and never overfills it
   assert.equal(a.processor.received, 70000);
   for (let i = 0; i < 16; i++) a.quantum();
   assert.equal(a.posts.length, 2);
-  assert.deepEqual({ ...a.posts[1] }, { buffered: (1 << 16) - 16 * 128, received: 70000, played: 16 * 128, underruns: 0, playing: true, time: 0 });
+  assert.deepEqual({ ...a.posts[1] }, { buffered: (1 << 16) - 16 * 128, received: 70000, played: 16 * 128, underruns: 0, playing: true, time: 128 / 32000 }, 'as of the end of the quantum');
 });
 
 function audioHarness({ sampleRate = 32000, worklet = true, state = 'running' } = {}) {
@@ -431,6 +431,8 @@ function audioHarness({ sampleRate = 32000, worklet = true, state = 'running' } 
     constructor(options) { created.push(options); this.sampleRate = options?.sampleRate ?? 48000; if (sampleRate !== 32000) this.sampleRate = sampleRate; this.state = state; this.currentTime = 0; this.destination = {}; this.resumes = 0;
       if (worklet) this.audioWorklet = { addModule: url => new Promise(resolve => { resolveModule = resolve; }) }; }
     resume() { this.resumes++; return Promise.resolve(); }
+    close() { this.state = 'closed'; return Promise.resolve(); }
+    suspend() { this.state = 'suspended'; return Promise.resolve(); }
   }
   h.context.window.AudioContext = FakeContext;
   h.context.AudioWorkletNode = class { constructor(context, name, options) { this.name = name; this.options = options; this.port = { postMessage: (data, transfer) => posted.push({ data, transfer }) }; } connect(to) { this.connectedTo = to; } };
@@ -518,11 +520,59 @@ test('a closed or suspended audio context never swallows game audio or builds a 
   assert.equal(h.evaluate('gameAudio.dropped'), 0);
   context.state = 'running';
   assert.equal(h.evaluate('Module.webAudioQueue(heap, 0, 16)'), 4);
-  // SDL closed the shared context (audio API switched, or a surround setting reopened the device).
+  // Closed anyway (SDL can't close it; see the next test).
   context.state = 'closed'; context.onstatechange();
   assert.equal(h.evaluate('Module.webAudioQueue(heap, 0, 16)'), -1, 'SDL must take over');
   assert.equal(h.evaluate('Module.webAudioBuffered()'), -1);
   assert.equal(h.evaluate('audioStatus().output'), 'sdl');
+});
+
+test('SDL closing and reopening its device keeps the shared context and the worklet', () => {
+  const h = audioHarness();
+  h.evaluate('startAudio(); gameAudio.node = new AudioWorkletNode(gameAudio.context, "shipwright-audio-output", {})');
+  h.context.heap = new ArrayBuffer(64);
+  // What SDL2's EMSCRIPTENAUDIO_CloseDevice and then OpenDevice do (choosing None, then SDL again).
+  h.evaluate(`{ const SDL2 = Module.SDL2;
+    if (SDL2.audioContext !== undefined) { SDL2.audioContext.close(); SDL2.audioContext = undefined; }
+    if (!SDL2.audioContext) SDL2.audioContext = new AudioContext(); }`);
+  assert.equal(h.created.length, 1, 'no second context');
+  assert.equal(h.evaluate('Module.SDL2.audioContext === gameAudio.context'), true);
+  assert.equal(h.evaluate('gameAudio.context.state'), 'running');
+  assert.equal(h.evaluate('Module.webAudioQueue(heap, 0, 16)'), 4);
+  assert.equal(h.evaluate('audioStatus().output'), 'audio-worklet');
+});
+
+test('sound held back while the tab was hidden or by another app says how to turn it on', async () => {
+  const h = audioHarness({ worklet: false });
+  h.evaluate('ready = true; started = running = true; startAudio()');
+  const context = h.evaluate('gameAudio.context');
+  h.context.document.hidden = true;
+  context.state = 'suspended'; context.onstatechange();
+  assert.equal(h.evaluate('document.getElementById("web-status").textContent ?? ""'), '', 'nothing to read while hidden');
+  const resumes = context.resumes;
+  h.context.document.hidden = false;
+  for (const listener of h.documentListeners.get('visibilitychange')) listener();
+  assert.equal(context.resumes, resumes + 1, 'tries again when the tab comes back');
+  assert.equal(h.evaluate('document.getElementById("web-status").textContent ?? ""'), '', 'and waits to see if that worked');
+  await h.settle();
+  assert.match(h.elements.get('web-status').textContent, /Click or press a key to turn on sound/);
+  context.state = 'running'; context.onstatechange();
+  assert.equal(h.elements.get('web-status').textContent, '');
+  context.state = 'interrupted'; context.onstatechange(); // Safari, during a call
+  assert.match(h.elements.get('web-status').textContent, /Click or press a key to turn on sound/);
+});
+
+test('a stopped game suspends its audio and input never resumes it', () => {
+  const h = audioHarness();
+  h.evaluate('ready = true; started = running = true; startAudio()');
+  const context = h.evaluate('gameAudio.context');
+  const resumes = context.resumes;
+  h.evaluate('stop("The game stopped.")');
+  assert.equal(context.state, 'suspended');
+  context.onstatechange();
+  assert.doesNotMatch(h.elements.get('message').textContent, /turn on sound/);
+  for (const listener of h.windowListeners.get('keydown')) listener({});
+  assert.equal(context.resumes, resumes);
 });
 
 test('a game that starts with sound held back says how to turn it on', () => {
@@ -1100,7 +1150,7 @@ test('touch taps survive one poll, simultaneous buttons hold and cancellation re
 
 test('touch stick clamps diagonals, packs signed axes and resets on release or disable', () => {
   const h = harness(); h.evaluate('started = true; setTouchEnabled(true)');
-  const stick = h.elements.get('touch-stick');
+  const stick = h.elements.get('touch-stick-zone');
   stick.listeners.pointerdown({ pointerId: 7, clientX: 180, clientY: -60, preventDefault() {} });
   const value = h.evaluate('Module.consumeWebInput(false)');
   assert.equal(value & 0x80, 0x80);
@@ -1113,6 +1163,45 @@ test('touch stick clamps diagonals, packs signed axes and resets on release or d
   stick.listeners.pointerdown({ pointerId: 8, clientX: 60, clientY: 60, preventDefault() {} });
   assert.equal(h.evaluate('Module.consumeWebInput(false)'), 0x80);
   h.evaluate('setTouchEnabled(false)');
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 0);
+});
+
+test('the touch stick comes to a thumb that lands outside its ring and stays inside its zone', () => {
+  const h = harness(); h.evaluate('started = true; setTouchEnabled(true)');
+  const zone = h.elements.get('touch-stick-zone'), stick = h.elements.get('touch-stick');
+  zone.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 300 });
+  stick.getBoundingClientRect = () => ({ left: 20, top: 160, width: 120, height: 120 }); // home: center (80, 220)
+  zone.listeners.pointerdown({ pointerId: 1, clientX: 250, clientY: 100, preventDefault() {} });
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 0x80, 'neutral where the thumb lands');
+  assert.equal(stick.style.transform, 'translate(170px, -120px)');
+  zone.listeners.pointermove({ pointerId: 1, clientX: 310, clientY: 100 });
+  assert.equal((h.evaluate('Module.consumeWebInput(false)') >> 16) & 255, 85, 'full right from the new center');
+  zone.listeners.pointerup({ pointerId: 1 });
+  assert.equal(stick.style.transform, '', 'back home');
+  // Near the zone's edge the stick stays whole inside it.
+  zone.listeners.pointerdown({ pointerId: 2, clientX: 395, clientY: 5, preventDefault() {} });
+  assert.equal(stick.style.transform, 'translate(260px, -160px)');
+  zone.listeners.pointerup({ pointerId: 2 });
+  // Inside the ring it is a fixed stick: no jump, and the offset counts at once.
+  zone.listeners.pointerdown({ pointerId: 3, clientX: 80, clientY: 160, preventDefault() {} });
+  assert.equal(stick.style.transform, '');
+  assert.equal((h.evaluate('Module.consumeWebInput(false)') >>> 24) & 255, 85);
+});
+
+test('a finger slides between touch buttons and keeps the last one held off them', () => {
+  const h = harness(); h.evaluate('started = true; setTouchEnabled(true)');
+  const a = h.elements.get('pad-32768'), b = h.elements.get('pad-16384');
+  for (const button of [a, b]) button.closest = () => button;
+  h.elements.get('touch-controls').contains = () => true;
+  let under = b;
+  h.context.document.elementFromPoint = () => under;
+  b.listeners.pointerdown({ pointerId: 4, preventDefault() {} });
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 16384);
+  under = a; b.listeners.pointermove({ pointerId: 4, clientX: 1, clientY: 1 });
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 32768, 'B released, A held');
+  under = null; b.listeners.pointermove({ pointerId: 4, clientX: 2, clientY: 2 });
+  assert.equal(h.evaluate('Module.consumeWebInput(false)'), 32768);
+  b.listeners.pointerup({ pointerId: 4 });
   assert.equal(h.evaluate('Module.consumeWebInput(false)'), 0);
 });
 
