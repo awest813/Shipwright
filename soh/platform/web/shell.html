@@ -856,19 +856,25 @@
 
   // Shows the start screen again with an explanation; the page has to be reloaded after this.
   // Without canRetry (an unsupported browser), reloading can't help, so it isn't offered.
-  function stop(text, canRetry = true) {
-    if (stopped) return;
+  // What every way of ending the game shares: input, rumble, the wake lock and audio stop, and the
+  // launcher comes back with imports and Start blocked (export stays available).
+  function endGameSession(reason) {
     stopped = true;
     stopAllControllerRumble();
     setTouchEnabled(false, false);
     wakeLock?.release().catch(() => {});
     // Nothing plays again, and SDL's audio callback would keep calling into the stopped engine.
     if (gameAudio.context && gameAudio.context.state !== "closed") gameAudio.context.suspend().catch(() => {});
-    finishBenchmark("game stopped");
+    finishBenchmark(reason);
     overlay.style.display = "";
     setControlsEnabled(false);
     startButton.disabled = true;
     startButton.hidden = true;
+  }
+
+  function stop(text, canRetry = true) {
+    if (stopped) return;
+    endGameSession("game stopped");
     document.getElementById("reload-launcher").hidden = !canRetry;
     setLoader(null);
     showMessage(canRetry ? `${text} Use Reload launcher to try again.` : text, true);
@@ -1100,7 +1106,11 @@
       let success = true;
       while (syncAgain) {
         syncAgain = false;
-        const err = await new Promise(resolve => FS.syncfs(false, resolve));
+        // A throw (rather than an error passed to the callback) counts as a failed flush too, so a
+        // later persist() still runs instead of waiting on a flush that never finishes.
+        const err = await new Promise(resolve => {
+          try { FS.syncfs(false, resolve); } catch (error) { resolve(error || Error("syncfs failed")); }
+        });
         if (err) {
           console.error("Saving to browser storage failed", err);
           if (storageWorks) showMessage("Browser storage failed. Export your saves before closing this tab; recent changes may not survive a reload.", true);
@@ -1213,14 +1223,7 @@
     },
     onGameStopped: () => {
       if (stopped) return;
-      stopped = true;
-      stopAllControllerRumble();
-      setTouchEnabled(false, false);
-      wakeLock?.release().catch(() => {});
-      finishBenchmark("game closed");
-      overlay.style.display = "";
-      setControlsEnabled(false);
-      startButton.hidden = true;
+      endGameSession("game closed");
       document.getElementById("reload-launcher").hidden = false;
       document.getElementById("fps").textContent = "Game closed";
       return returnToLauncher();
@@ -1343,6 +1346,7 @@
     },
   };
 
+  let reloadDespiteStorage = false; // storage failed once; Reload launcher now reloads regardless
   async function returnToLauncher() {
     if (!ready || busy || randomizerGenerating) return;
     const button = document.getElementById("return-launcher");
@@ -1351,7 +1355,10 @@
     showMessage("Saving browser files before returning to the launcher…");
     try {
       if (!storageWorks || !await persist()) {
-        showMessage("Could not save to browser storage. Export your saves before leaving.", true);
+        reloadDespiteStorage = true;
+        document.getElementById("reload-launcher").textContent = "Reload anyway";
+        showMessage(stopped ? "Could not save to browser storage. Export your saves, then use Reload anyway." :
+          "Could not save to browser storage. Export your saves before leaving.", true);
         return;
       }
       reloadPage();
@@ -1361,7 +1368,7 @@
   }
   document.getElementById("return-launcher").addEventListener("click", returnToLauncher);
   document.getElementById("reload-launcher").addEventListener("click", () => {
-    if (!ready) reloadPage();
+    if (!ready || reloadDespiteStorage) reloadPage();
     else returnToLauncher();
   });
   window.addEventListener("error", event => {
@@ -1427,7 +1434,9 @@
         paths.add(entry.path);
         const binary = atob(entry.data); total += binary.length;
         if (total > BACKUP_CONTENT_LIMIT) throw new Error("backup contents exceed 24 MB");
-        return { path: `${DATA_DIR}/${entry.path}`, bytes: Uint8Array.from(binary, c => c.charCodeAt(0)) };
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return { path: `${DATA_DIR}/${entry.path}`, bytes };
       });
       // Validate the entire package before changing any saved files.
       for (const entry of files) {
@@ -1642,7 +1651,7 @@
   async function handleDroppedFiles(files) {
     if (!files.length || !ready || stopped) return;
     if (running) { showMessage("Return to the launcher (Tools) to add ROMs, archives or mods.", true); return; }
-    if (busy) return;
+    if (busy) { showMessage("Wait for the current task to finish, then drop the files again.", true); return; }
     const named = name => files.find(file => file.name.toLowerCase() === name);
     const rom = files.find(file => /\.(z64|n64|v64)$/i.test(file.name));
     const mods = files.filter(file => /\.o2r$/i.test(file.name) && !ARCHIVES.includes(file.name.toLowerCase()));

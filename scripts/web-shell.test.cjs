@@ -1458,3 +1458,61 @@ test('randomizer generation reports state, blocks seed import and restores contr
   assert.match(h.elements.get('web-status').textContent, /generation failed/);
   h.syncs.shift()(null);
 });
+
+test('native quit suspends game audio the same way a crash does', () => {
+  const h = audioHarness();
+  h.context.window.location = { reload() {} };
+  h.evaluate('ready = true; started = running = true; startAudio()');
+  const context = h.evaluate('gameAudio.context');
+  h.evaluate('Module.onGameStopped()');
+  assert.equal(context.state, 'suspended');
+  assert.equal(h.elements.get('start').disabled, true);
+});
+
+test('a flush that throws instead of reporting an error fails once and never blocks later flushes', async () => {
+  const h = harness();
+  let throwNext = true;
+  const syncfs = h.context.FS.syncfs;
+  h.context.FS.syncfs = (populate, callback) => {
+    if (throwNext) { throwNext = false; throw Error('database closed'); }
+    return syncfs(populate, callback);
+  };
+  assert.equal(await h.evaluate('persist()'), false);
+  assert.match(h.elements.get('message').textContent, /Browser storage failed/);
+  const next = h.evaluate('persist()');
+  assert.equal(h.syncs.length, 1);
+  h.syncs.shift()(null);
+  assert.equal(await next, true);
+});
+
+test('after storage fails on a stopped game, Reload launcher offers to reload anyway', async () => {
+  const h = harness(); let reloads = 0;
+  h.context.window.location = { reload: () => reloads++ };
+  h.evaluate('ready = true; started = true; running = true');
+  const pending = h.evaluate('Module.onGameStopped()');
+  h.syncs.shift()(Error('storage full')); await pending;
+  assert.equal(reloads, 0);
+  assert.equal(h.elements.get('reload-launcher').textContent, 'Reload anyway');
+  assert.match(h.elements.get('message').textContent, /Export your saves, then use Reload anyway/);
+  h.elements.get('reload-launcher').listeners.click();
+  assert.equal(reloads, 1);
+});
+
+test('backups decode every byte value exactly', async () => {
+  const h = harness(); h.evaluate('ready = true');
+  const bytes = Uint8Array.from({ length: 256 }, (_, i) => i);
+  const file = { size: 1000, text: async () => JSON.stringify({ format: 'shipwright-web-backup', version: 1, files: [
+    { path: 'Save/file1.sav', data: Buffer.from(bytes).toString('base64') },
+  ] }) };
+  const pending = h.elements.get('backup-input').listeners.change({ target: { files: [file] } });
+  await new Promise(resolve => setImmediate(resolve));
+  h.syncs.shift()(null); await pending;
+  assert.deepEqual(Array.from(h.files.get('/data/Save/file1.sav')), Array.from(bytes));
+});
+
+test('files dropped while the launcher is busy are refused with an explanation', async () => {
+  const h = harness(); h.evaluate('ready = true; busy = true');
+  const event = { preventDefault() {}, dataTransfer: { types: ['Files'], files: [{ name: 'Zelda.z64' }] } };
+  for (const listener of h.documentListeners.get('drop')) await listener(event);
+  assert.match(h.elements.get('message').textContent, /Wait for the current task/);
+});

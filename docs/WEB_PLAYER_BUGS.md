@@ -46,6 +46,10 @@ acceptable only with consistent pacing. Matched captures do not establish whole-
 | Medium | Seed generation pauses the browser without useful feedback | Partial: start/completion/failure status and blocked duplicate imports; generation still runs synchronously | Manual seed 7238872525 produced all 442 locations matching the previous reference; responsiveness remains open |
 | Medium | Presentation can average about 59 FPS while still having visible long intervals | Open: phase profiler identifies synchronous depth readback as most simulation time; reduce stalls without changing glow accuracy | Earlier quiet house sample: 60.03 FPS, callback p99 17 ms; latest 9d5f719 house check: 57.96 FPS, callback p99 33.4 ms, maximum 100 ms; warmed 959x720 house repeat: 59.94 FPS, callback p99 17.1 ms/max 33.3 ms, presentation completion interval max 52.7 ms; broad pacing verification remains open |
 | High | Touch controls could not hold Z while pressing B or A (all buttons were under the right thumb), the stick ignored touches just outside its ring, a finger could not slide between buttons, and iOS long presses could raise callouts | Fixed: Z and L moved above the joystick; N64-style right cluster (C diamond, B up-left of A, R and Start on top); floating stick across the lower left; sliding between buttons; callouts, tap highlights and context menus suppressed; taps between buttons are swallowed instead of reaching the game or the stick | Real Chromium touch events at 844×390: Z+B, slide B→A while Z held, floating stick to full range and back, stick + A together; screenshots at 844×390, 667×375, 390×844 and 1180×820; regression tests. Physical phones remain to be checked |
+| Low | Native Quit left the audio context running (the crash path already suspended it) | Fixed: every way of ending the game shares one teardown, which suspends audio | Regression test (fails without the fix) |
+| Medium | A storage flush that threw instead of reporting an error left every later save waiting on it, including Return to launcher | Fixed: a throw counts as a failed flush, with the usual storage warning, and the next flush runs | Regression test (fails without the fix) |
+| Medium | After browser storage failed on a stopped game, Reload launcher only repeated the failed save, so the page could never reload | Fixed: after the failure the button reads Reload anyway and reloads, once the player has had the chance to export | Regression test (fails without the fix) |
+| Low | Files dropped while the launcher was busy were ignored silently; large backups decoded slowly | Fixed: a busy launcher says to drop again when it finishes; backups decode with a plain loop | Regression tests |
 | Medium | Device-specific controller, rumble, mobile or Safari issues may be missed | Open verification: physical Bluetooth/USB controllers and real iPhone/Safari still need checks | Chromium touch emulation and controller API regressions pass; not substitutes for hardware |
 
 The hosting package copies only the compiled engine, project conversion descriptions and optional
@@ -53,15 +57,8 @@ diagnostics. It excludes player ROMs, game archives, saves, settings and unrelat
 Changing site origin or browser gives a separate save store; export/import before moving hosts.
 
 The launcher, hosting helper, phone menu choices, preset lifecycle and native Quit return have
-passed browser checks with the compiled engine. The complete 43004c3 build passed all five CI
-jobs. The backup preflight fix also passes 57 shell tests and compiled-launcher parsing checks.
-These results cover the listed player problems; they do not establish a finished whole-game accuracy or pacing audit.
-
-The current local hosting package is `dist/shipwright-web-43004c3-ui2704653.zip`: the
-CI-built 43004c3 engine with the browser-tested 2704653 launcher. The original minified
-43004c3 launcher also passed browser startup and native Quit checks. The new launcher
-contains no engine changes; its full CI rebuild is tracked separately. Final package
-backup rejection evidence is `build-tools/backup-preflight-final-package-proof.json`.
+passed browser checks with the compiled engine. These results cover the listed player problems;
+they do not establish a finished whole-game accuracy or pacing audit.
 
 Repeat the automated launcher and distribution checks from the repository root:
 
